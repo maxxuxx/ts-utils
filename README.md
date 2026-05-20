@@ -98,22 +98,22 @@ const User = z.object({
 });
 
 const user = await api.post("/users", {
-  json      : { name: "haru" },
-  jsonSchema: z.object({
+  body      : { name: "haru" },
+  bodySchema: z.object({
     name: z.string().min(1)
   }),
-  schema: User
+  responseSchema: User
 });
 ```
 
-Reusable endpoints can define method, path params, query strings, request JSON, response schema, and result selection
+Reusable endpoints can define method, path params, query strings, request body schema, response schema, and result selection
 
 ```ts
 const getUser = endpoint.get("/users/:id", {
   params: z.object({
     id: z.coerce.number().int().positive()
   }),
-  schema: User
+  responseSchema: User
 });
 
 const user = await api.call(getUser, {

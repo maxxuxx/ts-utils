@@ -20,7 +20,7 @@ import { createApiFetcher, endpoint, z } from "@maxxuxx/ts-utils/api-fetch";
 
 Primary request vocabulary should stay small and direct
 
-`get`, `post`, `put`, `patch`, `delete`, `query`, `json`, `jsonSchema`, `schema`, and `select`
+`get`, `post`, `put`, `patch`, `delete`, `query`, `body`, `bodySchema`, `responseSchema`, and `select`
 
 ## Internal layout
 
@@ -30,7 +30,7 @@ Primary request vocabulary should stay small and direct
 
 `endpoint.ts` contains `endpoint.get/post/put/patch/delete`, path param replacement, endpoint param parsing, and endpoint execution helpers
 
-`body.ts` contains JSON request validation, response body parsing, and response schema validation
+`body.ts` contains JSON request body validation, response body parsing, and response schema validation
 
 `headers.ts`, `query.ts`, and `url.ts` contain small request building helpers
 
@@ -50,11 +50,11 @@ Method shortcuts are the preferred public API because they avoid exposing method
 
 `baseURL` uses the casing common in axios and ofetch style APIs
 
-`json` is the request JSON payload and `jsonSchema` validates it before the fetch call
+`body` is the request JSON payload and `bodySchema` validates it before the fetch call when provided
 
-`schema` validates the parsed response body and `select` reshapes the validated response
+`responseSchema` validates the parsed response body and `select` reshapes the validated response
 
-Endpoint definitions use `endpoint.get("/users/:id", { params, schema })` so route declarations read like HTTP routes
+Endpoint definitions use `endpoint.get("/users/:id", { params, responseSchema })` so route declarations read like HTTP routes
 
 Endpoint path params are replaced from parsed `params` and encoded with `encodeURIComponent`
 

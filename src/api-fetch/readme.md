@@ -32,7 +32,7 @@ const User = z.object({
 });
 
 const user = await api.get("/users/1", {
-  schema: User
+  responseSchema: User
 });
 ```
 
@@ -44,11 +44,15 @@ const CreateUser = z.object({
 });
 
 const user = await api.post("/users", {
-  json      : { name: "haru" },
-  jsonSchema: CreateUser,
-  schema    : User
+  body          : { name: "haru" },
+  bodySchema    : CreateUser,
+  responseSchema: User
 });
 ```
+
+`bodySchema` is optional. If provided, the fetcher validates `body` before the request is sent. Without `bodySchema`, `body` is still serialized as JSON.
+
+Use `rawBody` for non-JSON request bodies such as `FormData`, `Blob`, or a prebuilt string.
 
 Add query params with `query`
 
@@ -58,7 +62,7 @@ const users = await api.get("/users", {
     page : 1,
     limit: 20
   },
-  schema: z.array(User)
+  responseSchema: z.array(User)
 });
 ```
 
@@ -66,7 +70,7 @@ Use `select` to unwrap or reshape a validated response
 
 ```ts
 const user = await api.get("/users/1", {
-  schema: responseEnvelopeSchema(User),
+  responseSchema: responseEnvelopeSchema(User),
   select: (response) => response.data
 });
 ```
@@ -80,7 +84,7 @@ const getUser = endpoint.get("/users/:id", {
   params: z.object({
     id: z.coerce.number().int().positive()
   }),
-  schema: User
+  responseSchema: User
 });
 
 const user = await api.call(getUser, {
@@ -92,12 +96,12 @@ Endpoint paths support `:param` replacement and encode param values
 
 ```ts
 const createUser = endpoint.post("/users", {
-  json  : CreateUser,
-  schema: User
+  bodySchema    : CreateUser,
+  responseSchema: User
 });
 
 const user = await api.call(createUser, {
-  json: { name: "haru" }
+  body: { name: "haru" }
 });
 ```
 
@@ -111,7 +115,7 @@ const searchUsers = endpoint.get("/users", {
   query: (params) => ({
     page: params.page
   }),
-  schema: responseEnvelopeSchema(z.array(User)),
+  responseSchema: responseEnvelopeSchema(z.array(User)),
   select: (response) => response.data ?? []
 });
 ```
@@ -148,8 +152,8 @@ Disable auth per request when needed
 ```ts
 await api.post("/auth/login", {
   auth: false,
-  json: credentials,
-  schema: LoginResponse
+  body: credentials,
+  responseSchema: LoginResponse
 });
 ```
 
@@ -164,7 +168,7 @@ const data = await api.get("/unstable", {
     delay: 300,
     statusCodes: [408, 429, 500, 502, 503, 504]
   },
-  schema: Data
+  responseSchema: Data
 });
 ```
 
@@ -273,7 +277,7 @@ const api = createApiFetcher({
 
 `ApiHttpError` is thrown for non-2xx responses and includes `status`, `statusText`, parsed `body`, `response`, and request context
 
-`ApiValidationError` is thrown when request JSON or response schema validation fails
+`ApiValidationError` is thrown when request body or response schema validation fails
 
 `ApiParseError` is thrown when a JSON response cannot be parsed
 

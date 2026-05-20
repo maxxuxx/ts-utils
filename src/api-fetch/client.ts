@@ -74,13 +74,13 @@ export const createApiFetcher = (
   };
 
   const request: ApiRequest = async <
-    TJsonSchema extends OptionalSchema = undefined,
+    TBodySchema extends OptionalSchema = undefined,
     TResponseSchema extends OptionalSchema = undefined,
     TResult = SchemaOutput<TResponseSchema>
   >(
     method: ApiMethod,
     path: string,
-    requestOptions: ApiRequestOptions<TJsonSchema, TResponseSchema, TResult> = {}
+    requestOptions: ApiRequestOptions<TBodySchema, TResponseSchema, TResult> = {}
   ): Promise<TResult> => {
     const authEnabled = requestOptions.auth !== false && options.auth !== undefined;
 
@@ -147,13 +147,13 @@ const createMethod = (
 
 // Request execution
 const sendRequest = async <
-  TJsonSchema extends OptionalSchema,
+  TBodySchema extends OptionalSchema,
   TResponseSchema extends OptionalSchema,
   TResult
 >(
   method: ApiMethod,
   path: string,
-  options: ApiRequestOptions<TJsonSchema, TResponseSchema, TResult>,
+  options: ApiRequestOptions<TBodySchema, TResponseSchema, TResult>,
   clientOptions: ApiFetcherOptions,
   fetchImpl: FetchLike,
   accessToken: string | undefined,
@@ -163,13 +163,13 @@ const sendRequest = async <
     auth: _auth,
     baseURL,
     body: _body,
+    bodySchema: _bodySchema,
     headers,
     hooks,
-    json: _json,
-    jsonSchema: _jsonSchema,
     query,
+    rawBody: _rawBody,
+    responseSchema,
     retry,
-    schema,
     select,
     timeout,
     ...fetchOptions
@@ -245,7 +245,7 @@ const sendRequest = async <
 
       const parsedResponse = parseResponseBody(
         responseBody,
-        schema,
+        responseSchema,
         context
       ) as SchemaOutput<TResponseSchema>;
       const result         = select

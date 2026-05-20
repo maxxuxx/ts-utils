@@ -24,18 +24,18 @@ export const createEndpointFactory = <TMethod extends ApiMethod>(
 ): EndpointFactory<TMethod> => {
   const factory = <
     const TParamsSchema extends OptionalSchema = undefined,
-    const TJsonSchema extends OptionalSchema = undefined,
+    const TBodySchema extends OptionalSchema = undefined,
     const TResponseSchema extends OptionalSchema = undefined,
     TResult = unknown
   >(
     path: string,
     options: ApiEndpointOptions<
       TParamsSchema,
-      TJsonSchema,
+      TBodySchema,
       TResponseSchema,
       TResult
     > = {}
-  ): ApiEndpoint<TParamsSchema, TJsonSchema, TResponseSchema, TResult> => Object.freeze({
+  ): ApiEndpoint<TParamsSchema, TBodySchema, TResponseSchema, TResult> => Object.freeze({
     method,
     options: Object.freeze(options),
     path
@@ -80,17 +80,18 @@ export const executeEndpoint = async <TEndpoint extends AnyApiEndpoint>(
       resolveEndpointHeaders(apiEndpoint.options.headers, params),
       callOptions.headers
     ),
+    body      : callOptions.body,
+    bodySchema: apiEndpoint.options.bodySchema,
     hooks     : callOptions.hooks,
-    json      : callOptions.json,
-    jsonSchema: apiEndpoint.options.json,
     query     : mergeQuery(
       resolveEndpointQuery(apiEndpoint.options.query, params),
       callOptions.query
     ),
-    retry     : callOptions.retry ?? apiEndpoint.options.retry,
-    schema    : apiEndpoint.options.schema,
-    select    : apiEndpoint.options.select,
-    timeout   : callOptions.timeout ?? apiEndpoint.options.timeout
+    rawBody       : callOptions.rawBody,
+    responseSchema: apiEndpoint.options.responseSchema,
+    retry         : callOptions.retry ?? apiEndpoint.options.retry,
+    select        : apiEndpoint.options.select,
+    timeout       : callOptions.timeout ?? apiEndpoint.options.timeout
   }) as Promise<EndpointResult<TEndpoint>>;
 };
 

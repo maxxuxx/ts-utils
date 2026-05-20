@@ -100,22 +100,22 @@ export type ApiAuthOptions = Readonly<{
 
 // Request options
 export type ApiRequestOptions<
-  TJsonSchema extends OptionalSchema = undefined,
+  TBodySchema extends OptionalSchema = undefined,
   TResponseSchema extends OptionalSchema = undefined,
   TResult = SchemaOutput<TResponseSchema>
 > = Omit<RequestInit, "body" | "headers" | "method"> & {
-  auth      ?: boolean;
-  baseURL   ?: string;
-  body      ?: RequestInit["body"];
-  headers   ?: ApiHeadersInit;
-  hooks     ?: ApiHooks;
-  json      ?: SchemaInput<TJsonSchema>;
-  jsonSchema?: TJsonSchema;
-  query     ?: QueryParams;
-  retry     ?: ApiRetry;
-  schema    ?: TResponseSchema;
-  select    ?: (data: SchemaOutput<TResponseSchema>, response: Response) => TResult;
-  timeout   ?: number;
+  auth          ?: boolean;
+  baseURL       ?: string;
+  body          ?: SchemaInput<TBodySchema>;
+  bodySchema    ?: TBodySchema;
+  headers       ?: ApiHeadersInit;
+  hooks         ?: ApiHooks;
+  query         ?: QueryParams;
+  rawBody       ?: RequestInit["body"];
+  responseSchema?: TResponseSchema;
+  retry         ?: ApiRetry;
+  select        ?: (data: SchemaOutput<TResponseSchema>, response: Response) => TResult;
+  timeout       ?: number;
 };
 
 export type ApiReadOptions<
@@ -123,19 +123,21 @@ export type ApiReadOptions<
   TResult = SchemaOutput<TResponseSchema>
 > = Omit<
   ApiRequestOptions<undefined, TResponseSchema, TResult>,
-  "body" | "json" | "jsonSchema"
+  "body" | "bodySchema" | "rawBody"
 >;
 
 export type ApiWriteOptions<
-  TJsonSchema extends OptionalSchema = undefined,
+  TBodySchema extends OptionalSchema = undefined,
   TResponseSchema extends OptionalSchema = undefined,
   TResult = SchemaOutput<TResponseSchema>
-> = ApiRequestOptions<TJsonSchema, TResponseSchema, TResult>;
+> = ApiRequestOptions<TBodySchema, TResponseSchema, TResult>;
 
 export type ApiReadMethod = {
   <TResponseSchema extends z.ZodType, TResult = SchemaOutput<TResponseSchema>>(
     path: string,
-    options: ApiReadOptions<TResponseSchema, TResult> & { schema: TResponseSchema }
+    options: ApiReadOptions<TResponseSchema, TResult> & {
+      responseSchema: TResponseSchema;
+    }
   ): Promise<TResult>;
   <TData = unknown>(
     path: string,
@@ -145,43 +147,43 @@ export type ApiReadMethod = {
 
 export type ApiWriteMethod = {
   <
-    TJsonSchema extends OptionalSchema = undefined,
+    TBodySchema extends OptionalSchema = undefined,
     TResponseSchema extends z.ZodType = z.ZodType,
     TResult = SchemaOutput<TResponseSchema>
   >(
     path: string,
-    options: ApiWriteOptions<TJsonSchema, TResponseSchema, TResult> & {
-      schema: TResponseSchema;
+    options: ApiWriteOptions<TBodySchema, TResponseSchema, TResult> & {
+      responseSchema: TResponseSchema;
     }
   ): Promise<TResult>;
   <
     TData = unknown,
-    TJsonSchema extends OptionalSchema = undefined
+    TBodySchema extends OptionalSchema = undefined
   >(
     path: string,
-    options?: ApiWriteOptions<TJsonSchema, undefined, TData>
+    options?: ApiWriteOptions<TBodySchema, undefined, TData>
   ): Promise<TData>;
 };
 
 export type ApiRequest = {
   <
-    TJsonSchema extends OptionalSchema = undefined,
+    TBodySchema extends OptionalSchema = undefined,
     TResponseSchema extends z.ZodType = z.ZodType,
     TResult = SchemaOutput<TResponseSchema>
   >(
     method: ApiMethod,
     path: string,
-    options: ApiRequestOptions<TJsonSchema, TResponseSchema, TResult> & {
-      schema: TResponseSchema;
+    options: ApiRequestOptions<TBodySchema, TResponseSchema, TResult> & {
+      responseSchema: TResponseSchema;
     }
   ): Promise<TResult>;
   <
     TData = unknown,
-    TJsonSchema extends OptionalSchema = undefined
+    TBodySchema extends OptionalSchema = undefined
   >(
     method: ApiMethod,
     path: string,
-    options?: ApiRequestOptions<TJsonSchema, undefined, TData>
+    options?: ApiRequestOptions<TBodySchema, undefined, TData>
   ): Promise<TData>;
 };
 
@@ -224,31 +226,31 @@ export type EndpointHeaders<TParamsSchema extends OptionalSchema> =
 
 export type ApiEndpointOptions<
   TParamsSchema extends OptionalSchema = undefined,
-  TJsonSchema extends OptionalSchema = undefined,
+  TBodySchema extends OptionalSchema = undefined,
   TResponseSchema extends OptionalSchema = undefined,
   TResult = SchemaOutput<TResponseSchema>
 > = Readonly<{
-  auth   ?: boolean;
-  headers?: EndpointHeaders<TParamsSchema>;
-  json   ?: TJsonSchema;
-  params ?: TParamsSchema;
-  query  ?: EndpointQuery<TParamsSchema>;
-  retry  ?: ApiRetry;
-  schema ?: TResponseSchema;
-  select ?: (data: SchemaOutput<TResponseSchema>, response: Response) => TResult;
-  timeout?: number;
+  auth          ?: boolean;
+  bodySchema    ?: TBodySchema;
+  headers       ?: EndpointHeaders<TParamsSchema>;
+  params        ?: TParamsSchema;
+  query         ?: EndpointQuery<TParamsSchema>;
+  responseSchema?: TResponseSchema;
+  retry         ?: ApiRetry;
+  select        ?: (data: SchemaOutput<TResponseSchema>, response: Response) => TResult;
+  timeout       ?: number;
 }>;
 
 export type ApiEndpoint<
   TParamsSchema extends OptionalSchema = OptionalSchema,
-  TJsonSchema extends OptionalSchema = OptionalSchema,
+  TBodySchema extends OptionalSchema = OptionalSchema,
   TResponseSchema extends OptionalSchema = OptionalSchema,
   TResult = SchemaOutput<TResponseSchema>
 > = Readonly<{
   method : ApiMethod;
   options: ApiEndpointOptions<
     TParamsSchema,
-    TJsonSchema,
+    TBodySchema,
     TResponseSchema,
     TResult
   >;
@@ -260,37 +262,37 @@ export type AnyApiEndpoint = ApiEndpoint<any, any, any, any>;
 export type EndpointFactory<TMethod extends ApiMethod> = {
   <
     const TParamsSchema extends OptionalSchema = undefined,
-    const TJsonSchema extends OptionalSchema = undefined,
+    const TBodySchema extends OptionalSchema = undefined,
     const TResponseSchema extends z.ZodType = z.ZodType,
     TResult = SchemaOutput<TResponseSchema>
   >(
     path: string,
     options: ApiEndpointOptions<
       TParamsSchema,
-      TJsonSchema,
+      TBodySchema,
       TResponseSchema,
       TResult
-    > & { schema: TResponseSchema }
-  ): ApiEndpoint<TParamsSchema, TJsonSchema, TResponseSchema, TResult>;
+    > & { responseSchema: TResponseSchema }
+  ): ApiEndpoint<TParamsSchema, TBodySchema, TResponseSchema, TResult>;
   <
     const TParamsSchema extends OptionalSchema = undefined,
-    const TJsonSchema extends OptionalSchema = undefined,
+    const TBodySchema extends OptionalSchema = undefined,
     TResult = unknown
   >(
     path: string,
     options?: ApiEndpointOptions<
       TParamsSchema,
-      TJsonSchema,
+      TBodySchema,
       undefined,
       TResult
     >
-  ): ApiEndpoint<TParamsSchema, TJsonSchema, undefined, TResult>;
+  ): ApiEndpoint<TParamsSchema, TBodySchema, undefined, TResult>;
   method: TMethod;
 };
 
 export type EndpointCallOverrides = Omit<
   ApiRequestOptions<undefined, undefined>,
-  "body" | "jsonSchema" | "schema" | "select"
+  "body" | "bodySchema" | "responseSchema" | "select"
 >;
 
 export type EndpointParamsInput<TParamsSchema extends OptionalSchema> =
@@ -298,25 +300,25 @@ export type EndpointParamsInput<TParamsSchema extends OptionalSchema> =
     ? { params: z.input<TParamsSchema> }
     : { params?: undefined };
 
-export type EndpointJsonInput<TJsonSchema extends OptionalSchema> =
-  TJsonSchema extends z.ZodType
-    ? { json: z.input<TJsonSchema> }
-    : { json?: undefined };
+export type EndpointBodyInput<TBodySchema extends OptionalSchema> =
+  TBodySchema extends z.ZodType
+    ? { body: z.input<TBodySchema> }
+    : { body?: undefined };
 
 export type EndpointCallInput<
   TParamsSchema extends OptionalSchema,
-  TJsonSchema extends OptionalSchema
+  TBodySchema extends OptionalSchema
 > = EndpointCallOverrides
-  & EndpointJsonInput<TJsonSchema>
+  & EndpointBodyInput<TBodySchema>
   & EndpointParamsInput<TParamsSchema>;
 
 export type EndpointCallArgs<TEndpoint extends AnyApiEndpoint> =
-  TEndpoint extends ApiEndpoint<infer TParamsSchema, infer TJsonSchema, any, any>
+  TEndpoint extends ApiEndpoint<infer TParamsSchema, infer TBodySchema, any, any>
     ? TParamsSchema extends z.ZodType
-      ? [input: EndpointCallInput<TParamsSchema, TJsonSchema>]
-      : TJsonSchema extends z.ZodType
-        ? [input: EndpointCallInput<TParamsSchema, TJsonSchema>]
-        : [input?: EndpointCallInput<TParamsSchema, TJsonSchema>]
+      ? [input: EndpointCallInput<TParamsSchema, TBodySchema>]
+      : TBodySchema extends z.ZodType
+        ? [input: EndpointCallInput<TParamsSchema, TBodySchema>]
+        : [input?: EndpointCallInput<TParamsSchema, TBodySchema>]
     : never;
 
 export type EndpointResult<TEndpoint extends AnyApiEndpoint> =

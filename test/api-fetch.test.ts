@@ -36,10 +36,10 @@ describe("api-fetch", () => {
     });
 
     const data = await api.post("/users", {
-      json      : { name: "haru" },
-      jsonSchema: CreateUser,
-      query     : { page: 1, empty: null },
-      schema    : User
+      body          : { name: "haru" },
+      bodySchema    : CreateUser,
+      query         : { page: 1, empty: null },
+      responseSchema: User
     });
 
     expect(data).toEqual({
@@ -60,13 +60,30 @@ describe("api-fetch", () => {
     expect(headers.get("X-App")).toBe("test");
   });
 
+  it("sends raw request bodies without JSON serialization", async () => {
+    const fetch = vi.fn<FetchLike>(async () => jsonResponse({ ok: true }));
+    const api = createApiFetcher({ fetch });
+    const body = new URLSearchParams({
+      name: "haru"
+    });
+
+    await api.post("/users", {
+      rawBody: body
+    });
+
+    const headers = new Headers(fetch.mock.calls[0]?.[1]?.headers);
+
+    expect(fetch.mock.calls[0]?.[1]?.body).toBe(body);
+    expect(headers.get("Content-Type")).toBeNull();
+  });
+
   it("throws validation errors before invalid JSON requests are sent", async () => {
     const fetch = vi.fn<FetchLike>(async () => jsonResponse({ ok: true }));
     const api = createApiFetcher({ fetch });
 
     await expect(api.post("/users", {
-      json      : { name: "" },
-      jsonSchema: CreateUser
+      body      : { name: "" },
+      bodySchema: CreateUser
     })).rejects.toBeInstanceOf(ApiValidationError);
 
     expect(fetch).not.toHaveBeenCalled();
@@ -77,7 +94,7 @@ describe("api-fetch", () => {
     const api = createApiFetcher({ fetch });
 
     await expect(api.get("/me", {
-      schema: User
+      responseSchema: User
     })).rejects.toMatchObject({
       body  : { message: "unauthorized" },
       status: 401
@@ -109,7 +126,7 @@ describe("api-fetch", () => {
     });
 
     const data = await api.get("/me", {
-      schema: z.object({
+      responseSchema: z.object({
         ok: z.boolean()
       })
     });
@@ -138,7 +155,7 @@ describe("api-fetch", () => {
       query: () => ({
         include: "profile"
       }),
-      schema: responseEnvelopeSchema(User),
+      responseSchema: responseEnvelopeSchema(User),
       select: (response) => response.data
     });
 
@@ -164,12 +181,12 @@ describe("api-fetch", () => {
       fetch
     });
     const createUser = endpoint.post("/users", {
-      json  : CreateUser,
-      schema: User
+      bodySchema    : CreateUser,
+      responseSchema: User
     });
 
     const user = await api.call(createUser, {
-      json: { name: "haru" }
+      body: { name: "haru" }
     });
 
     expect(user.id).toBe(8);
@@ -184,7 +201,7 @@ describe("api-fetch", () => {
 
     const data = await api.get("/unstable", {
       retry: 1,
-      schema: z.object({
+      responseSchema: z.object({
         ok: z.boolean()
       })
     });
@@ -218,7 +235,7 @@ describe("api-fetch", () => {
     });
 
     await api.post("/health", {
-      json: { ok: true },
+      body: { ok: true },
       query: {
         verbose: true
       }

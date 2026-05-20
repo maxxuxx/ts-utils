@@ -13,53 +13,53 @@ export type ParsedRequestBody = Readonly<{
 }>;
 
 export const parseRequestBody = <
-  TJsonSchema extends OptionalSchema,
+  TBodySchema extends OptionalSchema,
   TResponseSchema extends OptionalSchema,
   TResult
 >(
-  options: ApiRequestOptions<TJsonSchema, TResponseSchema, TResult>,
+  options: ApiRequestOptions<TBodySchema, TResponseSchema, TResult>,
   context: ApiRequestContext
 ): ParsedRequestBody => {
-  const hasJsonBody = "json" in options || options.jsonSchema !== undefined;
+  const hasJsonBody = "body" in options || options.bodySchema !== undefined;
 
-  if (hasJsonBody && options.body !== undefined) {
-    throw new TypeError("Use either json or body for an API request, not both");
+  if (hasJsonBody && options.rawBody !== undefined) {
+    throw new TypeError("Use either body or rawBody for an API request, not both");
   }
 
   if (!hasJsonBody) {
     return {
-      body      : options.body ?? undefined,
+      body      : options.rawBody ?? undefined,
       isJsonBody: false
     };
   }
 
-  const json = parseRequestJson(options, context);
+  const body = parseRequestJson(options, context);
 
   return {
-    body      : JSON.stringify(json),
+    body      : JSON.stringify(body),
     isJsonBody: true
   };
 };
 
 const parseRequestJson = <
-  TJsonSchema extends OptionalSchema,
+  TBodySchema extends OptionalSchema,
   TResponseSchema extends OptionalSchema,
   TResult
 >(
-  options: ApiRequestOptions<TJsonSchema, TResponseSchema, TResult>,
+  options: ApiRequestOptions<TBodySchema, TResponseSchema, TResult>,
   context: ApiRequestContext
 ): unknown => {
-  if (!options.jsonSchema) {
-    return options.json;
+  if (!options.bodySchema) {
+    return options.body;
   }
 
-  const parsedJson = options.jsonSchema.safeParse(options.json);
+  const parsedJson = options.bodySchema.safeParse(options.body);
 
   if (!parsedJson.success) {
     throw new ApiValidationError(
       "request",
       parsedJson.error,
-      options.json,
+      options.body,
       context
     );
   }
@@ -70,14 +70,14 @@ const parseRequestJson = <
 // Response parsing
 export const parseResponseBody = <TResponseSchema extends OptionalSchema>(
   body: unknown,
-  schema: TResponseSchema,
+  responseSchema: TResponseSchema,
   context: ApiRequestContext
 ): SchemaOutput<TResponseSchema> => {
-  if (!schema) {
+  if (!responseSchema) {
     return body as SchemaOutput<TResponseSchema>;
   }
 
-  const parsedBody = schema.safeParse(body);
+  const parsedBody = responseSchema.safeParse(body);
 
   if (!parsedBody.success) {
     throw new ApiValidationError(
