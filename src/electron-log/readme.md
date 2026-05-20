@@ -6,11 +6,9 @@ Use process specific imports so renderer bundles do not load main process code
 
 ## Main process
 
-Install Electron logging dependencies only in Electron projects
+`electron-log` is included as a package dependency
 
-```bash
-npm install electron-log
-```
+Electron itself is expected to be provided by Electron apps
 
 ```ts
 import { app, ipcMain } from "electron";

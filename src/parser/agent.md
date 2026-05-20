@@ -10,7 +10,7 @@ Expose parser utilities through `src/parser/index.ts`
 
 Consumers import this module through `@maxxuxx/ts-utils/parser`
 
-Do not re-export this module from the root package entry because `zod` must stay module-scoped and optional for consumers
+Do not re-export this module from the root package entry because consumers should opt into Zod-backed helpers explicitly
 
 Consumers should use the namespaced `parser` object instead of predicate-looking names like `IsNumber`
 
@@ -44,4 +44,4 @@ Coerce parser presets are intended for route params, query strings, environment 
 
 Keep module docs updated whenever parser behavior, exports, or internal file layout changes
 
-`zod` is an optional peer dependency of the package and a dev dependency of this repository
+`zod` is a package dependency because this module imports and re-exports it

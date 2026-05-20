@@ -18,12 +18,6 @@ npm install github:maxxuxx/ts-utils
 
 ## Parser utils
 
-Install `zod` only in projects that use the parser module
-
-```bash
-npm install zod
-```
-
 Parser utils are small wrappers around Zod schemas
 They keep the familiar Zod methods and add a simple `is` type guard
 
@@ -79,15 +73,78 @@ const user = User.parse({
 });
 ```
 
+## API fetch
+
+API fetch utilities are available through the `api-fetch` subpath
+
+```ts
+import { createApiClient, defineEndpoint, HttpMethod, z } from "@maxxuxx/ts-utils/api-fetch";
+```
+
+Create a client with request and response validation
+
+```ts
+const client = createApiClient({
+  baseUrl: "https://api.example.com"
+});
+
+const user = await client.request("/users", {
+  method: HttpMethod.POST,
+  body  : {
+    name: "haru"
+  },
+  requestSchema: z.object({
+    name: z.string().min(1)
+  }),
+  responseSchema: z.object({
+    id  : z.number(),
+    name: z.string()
+  })
+});
+```
+
+Reusable endpoints can map params to paths, query strings, headers, request bodies, and final result shapes
+
+```ts
+const getUser = defineEndpoint({
+  method      : HttpMethod.GET,
+  path        : (params: { id: number }) => `/users/${params.id}`,
+  paramsSchema: z.object({
+    id: z.number()
+  }),
+  responseSchema: z.object({
+    id  : z.number(),
+    name: z.string()
+  })
+});
+
+const user = await client.endpoint(getUser)({ id: 1 });
+```
+
+Token refresh is injected so apps can use cookies, browser storage, iron-session, or custom stores
+
+```ts
+const client = createApiClient({
+  token: {
+    getToken      : () => tokenStore.get(),
+    setToken      : (token) => tokenStore.set(token),
+    clearToken    : () => tokenStore.clear(),
+    getAccessToken: (token) => token.accessToken,
+    shouldRefreshToken: (token) => token.expiresAt <= Date.now() + 60_000,
+    refreshToken  : () => refreshAccessToken()
+  }
+});
+```
+
+See [src/api-fetch/readme.md](https://github.com/maxxuxx/ts-utils/blob/main/src/api-fetch/readme.md) for module details
+
 ## Electron log
 
 Electron logging helpers are exported as process specific subpaths
 
-Install `electron-log` only in Electron projects that use this module
+`electron-log` is included as a package dependency
 
-```bash
-npm install electron-log
-```
+Electron itself is expected to be provided by Electron apps
 
 ```ts
 import { configureMainLogger } from "@maxxuxx/ts-utils/electron-log/main";

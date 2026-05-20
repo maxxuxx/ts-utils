@@ -8,12 +8,6 @@ Zod based parser utilities for repeated runtime validation patterns
 import { createParser, parser, z } from "@maxxuxx/ts-utils/parser";
 ```
 
-Install `zod` in projects that use this module
-
-```bash
-npm install zod
-```
-
 `parser` contains reusable presets
 
 ```ts

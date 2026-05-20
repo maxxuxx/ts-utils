@@ -44,7 +44,9 @@ Do not re-export this module from the root package entry because `electron-log` 
 
 Electron itself is not a direct dependency of this package
 
-`electron-log` and `electron` are optional peer dependencies of the package
+`electron-log` is a package dependency because this module imports process-specific `electron-log` entrypoints
+
+Electron itself is not a package dependency because this package does not import it directly
 
 Main, preload, and renderer APIs accept minimal Electron-like interfaces from the consuming app
 

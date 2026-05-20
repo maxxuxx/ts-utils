@@ -1,6 +1,6 @@
 {
   "name": "@maxxuxx/ts-utils",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Shared TypeScript utilities",
   "type": "module",
   "license": "MIT",
@@ -60,6 +60,10 @@
       "types": "./dist/device/index.d.ts",
       "import": "./dist/device/index.js"
     },
+    "./api-fetch": {
+      "types": "./dist/api-fetch/index.d.ts",
+      "import": "./dist/api-fetch/index.js"
+    },
     "./electron-log": {
       "types": "./dist/electron-log/index.d.ts",
       "import": "./dist/electron-log/index.js"
@@ -89,28 +93,14 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
-  "peerDependencies": {
-    "zod": "^4.4.3",
+  "dependencies": {
     "electron-log": "^5.4.4",
-    "electron": ">=13"
-  },
-  "peerDependenciesMeta": {
-    "zod": {
-      "optional": true
-    },
-    "electron-log": {
-      "optional": true
-    },
-    "electron": {
-      "optional": true
-    }
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^24.10.0",
-    "electron-log": "^5.4.4",
     "typescript": "^5.9.3",
-    "vitest": "^4.0.14",
-    "zod": "^4.4.3"
+    "vitest": "^4.0.14"
   },
   "engines": {
     "node": ">=24"
