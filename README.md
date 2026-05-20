@@ -1,5 +1,7 @@
 # ts-utils
 
+[![npm version](https://img.shields.io/npm/v/@maxxuxx/ts-utils.svg)](https://www.npmjs.com/package/@maxxuxx/ts-utils)
+
 Shared TypeScript utilities for projects that need small, reusable runtime helpers
 
 ## Install
@@ -119,6 +121,25 @@ const logger = createBridgeLogger({
 
 See [src/electron-log/readme.md](https://github.com/maxxuxx/ts-utils/blob/main/src/electron-log/readme.md) for module details
 
+## Is
+
+Dependency free type guards are available through the `is` subpath
+
+```ts
+import { is, isString, isDefined, isPlainObject } from "@maxxuxx/ts-utils/is";
+
+is.string("hello");
+is.number(10);
+is.nonEmptyArray([1]);
+is.validDate(new Date());
+
+isString("hello");
+isDefined(value);
+isPlainObject(payload);
+```
+
+See [src/is/readme.md](https://github.com/maxxuxx/ts-utils/blob/main/src/is/readme.md) for module details
+
 ## Try catch
 
 Dependency free result helpers are available through the `try-catch` subpath
@@ -146,14 +167,3 @@ npm install
 npm test
 npm run build
 ```
-
-## Publish
-
-The package is configured for GitHub Actions + npm Trusted Publishing
-
-1. Create the package on npm as `@maxxuxx/ts-utils`
-2. In npm package settings, add a Trusted Publisher for `maxxuxx/ts-utils`
-3. Use `.github/workflows/publish.yml` as the workflow file
-4. Bump `package.json` version and push to `main`
-
-The publish workflow skips versions that already exist on npm
