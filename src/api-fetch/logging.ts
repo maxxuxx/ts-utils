@@ -7,6 +7,7 @@ import type {
 
 const METHOD_WIDTH = 6;
 const TIME_WIDTH   = 4;
+const TIME_UNIT    = "ms";
 
 export type ApiLogLevel = "debug" | "info" | "warn" | "error" | "log";
 
@@ -88,7 +89,7 @@ export const formatApiLogEvent = (
   const emoji    = getEventEmoji(event, options);
   const method   = event.method.padEnd(METHOD_WIDTH, " ");
   const code     = event.status === undefined ? "ERR" : String(event.status);
-  const duration = `${Math.max(0, Math.round(event.durationMs))}ms`.padEnd(TIME_WIDTH, " ");
+  const duration = `${Math.max(0, Math.round(event.durationMs))}`.padEnd(TIME_WIDTH, " ") + TIME_UNIT;
   const path     = getLogPath(event, options.includeQuery === true);
 
   return `${emoji} ${method} ${code} ${duration} ${path}`;

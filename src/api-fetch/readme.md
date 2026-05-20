@@ -198,14 +198,14 @@ emoji method code time endpoint
 Example output
 
 ```text
-🌐 GET    200 8ms  /users/1
-⚠️ POST   500 42ms /users
-❌ GET    ERR 3ms  /offline
+🌐 GET    200 8   ms /users/1
+⚠️ POST   500 42  ms /users
+❌ GET    ERR 3   ms /offline
 ```
 
 The method column is left aligned to the longest HTTP method width
 
-The elapsed time token is left aligned to at least 4 characters
+The elapsed time number is left aligned to a 4 character field before `ms`
 
 The logged path excludes `baseURL` and omits query params by default
 
