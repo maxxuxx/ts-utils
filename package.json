@@ -1,0 +1,101 @@
+{
+  "name": "@maxxuxx/ts-utils",
+  "version": "0.1.0",
+  "description": "Shared TypeScript utilities",
+  "type": "module",
+  "license": "MIT",
+  "author": "haru",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/maxxuxx/ts-utils.git"
+  },
+  "homepage": "https://github.com/maxxuxx/ts-utils#readme",
+  "bugs": {
+    "url": "https://github.com/maxxuxx/ts-utils/issues"
+  },
+  "keywords": [
+    "typescript",
+    "utils",
+    "zod",
+    "parser",
+    "validation"
+  ],
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "src/**/readme.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./parser": {
+      "types": "./dist/parser/index.d.ts",
+      "import": "./dist/parser/index.js"
+    },
+    "./try-catch": {
+      "types": "./dist/try-catch/index.d.ts",
+      "import": "./dist/try-catch/index.js"
+    },
+    "./electron-log": {
+      "types": "./dist/electron-log/index.d.ts",
+      "import": "./dist/electron-log/index.js"
+    },
+    "./electron-log/main": {
+      "types": "./dist/electron-log/main.d.ts",
+      "import": "./dist/electron-log/main.js"
+    },
+    "./electron-log/preload": {
+      "types": "./dist/electron-log/preload.d.ts",
+      "import": "./dist/electron-log/preload.js"
+    },
+    "./electron-log/renderer": {
+      "types": "./dist/electron-log/renderer.d.ts",
+      "import": "./dist/electron-log/renderer.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rm -rf dist",
+    "lint": "npm run typecheck",
+    "prepack": "npm run clean",
+    "prepare": "npm run build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "peerDependencies": {
+    "zod": "^4.4.3",
+    "electron-log": "^5.4.4",
+    "electron": ">=13"
+  },
+  "peerDependenciesMeta": {
+    "zod": {
+      "optional": true
+    },
+    "electron-log": {
+      "optional": true
+    },
+    "electron": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.0",
+    "electron-log": "^5.4.4",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.14",
+    "zod": "^4.4.3"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
