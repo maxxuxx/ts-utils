@@ -1,6 +1,6 @@
 {
   "name": "@maxxuxx/ts-utils",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Shared TypeScript utilities",
   "type": "module",
   "license": "MIT",

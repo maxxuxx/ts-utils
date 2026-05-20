@@ -1,3 +1,4 @@
+import type { ApiLogging } from "./logging.js";
 import type { z } from "zod";
 
 // HTTP types
@@ -45,17 +46,23 @@ export type ApiRequestContext = Readonly<{
 }>;
 
 // Hooks
-export type ApiHookContext = ApiRequestContext;
-
-export type ApiResponseHookContext = ApiRequestContext & Readonly<{
-  data    : unknown;
-  response: Response;
+export type ApiTimedRequestContext = ApiRequestContext & Readonly<{
+  startedAt: number;
 }>;
 
-export type ApiErrorHookContext = ApiRequestContext & Readonly<{
-  data    ?: unknown;
-  error    : unknown;
-  response?: Response;
+export type ApiHookContext = ApiTimedRequestContext;
+
+export type ApiResponseHookContext = ApiTimedRequestContext & Readonly<{
+  data      : unknown;
+  durationMs: number;
+  response  : Response;
+}>;
+
+export type ApiErrorHookContext = ApiTimedRequestContext & Readonly<{
+  data      ?: unknown;
+  durationMs: number;
+  error     : unknown;
+  response ?: Response;
 }>;
 
 export type ApiHooks = Readonly<{
@@ -184,6 +191,7 @@ export type ApiFetcherOptions = Readonly<{
   fetch  ?: FetchLike;
   headers?: ApiHeadersInit;
   hooks  ?: ApiHooks;
+  logging?: ApiLogging;
   retry  ?: ApiRetry;
   timeout?: number;
 }>;

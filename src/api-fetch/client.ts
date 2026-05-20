@@ -2,6 +2,7 @@ import { parseRequestBody, parseResponseBody, readResponseBody } from "./body.js
 import { ApiHttpError, ApiTimeoutError } from "./errors.js";
 import { executeEndpoint } from "./endpoint.js";
 import { buildHeaders, mergeHeaders } from "./headers.js";
+import { createApiLoggerHooks } from "./logging.js";
 import { buildApiUrl } from "./url.js";
 import { ApiMethod } from "./types.js";
 import type {
@@ -17,6 +18,7 @@ import type {
   ApiRetry,
   ApiRetryContext,
   ApiRetryOptions,
+  ApiTimedRequestContext,
   FetchLike,
   OptionalSchema,
   SchemaOutput
@@ -40,6 +42,14 @@ export const createApiFetcher = (
   options: ApiFetcherOptions = {}
 ): ApiFetcher => {
   const fetchImpl = options.fetch ?? globalThis.fetch;
+  const clientHooks = mergeHooks(
+    createApiLoggerHooks(options.logging),
+    options.hooks
+  );
+  const clientOptions = {
+    ...options,
+    hooks: clientHooks
+  };
   let refreshPromise: Promise<string | null | undefined> | null = null;
 
   const refreshOnce = async (
@@ -75,7 +85,7 @@ export const createApiFetcher = (
     const authEnabled = requestOptions.auth !== false && options.auth !== undefined;
 
     if (!authEnabled) {
-      return sendRequest(method, path, requestOptions, options, fetchImpl, undefined, false);
+      return sendRequest(method, path, requestOptions, clientOptions, fetchImpl, undefined, false);
     }
 
     const accessToken = await options.auth?.getAccessToken();
@@ -85,7 +95,7 @@ export const createApiFetcher = (
         method,
         path,
         requestOptions,
-        options,
+        clientOptions,
         fetchImpl,
         accessToken ?? undefined,
         true
@@ -105,7 +115,7 @@ export const createApiFetcher = (
         method,
         path,
         requestOptions,
-        options,
+        clientOptions,
         fetchImpl,
         nextAccessToken,
         true
@@ -164,10 +174,12 @@ const sendRequest = async <
     timeout,
     ...fetchOptions
   } = options;
-  const url     = buildApiUrl(path, baseURL ?? clientOptions.baseURL, query);
+  const url       = buildApiUrl(path, baseURL ?? clientOptions.baseURL, query);
+  const startedAt = Date.now();
   const context = {
     method,
     path,
+    startedAt,
     url
   };
   const parsedBody = parseRequestBody(options, context);
@@ -203,6 +215,7 @@ const sendRequest = async <
           {
             ...context,
             data: responseBody,
+            durationMs: getDurationMs(context),
             error,
             response
           }
@@ -242,6 +255,7 @@ const sendRequest = async <
       await callResponseHooks(clientOptions.hooks?.onResponse, hooks?.onResponse, {
         ...context,
         data: parsedResponse,
+        durationMs: getDurationMs(context),
         response
       });
 
@@ -260,6 +274,7 @@ const sendRequest = async <
         hooks?.onRequestError,
         {
           ...context,
+          durationMs: getDurationMs(context),
           error: nextError
         }
       );
@@ -467,7 +482,53 @@ const createRequestSignal = (
   };
 };
 
+const getDurationMs = (context: ApiTimedRequestContext): number => (
+  Math.max(0, Date.now() - context.startedAt)
+);
+
 // Hook helpers
+const mergeHooks = (
+  ...sources: Array<ApiFetcherOptions["hooks"] | undefined>
+): ApiFetcherOptions["hooks"] | undefined => {
+  const hooks = sources.filter(hasAnyHook);
+
+  if (hooks.length === 0) {
+    return undefined;
+  }
+
+  return {
+    onRequest: async (context) => {
+      for (const hook of hooks) {
+        await hook.onRequest?.(context);
+      }
+    },
+    onRequestError: async (context) => {
+      for (const hook of hooks) {
+        await hook.onRequestError?.(context);
+      }
+    },
+    onResponse: async (context) => {
+      for (const hook of hooks) {
+        await hook.onResponse?.(context);
+      }
+    },
+    onResponseError: async (context) => {
+      for (const hook of hooks) {
+        await hook.onResponseError?.(context);
+      }
+    }
+  };
+};
+
+const hasAnyHook = (
+  source: ApiFetcherOptions["hooks"] | undefined
+): source is NonNullable<ApiFetcherOptions["hooks"]> => (
+  source?.onRequest !== undefined
+  || source?.onRequestError !== undefined
+  || source?.onResponse !== undefined
+  || source?.onResponseError !== undefined
+);
+
 const callRequestHooks = async (
   ...args: [
     ...hooks: Array<((context: ApiHookContext) => unknown) | undefined>,

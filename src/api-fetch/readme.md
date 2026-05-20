@@ -178,22 +178,96 @@ await api.get("/slow", {
 });
 ```
 
-## Hooks
+## Logging
 
-Hooks can be configured globally or per request
+Enable built-in request logging with `logging`
 
 ```ts
 const api = createApiFetcher({
-  hooks: {
-    onRequest: ({ method, url }) => {
-      console.debug(method, url);
-    },
-    onResponseError: ({ error }) => {
-      report(error);
+  baseURL: "https://api.example.com",
+  logging: true
+});
+```
+
+Logs use this order
+
+```text
+emoji method code time endpoint
+```
+
+Example output
+
+```text
+🌐 GET    200 8ms  /users/1
+⚠️ POST   500 42ms /users
+❌ GET    ERR 3ms  /offline
+```
+
+The method column is left aligned to the longest HTTP method width
+
+The elapsed time token is left aligned to at least 4 characters
+
+The logged path excludes `baseURL` and omits query params by default
+
+Pass a custom logger or include query params when needed
+
+```ts
+const api = createApiFetcher({
+  logging: {
+    includeQuery: true,
+    logger: (message) => {
+      console.info(message);
     }
   }
 });
 ```
+
+In an Electron renderer, pass the logger created by `@maxxuxx/ts-utils/electron-log`
+
+```ts
+import { createApiFetcher } from "@maxxuxx/ts-utils/api-fetch";
+import { createBridgeLogger } from "@maxxuxx/ts-utils/electron-log";
+
+const logger = createBridgeLogger({
+  bridge: window.electronLog,
+  isProduction: import.meta.env.PROD,
+  targets: ["console", "terminal"]
+});
+
+const api = createApiFetcher({
+  logging: {
+    enabled: import.meta.env.DEV,
+    logger
+  }
+});
+```
+
+Request bodies, headers, and bearer tokens are never included in the default log message
+
+## Hooks
+
+Hooks are optional observability callbacks
+
+They do not change the value returned by `get`, `post`, `request`, or `call`
+
+Use `logging` when all you need is API call logging
+
+```ts
+const api = createApiFetcher({
+  hooks: {
+    onResponseError: ({ method, path, error, durationMs }) => {
+      report({
+        durationMs,
+        error,
+        method,
+        path
+      });
+    }
+  }
+});
+```
+
+`durationMs` is only available inside response and error hook contexts
 
 ## Errors
 

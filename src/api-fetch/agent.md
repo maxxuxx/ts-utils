@@ -4,7 +4,7 @@
 
 This module provides fetch based API helpers for projects that want small request utilities with Zod validation
 
-It provides method shortcuts, reusable endpoint definitions, bearer token refresh, timeout, retry, and hooks without depending on a framework
+It provides method shortcuts, reusable endpoint definitions, bearer token refresh, timeout, retry, logging, and hooks without depending on a framework
 
 ## Public shape
 
@@ -26,13 +26,15 @@ Primary request vocabulary should stay small and direct
 
 `types.ts` contains public types, method constants, fetcher contracts, endpoint contracts, auth contracts, retry contracts, and hook contracts
 
-`client.ts` contains `createApiFetcher`, method shortcuts, request execution, auth refresh retry, timeout, retry, and hook orchestration
+`client.ts` contains `createApiFetcher`, method shortcuts, request execution, auth refresh retry, timeout, retry, logging hook composition, and hook orchestration
 
 `endpoint.ts` contains `endpoint.get/post/put/patch/delete`, path param replacement, endpoint param parsing, and endpoint execution helpers
 
 `body.ts` contains JSON request validation, response body parsing, and response schema validation
 
 `headers.ts`, `query.ts`, and `url.ts` contain small request building helpers
+
+`logging.ts` contains built-in API call logging formatters and hook adapters
 
 `errors.ts` contains typed errors for HTTP, validation, parse, auth, and timeout failures
 
@@ -68,6 +70,12 @@ Timeout uses `AbortController` and throws `ApiTimeoutError`
 
 Hooks are available globally and per request for observability
 
-Keep module docs updated whenever endpoint shape, request options, auth behavior, retry behavior, hooks, exports, or error behavior changes
+Use `createApiLoggerHooks` to enable built-in API call logs through the existing hook surface
+
+The default log format is `[api] METHOD path status durationMs`
+
+Default log messages never include request bodies, headers, or bearer tokens
+
+Keep module docs updated whenever endpoint shape, request options, auth behavior, retry behavior, logging behavior, hooks, exports, or error behavior changes
 
 `zod` is a package dependency because this module imports and re-exports it

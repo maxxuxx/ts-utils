@@ -12,6 +12,19 @@ export {
   ApiValidationError
 } from "./errors.js";
 export {
+  createApiLoggerHooks,
+  formatApiLogEvent
+} from "./logging.js";
+export type {
+  ApiLogEvent,
+  ApiLogging,
+  ApiLoggingOptions,
+  ApiLogger,
+  ApiLogWriter,
+  ApiLogEventType,
+  ApiLogLevel
+} from "./logging.js";
+export {
   appendQuery,
   mergeQuery,
   toQueryEntries
@@ -44,6 +57,7 @@ export type {
   ApiRetry,
   ApiRetryContext,
   ApiRetryOptions,
+  ApiTimedRequestContext,
   ApiWriteMethod,
   ApiWriteOptions,
   EndpointCallArgs,

@@ -78,7 +78,11 @@ const user = User.parse({
 API fetch utilities are available through the `api-fetch` subpath
 
 ```ts
-import { createApiFetcher, endpoint, z } from "@maxxuxx/ts-utils/api-fetch";
+import {
+  createApiFetcher,
+  endpoint,
+  z
+} from "@maxxuxx/ts-utils/api-fetch";
 ```
 
 Create a fetcher with request and response validation
@@ -133,6 +137,22 @@ const api = createApiFetcher({
     clear: () => tokenStore.clear()
   }
 });
+```
+
+API calls can log method, status code, elapsed time, and endpoint path
+
+```ts
+const api = createApiFetcher({
+  logging: true
+});
+```
+
+Example output
+
+```text
+🌐 GET    200 8ms  /users/1
+⚠️ POST   500 42ms /users
+❌ GET    ERR 3ms  /offline
 ```
 
 See [src/api-fetch/readme.md](https://github.com/maxxuxx/ts-utils/blob/main/src/api-fetch/readme.md) for module details

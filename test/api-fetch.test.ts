@@ -204,6 +204,65 @@ describe("api-fetch", () => {
       timeout: 1
     })).rejects.toBeInstanceOf(ApiTimeoutError);
   });
+
+  it("logs API responses with aligned method, status, duration, and endpoint path", async () => {
+    const fetch = vi.fn<FetchLike>(async () => jsonResponse({ ok: true }));
+    const logger = vi.fn();
+    const api = createApiFetcher({
+      baseURL: "https://api.example.com",
+      fetch,
+      logging: {
+        logger
+      }
+    });
+
+    await api.post("/health", {
+      json: { ok: true },
+      query: {
+        verbose: true
+      }
+    });
+
+    const message = logger.mock.calls[0]?.[0];
+
+    expect(message).toMatch(/^🌐 POST {3}200 \d+ms\s+\/health$/);
+  });
+
+  it("logs API failures with warning emoji and endpoint path", async () => {
+    const fetch = vi.fn<FetchLike>(async () => jsonResponse({ message: "failed" }, 500));
+    const logger = vi.fn();
+    const api = createApiFetcher({
+      fetch,
+      logging: {
+        logger
+      }
+    });
+
+    await expect(api.get("/broken")).rejects.toBeInstanceOf(ApiHttpError);
+
+    const message = logger.mock.calls[0]?.[0];
+
+    expect(message).toMatch(/^⚠️ GET {4}500 \d+ms\s+\/broken$/);
+  });
+
+  it("logs request failures with error emoji and ERR code", async () => {
+    const fetch = vi.fn<FetchLike>(async () => {
+      throw new Error("network down");
+    });
+    const logger = vi.fn();
+    const api = createApiFetcher({
+      fetch,
+      logging: {
+        logger
+      }
+    });
+
+    await expect(api.get("/offline")).rejects.toThrow("network down");
+
+    const message = logger.mock.calls[0]?.[0];
+
+    expect(message).toMatch(/^❌ GET {4}ERR \d+ms\s+\/offline$/);
+  });
 });
 
 const jsonResponse = (body: unknown, status = 200): Response => new Response(

@@ -65,9 +65,10 @@ export const executeEndpoint = async <TEndpoint extends AnyApiEndpoint>(
     ...callOptions
   } = input;
   const context = {
-    method: apiEndpoint.method,
-    path  : apiEndpoint.path,
-    url   : apiEndpoint.path
+    method   : apiEndpoint.method,
+    path     : apiEndpoint.path,
+    startedAt: Date.now(),
+    url      : apiEndpoint.path
   };
   const params = parseEndpointParams(apiEndpoint, rawParams, context);
   const path   = buildEndpointPath(apiEndpoint.path, params);
