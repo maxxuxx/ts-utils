@@ -157,6 +157,25 @@ Example output
 
 See [src/api-fetch/readme.md](https://github.com/maxxuxx/ts-utils/blob/main/src/api-fetch/readme.md) for module details
 
+## Env
+
+Runtime environment helpers are available through the `env` subpath
+
+```ts
+import { env, envSchema, z } from "@maxxuxx/ts-utils/env";
+
+const Config = z.object({
+  API_URL: envSchema.string(),
+  DEBUG  : envSchema.boolean().default(false),
+  PORT   : envSchema.number().default(3000)
+});
+
+const config = env.parse(Config, import.meta.env);
+const apiUrl = env.require("API_URL");
+```
+
+See [src/env/readme.md](https://github.com/maxxuxx/ts-utils/blob/main/src/env/readme.md) for module details
+
 ## Electron log
 
 Electron logging helpers are exported as process specific subpaths

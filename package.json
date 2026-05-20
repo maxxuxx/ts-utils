@@ -1,6 +1,6 @@
 {
   "name": "@maxxuxx/ts-utils",
-  "version": "0.5.2",
+  "version": "0.6.0",
   "description": "Shared TypeScript utilities",
   "type": "module",
   "license": "MIT",
@@ -51,6 +51,10 @@
     "./normalize": {
       "types": "./dist/normalize/index.d.ts",
       "import": "./dist/normalize/index.js"
+    },
+    "./env": {
+      "types": "./dist/env/index.d.ts",
+      "import": "./dist/env/index.js"
     },
     "./time": {
       "types": "./dist/time/index.d.ts",
