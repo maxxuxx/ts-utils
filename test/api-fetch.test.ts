@@ -2,42 +2,43 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   ApiHttpError,
+  ApiTimeoutError,
   ApiValidationError,
-  HttpMethod,
-  createApiClient,
-  defineEndpoint,
+  createApiFetcher,
+  endpoint,
   responseEnvelopeSchema,
   type FetchLike,
   z
 } from "../src/api-fetch/index.js";
 
+const User = z.object({
+  id  : z.number(),
+  name: z.string()
+});
+
+const CreateUser = z.object({
+  name: z.string().min(1)
+});
+
 describe("api-fetch", () => {
-  it("sends zod validated JSON requests and parses zod validated responses", async () => {
+  it("sends JSON requests and parses schema validated responses", async () => {
     const fetch = vi.fn<FetchLike>(async () => jsonResponse({
       id  : 1,
       name: "haru"
     }));
-    const client = createApiClient({
-      baseUrl: "https://api.example.com",
+    const api = createApiFetcher({
+      baseURL: "https://api.example.com",
       headers: {
         "X-App": "test"
       },
       fetch
     });
-    const requestSchema = z.object({
-      name: z.string().min(1)
-    });
-    const responseSchema = z.object({
-      id  : z.number(),
-      name: z.string()
-    });
 
-    const data = await client.request("/users", {
-      method        : HttpMethod.POST,
-      body          : { name: "haru" },
-      requestSchema,
-      responseSchema,
-      query         : { page: 1, empty: null }
+    const data = await api.post("/users", {
+      json      : { name: "haru" },
+      jsonSchema: CreateUser,
+      query     : { page: 1, empty: null },
+      schema    : User
     });
 
     expect(data).toEqual({
@@ -47,8 +48,8 @@ describe("api-fetch", () => {
     expect(fetch).toHaveBeenCalledWith(
       "https://api.example.com/users?page=1",
       expect.objectContaining({
-        method: "POST",
-        body  : JSON.stringify({ name: "haru" })
+        body  : JSON.stringify({ name: "haru" }),
+        method: "POST"
       })
     );
 
@@ -58,16 +59,13 @@ describe("api-fetch", () => {
     expect(headers.get("X-App")).toBe("test");
   });
 
-  it("throws validation errors before invalid requests are sent", async () => {
+  it("throws validation errors before invalid JSON requests are sent", async () => {
     const fetch = vi.fn<FetchLike>(async () => jsonResponse({ ok: true }));
-    const client = createApiClient({ fetch });
+    const api = createApiFetcher({ fetch });
 
-    await expect(client.request("/users", {
-      method       : HttpMethod.POST,
-      body         : { name: "" },
-      requestSchema: z.object({
-        name: z.string().min(1)
-      })
+    await expect(api.post("/users", {
+      json      : { name: "" },
+      jsonSchema: CreateUser
     })).rejects.toBeInstanceOf(ApiValidationError);
 
     expect(fetch).not.toHaveBeenCalled();
@@ -75,29 +73,19 @@ describe("api-fetch", () => {
 
   it("throws typed HTTP errors with parsed response bodies", async () => {
     const fetch = vi.fn<FetchLike>(async () => jsonResponse({ message: "unauthorized" }, 401));
-    const client = createApiClient({ fetch });
+    const api = createApiFetcher({ fetch });
 
-    await expect(client.request("/me", {
-      responseSchema: z.object({
-        id: z.number()
-      })
+    await expect(api.get("/me", {
+      schema: User
     })).rejects.toMatchObject({
-      status: 401,
-      body  : { message: "unauthorized" }
+      body  : { message: "unauthorized" },
+      status: 401
     } satisfies Partial<ApiHttpError>);
   });
 
   it("refreshes access tokens once and retries unauthorized requests", async () => {
-    type Token = {
-      accessToken: string;
-      expiresAt  : number;
-    };
-
-    let token: Token | null = {
-      accessToken: "expired",
-      expiresAt  : 0
-    };
-    const fetch = vi.fn<FetchLike>(async (_input: string | URL | Request, init?: RequestInit) => {
+    let accessToken = "expired";
+    const fetch = vi.fn<FetchLike>(async (_input, init) => {
       const headers = new Headers(init?.headers);
 
       if (headers.get("Authorization") === "Bearer fresh") {
@@ -106,36 +94,31 @@ describe("api-fetch", () => {
 
       return jsonResponse({ message: "expired" }, 401);
     });
-    const refreshToken = vi.fn(async () => ({
-      accessToken: "fresh",
-      expiresAt  : Date.now() + 60_000
-    }));
-    const client = createApiClient<Token>({
+    const refresh = vi.fn(async () => {
+      accessToken = "fresh";
+
+      return accessToken;
+    });
+    const api = createApiFetcher({
       fetch,
-      token: {
-        getToken          : () => token,
-        setToken          : (nextToken) => {
-          token = nextToken;
-        },
-        getAccessToken    : (currentToken) => currentToken.accessToken,
-        shouldRefreshToken: () => false,
-        refreshToken
+      auth: {
+        getAccessToken: () => accessToken,
+        refresh
       }
     });
 
-    const data = await client.request("/me", {
-      responseSchema: z.object({
+    const data = await api.get("/me", {
+      schema: z.object({
         ok: z.boolean()
       })
     });
 
     expect(data).toEqual({ ok: true });
-    expect(refreshToken).toHaveBeenCalledTimes(1);
+    expect(refresh).toHaveBeenCalledTimes(1);
     expect(fetch).toHaveBeenCalledTimes(2);
-    expect(token?.accessToken).toBe("fresh");
   });
 
-  it("creates reusable endpoints with params, query, body, response, and result mapping", async () => {
+  it("creates reusable endpoints with path params, query, response schema, and select", async () => {
     const fetch = vi.fn<FetchLike>(async () => jsonResponse({
       code: 200,
       data: {
@@ -143,33 +126,83 @@ describe("api-fetch", () => {
         name: "haru"
       }
     }));
-    const client = createApiClient({
-      baseUrl: "https://api.example.com",
+    const api = createApiFetcher({
+      baseURL: "https://api.example.com",
       fetch
     });
-    const endpoint = defineEndpoint({
-      method      : HttpMethod.GET,
-      path        : (params: { id: number }) => `/users/${params.id}`,
-      paramsSchema: z.object({
-        id: z.number()
+    const getUser = endpoint.get("/users/:id", {
+      params: z.object({
+        id: z.coerce.number().int().positive()
       }),
-      responseSchema: responseEnvelopeSchema(z.object({
-        id  : z.number(),
-        name: z.string()
-      })),
-      resultSchema: z.object({
-        id: z.number()
+      query: () => ({
+        include: "profile"
       }),
-      mapQuery: () => ({ include: "profile" }),
-      mapResult: (response) => ({
-        id: response.data?.id ?? 0
+      schema: responseEnvelopeSchema(User),
+      select: (response) => response.data
+    });
+
+    const user = await api.call(getUser, {
+      params: { id: "7" },
+      query : { lang: "ko" }
+    });
+
+    expect(user).toEqual({
+      id  : 7,
+      name: "haru"
+    });
+    expect(fetch.mock.calls[0]?.[0]).toBe("https://api.example.com/users/7?include=profile&lang=ko");
+  });
+
+  it("creates reusable endpoints with JSON schemas", async () => {
+    const fetch = vi.fn<FetchLike>(async () => jsonResponse({
+      id  : 8,
+      name: "haru"
+    }));
+    const api = createApiFetcher({
+      baseURL: "https://api.example.com",
+      fetch
+    });
+    const createUser = endpoint.post("/users", {
+      json  : CreateUser,
+      schema: User
+    });
+
+    const user = await api.call(createUser, {
+      json: { name: "haru" }
+    });
+
+    expect(user.id).toBe(8);
+    expect(fetch.mock.calls[0]?.[0]).toBe("https://api.example.com/users");
+  });
+
+  it("retries configured GET status failures", async () => {
+    const fetch = vi.fn<FetchLike>()
+      .mockResolvedValueOnce(jsonResponse({ message: "try again" }, 503))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }));
+    const api = createApiFetcher({ fetch });
+
+    const data = await api.get("/unstable", {
+      retry: 1,
+      schema: z.object({
+        ok: z.boolean()
       })
     });
 
-    const getUser = client.endpoint(endpoint);
+    expect(data).toEqual({ ok: true });
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
 
-    await expect(getUser({ id: 7 })).resolves.toEqual({ id: 7 });
-    expect(fetch.mock.calls[0]?.[0]).toBe("https://api.example.com/users/7?include=profile");
+  it("throws timeout errors when requests exceed timeout", async () => {
+    const fetch = vi.fn<FetchLike>(async (_input, init) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => {
+        reject(new Error("aborted"));
+      });
+    }));
+    const api = createApiFetcher({ fetch });
+
+    await expect(api.get("/slow", {
+      timeout: 1
+    })).rejects.toBeInstanceOf(ApiTimeoutError);
   });
 });
 

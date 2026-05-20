@@ -78,60 +78,59 @@ const user = User.parse({
 API fetch utilities are available through the `api-fetch` subpath
 
 ```ts
-import { createApiClient, defineEndpoint, HttpMethod, z } from "@maxxuxx/ts-utils/api-fetch";
+import { createApiFetcher, endpoint, z } from "@maxxuxx/ts-utils/api-fetch";
 ```
 
-Create a client with request and response validation
+Create a fetcher with request and response validation
 
 ```ts
-const client = createApiClient({
-  baseUrl: "https://api.example.com"
+const api = createApiFetcher({
+  baseURL: "https://api.example.com"
 });
 
-const user = await client.request("/users", {
-  method: HttpMethod.POST,
-  body  : {
-    name: "haru"
-  },
-  requestSchema: z.object({
+const User = z.object({
+  id  : z.number(),
+  name: z.string()
+});
+
+const user = await api.post("/users", {
+  json      : { name: "haru" },
+  jsonSchema: z.object({
     name: z.string().min(1)
   }),
-  responseSchema: z.object({
-    id  : z.number(),
-    name: z.string()
-  })
+  schema: User
 });
 ```
 
-Reusable endpoints can map params to paths, query strings, headers, request bodies, and final result shapes
+Reusable endpoints can define method, path params, query strings, request JSON, response schema, and result selection
 
 ```ts
-const getUser = defineEndpoint({
-  method      : HttpMethod.GET,
-  path        : (params: { id: number }) => `/users/${params.id}`,
-  paramsSchema: z.object({
-    id: z.number()
+const getUser = endpoint.get("/users/:id", {
+  params: z.object({
+    id: z.coerce.number().int().positive()
   }),
-  responseSchema: z.object({
-    id  : z.number(),
-    name: z.string()
-  })
+  schema: User
 });
 
-const user = await client.endpoint(getUser)({ id: 1 });
+const user = await api.call(getUser, {
+  params: { id: "1" }
+});
 ```
 
 Token refresh is injected so apps can use cookies, browser storage, iron-session, or custom stores
 
 ```ts
-const client = createApiClient({
-  token: {
-    getToken      : () => tokenStore.get(),
-    setToken      : (token) => tokenStore.set(token),
-    clearToken    : () => tokenStore.clear(),
-    getAccessToken: (token) => token.accessToken,
-    shouldRefreshToken: (token) => token.expiresAt <= Date.now() + 60_000,
-    refreshToken  : () => refreshAccessToken()
+const api = createApiFetcher({
+  auth: {
+    getAccessToken: () => tokenStore.get()?.accessToken,
+    refresh: async () => {
+      const token = await refreshAccessToken();
+
+      tokenStore.set(token);
+
+      return token.accessToken;
+    },
+    clear: () => tokenStore.clear()
   }
 });
 ```

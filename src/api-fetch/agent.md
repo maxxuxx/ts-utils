@@ -2,9 +2,9 @@
 
 ## Purpose
 
-This module provides small fetch utilities for API clients that need Zod request and response validation
+This module provides fetch based API helpers for projects that want small request utilities with Zod validation
 
-It also provides optional token refresh orchestration without coupling the package to any framework session store
+It provides method shortcuts, reusable endpoint definitions, bearer token refresh, timeout, retry, and hooks without depending on a framework
 
 ## Public shape
 
@@ -15,43 +15,59 @@ Consumers import this module through `@maxxuxx/ts-utils/api-fetch`
 Do not re-export this module from the root package entry because `zod` must stay module-scoped and optional for consumers
 
 ```ts
-import { createApiClient, defineEndpoint, HttpMethod, z } from "@maxxuxx/ts-utils/api-fetch";
+import { createApiFetcher, endpoint, z } from "@maxxuxx/ts-utils/api-fetch";
 ```
+
+Primary request vocabulary should stay small and direct
+
+`get`, `post`, `put`, `patch`, `delete`, `query`, `json`, `jsonSchema`, `schema`, and `select`
 
 ## Internal layout
 
-`types.ts` contains public types, HTTP method constants, endpoint contracts, and token auth contracts
+`types.ts` contains public types, method constants, fetcher contracts, endpoint contracts, auth contracts, retry contracts, and hook contracts
 
-`client.ts` contains `createApiClient`, request execution, and token refresh retry logic
+`client.ts` contains `createApiFetcher`, method shortcuts, request execution, auth refresh retry, timeout, retry, and hook orchestration
 
-`endpoint.ts` contains `defineEndpoint` and endpoint execution helpers
+`endpoint.ts` contains `endpoint.get/post/put/patch/delete`, path param replacement, endpoint param parsing, and endpoint execution helpers
 
-`body.ts` contains request body validation, response body parsing, and response schema validation
+`body.ts` contains JSON request validation, response body parsing, and response schema validation
 
 `headers.ts`, `query.ts`, and `url.ts` contain small request building helpers
 
-`errors.ts` contains typed errors for HTTP, validation, parse, and auth failures
+`errors.ts` contains typed errors for HTTP, validation, parse, auth, and timeout failures
 
 `schemas.ts` contains common API response schema helpers
 
 ## Design decisions
 
-The client does not know about cookies, local storage, iron-session, or refresh endpoint shapes
+The public client name is `createApiFetcher`
 
-Token storage and refresh behavior are injected through `token.getToken`, `token.setToken`, `token.clearToken`, and `token.refreshToken`
+The old `createApiClient`, `defineEndpoint`, `HttpMethod`, `requestSchema`, `responseSchema`, `transform`, `mapBody`, and `mapQuery` API was intentionally replaced
 
-Auth defaults to enabled when `token` options exist and disabled otherwise
+Method shortcuts are the preferred public API because they avoid exposing method constants at most call sites
 
-Requests can override auth with `auth: false`
+`baseURL` uses the casing common in axios and ofetch style APIs
+
+`json` is the request JSON payload and `jsonSchema` validates it before the fetch call
+
+`schema` validates the parsed response body and `select` reshapes the validated response
+
+Endpoint definitions use `endpoint.get("/users/:id", { params, schema })` so route declarations read like HTTP routes
+
+Endpoint path params are replaced from parsed `params` and encoded with `encodeURIComponent`
+
+Auth is intentionally bearer-token oriented and only requires `getAccessToken`, optional `refresh`, and optional `clear`
 
 Refresh retry happens once after `401` or `419` by default
 
-Custom retry policy can be supplied with `token.shouldRefreshOnError`
+Concurrent refresh calls are deduped per fetcher instance through a shared refresh promise
 
-Concurrent refresh calls are deduped per client instance through a shared refresh promise
+General retry is separate from auth refresh and defaults to `GET` only
 
-The base request layer stays useful without auth, token storage, or endpoint definitions
+Timeout uses `AbortController` and throws `ApiTimeoutError`
 
-Keep module docs updated whenever endpoint shape, request options, token behavior, exports, or error behavior changes
+Hooks are available globally and per request for observability
+
+Keep module docs updated whenever endpoint shape, request options, auth behavior, retry behavior, hooks, exports, or error behavior changes
 
 `zod` is a package dependency because this module imports and re-exports it

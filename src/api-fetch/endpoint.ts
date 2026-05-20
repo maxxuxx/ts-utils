@@ -1,123 +1,110 @@
 import { ApiValidationError } from "./errors.js";
 import { mergeHeaders } from "./headers.js";
 import { mergeQuery } from "./query.js";
-import { HttpMethod } from "./types.js";
+import { ApiMethod } from "./types.js";
 import type {
+  AnyApiEndpoint,
   ApiEndpoint,
   ApiEndpointOptions,
-  ApiRequestContext,
+  ApiHeadersInit,
   ApiRequest,
-  EndpointCallOptions,
-  EndpointInput,
+  ApiRequestContext,
+  EndpointCallInput,
+  EndpointFactory,
+  EndpointHeaders,
   EndpointParams,
+  EndpointQuery,
   EndpointResult,
   OptionalSchema,
-  SchemaInput,
-  SchemaOutput
+  QueryParams
 } from "./types.js";
 
-// Definition
-export const defineEndpoint = <
-  const TParamsSchema extends OptionalSchema = undefined,
-  const TRequestSchema extends OptionalSchema = undefined,
-  const TResponseSchema extends OptionalSchema = undefined,
-  const TResultSchema extends OptionalSchema = undefined
->(
-  endpoint: ApiEndpointOptions<
-    TParamsSchema,
-    TRequestSchema,
-    TResponseSchema,
-    TResultSchema
-  >
-): ApiEndpointOptions<
-  TParamsSchema,
-  TRequestSchema,
-  TResponseSchema,
-  TResultSchema
-> => Object.freeze(endpoint);
-
-// Execution
-export const executeEndpoint = async <
-  TParamsSchema extends OptionalSchema,
-  TRequestSchema extends OptionalSchema,
-  TResponseSchema extends OptionalSchema,
-  TResultSchema extends OptionalSchema
->(
-  request: ApiRequest,
-  endpoint: ApiEndpointOptions<
-    TParamsSchema,
-    TRequestSchema,
-    TResponseSchema,
-    TResultSchema
-  >,
-  rawParams: EndpointInput<TParamsSchema>,
-  callOptions: EndpointCallOptions = {}
-): Promise<EndpointResult<TResponseSchema, TResultSchema>> => {
-  const method = endpoint.method ?? HttpMethod.GET;
-  const contextPath = typeof endpoint.path === "string"
-    ? endpoint.path
-    : "[dynamic endpoint]";
-  const context = {
+export const createEndpointFactory = <TMethod extends ApiMethod>(
+  method: TMethod
+): EndpointFactory<TMethod> => {
+  const factory = <
+    const TParamsSchema extends OptionalSchema = undefined,
+    const TJsonSchema extends OptionalSchema = undefined,
+    const TResponseSchema extends OptionalSchema = undefined,
+    TResult = unknown
+  >(
+    path: string,
+    options: ApiEndpointOptions<
+      TParamsSchema,
+      TJsonSchema,
+      TResponseSchema,
+      TResult
+    > = {}
+  ): ApiEndpoint<TParamsSchema, TJsonSchema, TResponseSchema, TResult> => Object.freeze({
     method,
-    path: contextPath
-  };
-  const params = parseEndpointParams(endpoint, rawParams, context);
-  const path   = typeof endpoint.path === "function"
-    ? endpoint.path(params)
-    : endpoint.path;
-  const body   = endpoint.mapBody
-    ? endpoint.mapBody(params)
-    : endpoint.requestSchema
-      ? params as SchemaInput<TRequestSchema>
-      : undefined;
-
-  const response = await request(path, {
-    ...callOptions,
-    method,
-    body,
-    requestSchema      : endpoint.requestSchema,
-    responseSchema     : endpoint.responseSchema,
-    headers            : mergeHeaders(endpoint.mapHeaders?.(params), callOptions.headers),
-    query              : mergeQuery(endpoint.mapQuery?.(params), callOptions.query),
-    auth               : callOptions.auth ?? endpoint.auth,
-    retryOnUnauthorized: callOptions.retryOnUnauthorized ?? endpoint.retryOnUnauthorized
+    options: Object.freeze(options),
+    path
   });
 
-  const resultInput = endpoint.mapResult
-    ? endpoint.mapResult(response as SchemaOutput<TResponseSchema>)
-    : response;
-
-  if (!endpoint.resultSchema) {
-    return resultInput as EndpointResult<TResponseSchema, TResultSchema>;
-  }
-
-  const parsedResult = endpoint.resultSchema.safeParse(resultInput);
-
-  if (!parsedResult.success) {
-    throw new ApiValidationError(
-      "response",
-      parsedResult.error,
-      resultInput,
-      {
-        method,
-        path
-      }
-    );
-  }
-
-  return parsedResult.data as EndpointResult<TResponseSchema, TResultSchema>;
+  return Object.assign(factory, {
+    method
+  }) as EndpointFactory<TMethod>;
 };
 
-const parseEndpointParams = <TParamsSchema extends OptionalSchema>(
-  endpoint: Pick<ApiEndpoint<TParamsSchema>, "paramsSchema">,
-  rawParams: EndpointInput<TParamsSchema>,
+export const endpoint = Object.freeze({
+  delete: createEndpointFactory(ApiMethod.DELETE),
+  get   : createEndpointFactory(ApiMethod.GET),
+  patch : createEndpointFactory(ApiMethod.PATCH),
+  post  : createEndpointFactory(ApiMethod.POST),
+  put   : createEndpointFactory(ApiMethod.PUT)
+});
+
+// Endpoint execution
+export const executeEndpoint = async <TEndpoint extends AnyApiEndpoint>(
+  request: ApiRequest,
+  apiEndpoint: TEndpoint,
+  input: EndpointCallInput<any, any> = {}
+): Promise<EndpointResult<TEndpoint>> => {
+  const {
+    params: rawParams,
+    ...callOptions
+  } = input;
+  const context = {
+    method: apiEndpoint.method,
+    path  : apiEndpoint.path,
+    url   : apiEndpoint.path
+  };
+  const params = parseEndpointParams(apiEndpoint, rawParams, context);
+  const path   = buildEndpointPath(apiEndpoint.path, params);
+
+  return request(apiEndpoint.method, path, {
+    ...callOptions,
+    auth      : callOptions.auth ?? apiEndpoint.options.auth,
+    headers   : mergeHeaders(
+      resolveEndpointHeaders(apiEndpoint.options.headers, params),
+      callOptions.headers
+    ),
+    hooks     : callOptions.hooks,
+    json      : callOptions.json,
+    jsonSchema: apiEndpoint.options.json,
+    query     : mergeQuery(
+      resolveEndpointQuery(apiEndpoint.options.query, params),
+      callOptions.query
+    ),
+    retry     : callOptions.retry ?? apiEndpoint.options.retry,
+    schema    : apiEndpoint.options.schema,
+    select    : apiEndpoint.options.select,
+    timeout   : callOptions.timeout ?? apiEndpoint.options.timeout
+  }) as Promise<EndpointResult<TEndpoint>>;
+};
+
+const parseEndpointParams = <TEndpoint extends AnyApiEndpoint>(
+  apiEndpoint: TEndpoint,
+  rawParams: unknown,
   context: ApiRequestContext
-): EndpointParams<TParamsSchema> => {
-  if (!endpoint.paramsSchema) {
-    return undefined as EndpointParams<TParamsSchema>;
+): EndpointParams<TEndpoint["options"]["params"]> => {
+  const paramsSchema = apiEndpoint.options.params;
+
+  if (!paramsSchema) {
+    return undefined as EndpointParams<TEndpoint["options"]["params"]>;
   }
 
-  const parsedParams = endpoint.paramsSchema.safeParse(rawParams);
+  const parsedParams = paramsSchema.safeParse(rawParams);
 
   if (!parsedParams.success) {
     throw new ApiValidationError(
@@ -128,5 +115,44 @@ const parseEndpointParams = <TParamsSchema extends OptionalSchema>(
     );
   }
 
-  return parsedParams.data as EndpointParams<TParamsSchema>;
+  return parsedParams.data as EndpointParams<TEndpoint["options"]["params"]>;
 };
+
+const buildEndpointPath = (
+  path: string,
+  params: unknown
+): string => {
+  if (!path.includes(":")) {
+    return path;
+  }
+
+  const record = isRecord(params) ? params : {};
+
+  return path.replace(/:([A-Za-z_][A-Za-z0-9_]*)/g, (token, key: string) => {
+    const value = record[key];
+
+    if (value === undefined || value === null) {
+      throw new Error(`Missing endpoint path param ${token}`);
+    }
+
+    return encodeURIComponent(String(value));
+  });
+};
+
+const resolveEndpointQuery = <TParamsSchema extends OptionalSchema>(
+  query: EndpointQuery<TParamsSchema> | undefined,
+  params: EndpointParams<TParamsSchema>
+): QueryParams | undefined => (
+  typeof query === "function" ? query(params) : query
+);
+
+const resolveEndpointHeaders = <TParamsSchema extends OptionalSchema>(
+  headers: EndpointHeaders<TParamsSchema> | undefined,
+  params: EndpointParams<TParamsSchema>
+): ApiHeadersInit | undefined => (
+  typeof headers === "function" ? headers(params) : headers
+);
+
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+  typeof value === "object" && value !== null
+);

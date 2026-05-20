@@ -1,15 +1,15 @@
 import type { z } from "zod";
 
 // HTTP types
-export const HttpMethod = {
+export const ApiMethod = {
+  DELETE: "DELETE",
   GET   : "GET",
-  POST  : "POST",
-  PUT   : "PUT",
   PATCH : "PATCH",
-  DELETE: "DELETE"
+  POST  : "POST",
+  PUT   : "PUT"
 } as const;
 
-export type HttpMethod = (typeof HttpMethod)[keyof typeof HttpMethod];
+export type ApiMethod = (typeof ApiMethod)[keyof typeof ApiMethod];
 
 export type QueryValue = string | number | boolean | null | undefined;
 
@@ -19,8 +19,6 @@ export type QueryParams =
   | Record<string, QueryValue | QueryValue[]>;
 
 export type ApiHeadersInit = ConstructorParameters<typeof Headers>[0];
-
-export type HeaderFactory<TParams> = (params: TParams) => ApiHeadersInit | undefined;
 
 // Schema types
 export type AnySchema = z.ZodType;
@@ -32,157 +30,288 @@ export type SchemaInput<TSchema extends OptionalSchema> =
 export type SchemaOutput<TSchema extends OptionalSchema> =
   TSchema extends z.ZodType ? z.output<TSchema> : unknown;
 
-// Fetch types
+// Shared types
+export type MaybePromise<TValue> = TValue | Promise<TValue>;
+
 export type FetchLike = (
   input: string | URL | Request,
   init?: RequestInit
 ) => Promise<Response>;
 
-export type AuthMode = boolean | "optional";
-
-export type MaybePromise<T> = T | Promise<T>;
-
 export type ApiRequestContext = Readonly<{
-  method: HttpMethod;
+  method: ApiMethod;
   path  : string;
+  url   : string;
 }>;
 
+// Hooks
+export type ApiHookContext = ApiRequestContext;
+
+export type ApiResponseHookContext = ApiRequestContext & Readonly<{
+  data    : unknown;
+  response: Response;
+}>;
+
+export type ApiErrorHookContext = ApiRequestContext & Readonly<{
+  data    ?: unknown;
+  error    : unknown;
+  response?: Response;
+}>;
+
+export type ApiHooks = Readonly<{
+  onRequest      ?: (context: ApiHookContext) => MaybePromise<void>;
+  onRequestError ?: (context: ApiErrorHookContext) => MaybePromise<void>;
+  onResponse     ?: (context: ApiResponseHookContext) => MaybePromise<void>;
+  onResponseError?: (context: ApiErrorHookContext) => MaybePromise<void>;
+}>;
+
+// Retry
+export type ApiRetryContext = ApiRequestContext & Readonly<{
+  attempt : number;
+  error   : unknown;
+  response?: Response;
+  status  ?: number;
+}>;
+
+export type ApiRetryOptions = Readonly<{
+  delay      ?: number | ((context: ApiRetryContext) => number);
+  limit      ?: number;
+  methods    ?: readonly ApiMethod[];
+  shouldRetry?: (context: ApiRetryContext) => MaybePromise<boolean | undefined>;
+  statusCodes?: readonly number[];
+}>;
+
+export type ApiRetry = boolean | number | ApiRetryOptions;
+
+// Auth
+export type ApiAuthOptions = Readonly<{
+  clear               ?: () => MaybePromise<void>;
+  getAccessToken       : () => MaybePromise<string | null | undefined>;
+  refresh            ?: (error: unknown) => MaybePromise<string | null | undefined>;
+  shouldRefreshOnError?: (error: unknown) => boolean;
+}>;
+
+// Request options
 export type ApiRequestOptions<
-  TRequestSchema extends OptionalSchema = undefined,
+  TJsonSchema extends OptionalSchema = undefined,
   TResponseSchema extends OptionalSchema = undefined,
   TResult = SchemaOutput<TResponseSchema>
 > = Omit<RequestInit, "body" | "headers" | "method"> & {
-  method        ?: HttpMethod;
-  body          ?: SchemaInput<TRequestSchema>;
-  requestSchema ?: TRequestSchema;
-  responseSchema?: TResponseSchema;
-  transform     ?: (data: SchemaOutput<TResponseSchema>) => TResult;
-  baseUrl       ?: string;
-  headers       ?: ApiHeadersInit;
-  query         ?: QueryParams;
-  accessToken   ?: string;
-  auth          ?: AuthMode;
-  retryOnUnauthorized?: boolean;
+  auth      ?: boolean;
+  baseURL   ?: string;
+  body      ?: RequestInit["body"];
+  headers   ?: ApiHeadersInit;
+  hooks     ?: ApiHooks;
+  json      ?: SchemaInput<TJsonSchema>;
+  jsonSchema?: TJsonSchema;
+  query     ?: QueryParams;
+  retry     ?: ApiRetry;
+  schema    ?: TResponseSchema;
+  select    ?: (data: SchemaOutput<TResponseSchema>, response: Response) => TResult;
+  timeout   ?: number;
 };
 
-export type ApiRequest = <
-  TRequestSchema extends OptionalSchema = undefined,
+export type ApiReadOptions<
   TResponseSchema extends OptionalSchema = undefined,
   TResult = SchemaOutput<TResponseSchema>
->(
-  path: string,
-  options?: ApiRequestOptions<TRequestSchema, TResponseSchema, TResult>
-) => Promise<TResult>;
+> = Omit<
+  ApiRequestOptions<undefined, TResponseSchema, TResult>,
+  "body" | "json" | "jsonSchema"
+>;
 
-// Token refresh types
-export type TokenReader<TToken> = () => MaybePromise<TToken | null | undefined>;
+export type ApiWriteOptions<
+  TJsonSchema extends OptionalSchema = undefined,
+  TResponseSchema extends OptionalSchema = undefined,
+  TResult = SchemaOutput<TResponseSchema>
+> = ApiRequestOptions<TJsonSchema, TResponseSchema, TResult>;
 
-export type TokenWriter<TToken> = (token: TToken) => MaybePromise<void>;
-
-export type TokenClearer = () => MaybePromise<void>;
-
-export type TokenRefresher<TToken> = (
-  token: TToken | null | undefined
-) => MaybePromise<TToken | null | undefined>;
-
-export type TokenAuthOptions<TToken> = {
-  getToken             : TokenReader<TToken>;
-  getAccessToken       : (token: TToken) => string | undefined;
-  refreshToken         : TokenRefresher<TToken>;
-  setToken            ?: TokenWriter<TToken>;
-  clearToken          ?: TokenClearer;
-  shouldRefreshToken  ?: (token: TToken) => boolean;
-  shouldRefreshOnError?: (error: unknown) => boolean;
-  onRefreshError      ?: (error: unknown) => MaybePromise<void>;
+export type ApiReadMethod = {
+  <TResponseSchema extends z.ZodType, TResult = SchemaOutput<TResponseSchema>>(
+    path: string,
+    options: ApiReadOptions<TResponseSchema, TResult> & { schema: TResponseSchema }
+  ): Promise<TResult>;
+  <TData = unknown>(
+    path: string,
+    options?: ApiReadOptions<undefined, TData>
+  ): Promise<TData>;
 };
 
-export type ApiClientOptions<TToken = unknown> = {
-  baseUrl              ?: string;
-  headers              ?: ApiHeadersInit;
-  fetch                ?: FetchLike;
-  auth                 ?: AuthMode;
-  accessToken          ?: string;
-  retryOnUnauthorized  ?: boolean;
-  token                ?: TokenAuthOptions<TToken>;
+export type ApiWriteMethod = {
+  <
+    TJsonSchema extends OptionalSchema = undefined,
+    TResponseSchema extends z.ZodType = z.ZodType,
+    TResult = SchemaOutput<TResponseSchema>
+  >(
+    path: string,
+    options: ApiWriteOptions<TJsonSchema, TResponseSchema, TResult> & {
+      schema: TResponseSchema;
+    }
+  ): Promise<TResult>;
+  <
+    TData = unknown,
+    TJsonSchema extends OptionalSchema = undefined
+  >(
+    path: string,
+    options?: ApiWriteOptions<TJsonSchema, undefined, TData>
+  ): Promise<TData>;
 };
 
-export type ApiClient<TToken = unknown> = Readonly<{
+export type ApiRequest = {
+  <
+    TJsonSchema extends OptionalSchema = undefined,
+    TResponseSchema extends z.ZodType = z.ZodType,
+    TResult = SchemaOutput<TResponseSchema>
+  >(
+    method: ApiMethod,
+    path: string,
+    options: ApiRequestOptions<TJsonSchema, TResponseSchema, TResult> & {
+      schema: TResponseSchema;
+    }
+  ): Promise<TResult>;
+  <
+    TData = unknown,
+    TJsonSchema extends OptionalSchema = undefined
+  >(
+    method: ApiMethod,
+    path: string,
+    options?: ApiRequestOptions<TJsonSchema, undefined, TData>
+  ): Promise<TData>;
+};
+
+export type ApiFetcherOptions = Readonly<{
+  auth   ?: ApiAuthOptions;
+  baseURL?: string;
+  fetch  ?: FetchLike;
+  headers?: ApiHeadersInit;
+  hooks  ?: ApiHooks;
+  retry  ?: ApiRetry;
+  timeout?: number;
+}>;
+
+export type ApiFetcher = Readonly<{
+  call: <TEndpoint extends AnyApiEndpoint>(
+    endpoint: TEndpoint,
+    ...args: EndpointCallArgs<TEndpoint>
+  ) => Promise<EndpointResult<TEndpoint>>;
+  delete : ApiWriteMethod;
+  get    : ApiReadMethod;
+  options: ApiFetcherOptions;
+  patch  : ApiWriteMethod;
+  post   : ApiWriteMethod;
+  put    : ApiWriteMethod;
   request: ApiRequest;
-  call   : ApiRequest;
-  endpoint: <TEndpoint extends AnyApiEndpoint>(
-    endpoint: TEndpoint
-  ) => EndpointHandler<TEndpoint>;
-  options: ApiClientOptions<TToken>;
 }>;
 
 // Endpoint types
-export type EndpointInput<TParamsSchema extends OptionalSchema> =
-  TParamsSchema extends z.ZodType ? z.input<TParamsSchema> : void | undefined;
-
 export type EndpointParams<TParamsSchema extends OptionalSchema> =
   TParamsSchema extends z.ZodType ? z.output<TParamsSchema> : undefined;
 
-export type EndpointResult<
-  TResponseSchema extends OptionalSchema,
-  TResultSchema extends OptionalSchema
-> = TResultSchema extends z.ZodType
-  ? z.output<TResultSchema>
-  : SchemaOutput<TResponseSchema>;
+export type EndpointQuery<TParamsSchema extends OptionalSchema> =
+  | QueryParams
+  | ((params: EndpointParams<TParamsSchema>) => QueryParams | undefined);
+
+export type EndpointHeaders<TParamsSchema extends OptionalSchema> =
+  | ApiHeadersInit
+  | ((params: EndpointParams<TParamsSchema>) => ApiHeadersInit | undefined);
 
 export type ApiEndpointOptions<
   TParamsSchema extends OptionalSchema = undefined,
-  TRequestSchema extends OptionalSchema = undefined,
+  TJsonSchema extends OptionalSchema = undefined,
   TResponseSchema extends OptionalSchema = undefined,
-  TResultSchema extends OptionalSchema = undefined
+  TResult = SchemaOutput<TResponseSchema>
 > = Readonly<{
-  path          : string | ((params: EndpointParams<TParamsSchema>) => string);
-  method       ?: HttpMethod;
-  paramsSchema ?: TParamsSchema;
-  requestSchema?: TRequestSchema;
-  responseSchema?: TResponseSchema;
-  resultSchema ?: TResultSchema;
-  mapBody      ?: (
-    params: EndpointParams<TParamsSchema>
-  ) => SchemaInput<TRequestSchema> | undefined;
-  mapQuery     ?: (params: EndpointParams<TParamsSchema>) => QueryParams | undefined;
-  mapHeaders   ?: HeaderFactory<EndpointParams<TParamsSchema>>;
-  mapResult    ?: (
-    response: SchemaOutput<TResponseSchema>
-  ) => TResultSchema extends z.ZodType
-    ? z.input<TResultSchema>
-    : SchemaOutput<TResponseSchema>;
-  auth         ?: AuthMode;
-  retryOnUnauthorized?: boolean;
+  auth   ?: boolean;
+  headers?: EndpointHeaders<TParamsSchema>;
+  json   ?: TJsonSchema;
+  params ?: TParamsSchema;
+  query  ?: EndpointQuery<TParamsSchema>;
+  retry  ?: ApiRetry;
+  schema ?: TResponseSchema;
+  select ?: (data: SchemaOutput<TResponseSchema>, response: Response) => TResult;
+  timeout?: number;
 }>;
 
 export type ApiEndpoint<
   TParamsSchema extends OptionalSchema = OptionalSchema,
-  TRequestSchema extends OptionalSchema = OptionalSchema,
+  TJsonSchema extends OptionalSchema = OptionalSchema,
   TResponseSchema extends OptionalSchema = OptionalSchema,
-  TResultSchema extends OptionalSchema = OptionalSchema
-> = ApiEndpointOptions<
-  TParamsSchema,
-  TRequestSchema,
-  TResponseSchema,
-  TResultSchema
->;
+  TResult = SchemaOutput<TResponseSchema>
+> = Readonly<{
+  method : ApiMethod;
+  options: ApiEndpointOptions<
+    TParamsSchema,
+    TJsonSchema,
+    TResponseSchema,
+    TResult
+  >;
+  path   : string;
+}>;
 
 export type AnyApiEndpoint = ApiEndpoint<any, any, any, any>;
 
-export type EndpointCallOptions = Omit<
+export type EndpointFactory<TMethod extends ApiMethod> = {
+  <
+    const TParamsSchema extends OptionalSchema = undefined,
+    const TJsonSchema extends OptionalSchema = undefined,
+    const TResponseSchema extends z.ZodType = z.ZodType,
+    TResult = SchemaOutput<TResponseSchema>
+  >(
+    path: string,
+    options: ApiEndpointOptions<
+      TParamsSchema,
+      TJsonSchema,
+      TResponseSchema,
+      TResult
+    > & { schema: TResponseSchema }
+  ): ApiEndpoint<TParamsSchema, TJsonSchema, TResponseSchema, TResult>;
+  <
+    const TParamsSchema extends OptionalSchema = undefined,
+    const TJsonSchema extends OptionalSchema = undefined,
+    TResult = unknown
+  >(
+    path: string,
+    options?: ApiEndpointOptions<
+      TParamsSchema,
+      TJsonSchema,
+      undefined,
+      TResult
+    >
+  ): ApiEndpoint<TParamsSchema, TJsonSchema, undefined, TResult>;
+  method: TMethod;
+};
+
+export type EndpointCallOverrides = Omit<
   ApiRequestOptions<undefined, undefined>,
-  "body" | "method" | "requestSchema" | "responseSchema" | "transform"
+  "body" | "jsonSchema" | "schema" | "select"
 >;
 
-export type EndpointHandler<TEndpoint extends AnyApiEndpoint> =
-  TEndpoint extends ApiEndpoint<
-    infer TParamsSchema,
-    OptionalSchema,
-    infer TResponseSchema,
-    infer TResultSchema
-  >
-    ? (
-        params: EndpointInput<TParamsSchema>,
-        options?: EndpointCallOptions
-      ) => Promise<EndpointResult<TResponseSchema, TResultSchema>>
+export type EndpointParamsInput<TParamsSchema extends OptionalSchema> =
+  TParamsSchema extends z.ZodType
+    ? { params: z.input<TParamsSchema> }
+    : { params?: undefined };
+
+export type EndpointJsonInput<TJsonSchema extends OptionalSchema> =
+  TJsonSchema extends z.ZodType
+    ? { json: z.input<TJsonSchema> }
+    : { json?: undefined };
+
+export type EndpointCallInput<
+  TParamsSchema extends OptionalSchema,
+  TJsonSchema extends OptionalSchema
+> = EndpointCallOverrides
+  & EndpointJsonInput<TJsonSchema>
+  & EndpointParamsInput<TParamsSchema>;
+
+export type EndpointCallArgs<TEndpoint extends AnyApiEndpoint> =
+  TEndpoint extends ApiEndpoint<infer TParamsSchema, infer TJsonSchema, any, any>
+    ? TParamsSchema extends z.ZodType
+      ? [input: EndpointCallInput<TParamsSchema, TJsonSchema>]
+      : TJsonSchema extends z.ZodType
+        ? [input: EndpointCallInput<TParamsSchema, TJsonSchema>]
+        : [input?: EndpointCallInput<TParamsSchema, TJsonSchema>]
+    : never;
+
+export type EndpointResult<TEndpoint extends AnyApiEndpoint> =
+  TEndpoint extends ApiEndpoint<any, any, any, infer TResult>
+    ? TResult
     : never;

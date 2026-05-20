@@ -1,48 +1,59 @@
-import { readResponseBody, parseRequestBody, parseResponseBody } from "./body.js";
-import { ApiHttpError } from "./errors.js";
+import { parseRequestBody, parseResponseBody, readResponseBody } from "./body.js";
+import { ApiHttpError, ApiTimeoutError } from "./errors.js";
 import { executeEndpoint } from "./endpoint.js";
 import { buildHeaders, mergeHeaders } from "./headers.js";
 import { buildApiUrl } from "./url.js";
-import { HttpMethod } from "./types.js";
+import { ApiMethod } from "./types.js";
 import type {
-  ApiClient,
-  ApiClientOptions,
   AnyApiEndpoint,
+  ApiErrorHookContext,
+  ApiFetcher,
+  ApiFetcherOptions,
+  ApiHookContext,
   ApiRequest,
+  ApiRequestContext,
   ApiRequestOptions,
-  EndpointHandler,
+  ApiResponseHookContext,
+  ApiRetry,
+  ApiRetryContext,
+  ApiRetryOptions,
   FetchLike,
   OptionalSchema,
   SchemaOutput
 } from "./types.js";
 
+const AUTH_REFRESH_STATUS_CODES = [401, 419] as const;
+const DEFAULT_RETRY_METHODS = [ApiMethod.GET] as const;
+const DEFAULT_RETRY_STATUS_CODES = [
+  408,
+  409,
+  425,
+  429,
+  500,
+  502,
+  503,
+  504
+] as const;
+
 // Client factory
-export const createApiClient = <TToken = unknown>(
-  options: ApiClientOptions<TToken> = {}
-): ApiClient<TToken> => {
+export const createApiFetcher = (
+  options: ApiFetcherOptions = {}
+): ApiFetcher => {
   const fetchImpl = options.fetch ?? globalThis.fetch;
-  let refreshPromise: Promise<TToken | null | undefined> | null = null;
+  let refreshPromise: Promise<string | null | undefined> | null = null;
 
   const refreshOnce = async (
-    token: TToken | null | undefined
-  ): Promise<TToken | null | undefined> => {
-    if (!options.token) {
+    error: unknown
+  ): Promise<string | null | undefined> => {
+    if (!options.auth?.refresh) {
       return null;
     }
 
     if (!refreshPromise) {
-      refreshPromise = Promise.resolve(options.token.refreshToken(token))
-        .then(async (nextToken) => {
-          if (nextToken) {
-            await options.token?.setToken?.(nextToken);
-          }
-
-          return nextToken;
-        })
-        .catch(async (error) => {
-          await options.token?.clearToken?.();
-          await options.token?.onRefreshError?.(error);
-          throw error;
+      refreshPromise = Promise.resolve(options.auth.refresh(error))
+        .catch(async (refreshError) => {
+          await options.auth?.clear?.();
+          throw refreshError;
         })
         .finally(() => {
           refreshPromise = null;
@@ -53,146 +64,448 @@ export const createApiClient = <TToken = unknown>(
   };
 
   const request: ApiRequest = async <
-    TRequestSchema extends OptionalSchema = undefined,
+    TJsonSchema extends OptionalSchema = undefined,
     TResponseSchema extends OptionalSchema = undefined,
     TResult = SchemaOutput<TResponseSchema>
   >(
+    method: ApiMethod,
     path: string,
-    requestOptions: ApiRequestOptions<TRequestSchema, TResponseSchema, TResult> = {}
+    requestOptions: ApiRequestOptions<TJsonSchema, TResponseSchema, TResult> = {}
   ): Promise<TResult> => {
-    const authMode = requestOptions.auth ?? options.auth ?? (options.token ? true : false);
+    const authEnabled = requestOptions.auth !== false && options.auth !== undefined;
 
-    if (authMode === false) {
-      return sendRequest(path, requestOptions, options, fetchImpl, requestOptions.accessToken);
+    if (!authEnabled) {
+      return sendRequest(method, path, requestOptions, options, fetchImpl, undefined, false);
     }
 
-    const currentToken = await options.token?.getToken();
-    const activeToken  = currentToken && options.token?.shouldRefreshToken?.(currentToken)
-      ? await refreshOnce(currentToken)
-      : currentToken;
-    const accessToken  = activeToken
-      ? options.token?.getAccessToken(activeToken)
-      : requestOptions.accessToken ?? options.accessToken;
+    const accessToken = await options.auth?.getAccessToken();
 
     try {
-      return await sendRequest(path, requestOptions, options, fetchImpl, accessToken);
+      return await sendRequest(
+        method,
+        path,
+        requestOptions,
+        options,
+        fetchImpl,
+        accessToken ?? undefined,
+        true
+      );
     } catch (error) {
-      if (!shouldRetryWithRefresh(error, requestOptions, options)) {
+      if (!shouldRefreshAuth(error, options)) {
         throw error;
       }
 
-      const nextToken       = await refreshOnce(activeToken ?? currentToken);
-      const nextAccessToken = nextToken ? options.token?.getAccessToken(nextToken) : undefined;
+      const nextAccessToken = await refreshOnce(error);
 
       if (!nextAccessToken) {
         throw error;
       }
 
-      return sendRequest(path, requestOptions, options, fetchImpl, nextAccessToken);
+      return sendRequest(
+        method,
+        path,
+        requestOptions,
+        options,
+        fetchImpl,
+        nextAccessToken,
+        true
+      );
     }
-  };
-  const endpoint = <TEndpoint extends AnyApiEndpoint>(
-    apiEndpoint: TEndpoint
-  ): EndpointHandler<TEndpoint> => {
-    const handler = (
-      params: Parameters<EndpointHandler<TEndpoint>>[0],
-      callOptions?: Parameters<EndpointHandler<TEndpoint>>[1]
-    ) => executeEndpoint(request, apiEndpoint, params, callOptions);
-
-    return handler as EndpointHandler<TEndpoint>;
   };
 
   return Object.freeze({
-    request,
-    call    : request,
-    endpoint,
-    options : Object.freeze({ ...options })
-  }) as ApiClient<TToken>;
+    call: (apiEndpoint: AnyApiEndpoint, ...args: any[]) => (
+      executeEndpoint(request, apiEndpoint, args[0])
+    ),
+    delete : createMethod(request, ApiMethod.DELETE),
+    get    : createMethod(request, ApiMethod.GET),
+    options: Object.freeze({ ...options }),
+    patch  : createMethod(request, ApiMethod.PATCH),
+    post   : createMethod(request, ApiMethod.POST),
+    put    : createMethod(request, ApiMethod.PUT),
+    request
+  }) as ApiFetcher;
 };
+
+const createMethod = (
+  request: ApiRequest,
+  method: ApiMethod
+) => (
+  path: string,
+  options?: ApiRequestOptions
+) => request(method, path, options);
 
 // Request execution
 const sendRequest = async <
-  TToken,
-  TRequestSchema extends OptionalSchema,
+  TJsonSchema extends OptionalSchema,
   TResponseSchema extends OptionalSchema,
   TResult
 >(
+  method: ApiMethod,
   path: string,
-  options: ApiRequestOptions<TRequestSchema, TResponseSchema, TResult>,
-  clientOptions: ApiClientOptions<TToken>,
+  options: ApiRequestOptions<TJsonSchema, TResponseSchema, TResult>,
+  clientOptions: ApiFetcherOptions,
   fetchImpl: FetchLike,
-  accessToken: string | undefined
+  accessToken: string | undefined,
+  authEnabled: boolean
 ): Promise<TResult> => {
   const {
-    method = HttpMethod.GET,
-    responseSchema,
-    transform,
-    baseUrl,
-    headers,
-    query,
-    cache,
-    accessToken: _accessToken,
     auth: _auth,
-    retryOnUnauthorized: _retryOnUnauthorized,
+    baseURL,
+    body: _body,
+    headers,
+    hooks,
+    json: _json,
+    jsonSchema: _jsonSchema,
+    query,
+    retry,
+    schema,
+    select,
+    timeout,
     ...fetchOptions
   } = options;
+  const url     = buildApiUrl(path, baseURL ?? clientOptions.baseURL, query);
   const context = {
     method,
-    path
+    path,
+    url
   };
-
-  const body     = parseRequestBody(options, context);
-  const response = await fetchImpl(buildApiUrl(path, baseUrl ?? clientOptions.baseUrl, query), {
-    ...fetchOptions,
-    method,
-    headers: buildHeaders(
-      mergeHeaders(clientOptions.headers, headers),
-      accessToken,
-      body !== undefined
-    ),
-    body   : body === undefined ? undefined : JSON.stringify(body),
-    cache
-  });
-  const responseBody = await readResponseBody(response, context);
-
-  if (!response.ok) {
-    throw new ApiHttpError(response, responseBody, context);
-  }
-
-  const parsedResponse = parseResponseBody(
-    responseBody,
-    responseSchema as TResponseSchema,
-    context
+  const parsedBody = parseRequestBody(options, context);
+  const headersInit = buildHeaders(
+    mergeHeaders(clientOptions.headers, headers),
+    accessToken,
+    parsedBody.isJsonBody
   );
+  const retryOptions = resolveRetryOptions(retry ?? clientOptions.retry);
+  const timeoutMs    = timeout ?? clientOptions.timeout;
 
-  if (transform) {
-    return transform(parsedResponse);
+  await callRequestHooks(clientOptions.hooks?.onRequest, hooks?.onRequest, context);
+
+  for (let attempt = 0; ; attempt += 1) {
+    const signal = createRequestSignal(fetchOptions.signal, timeoutMs);
+
+    try {
+      const response = await fetchImpl(url, {
+        ...fetchOptions,
+        body: parsedBody.body,
+        headers: headersInit,
+        method,
+        signal: signal.signal
+      });
+      const responseBody = await readResponseBody(response, context);
+
+      if (!response.ok) {
+        const error = new ApiHttpError(response, responseBody, context);
+
+        await callErrorHooks(
+          clientOptions.hooks?.onResponseError,
+          hooks?.onResponseError,
+          {
+            ...context,
+            data: responseBody,
+            error,
+            response
+          }
+        );
+
+        if (await shouldRetryRequest({
+          attempt,
+          authEnabled,
+          context,
+          error,
+          method,
+          response,
+          retryOptions
+        })) {
+          await waitForRetry(retryOptions, {
+            ...context,
+            attempt: attempt + 1,
+            error,
+            response,
+            status: response.status
+          });
+          continue;
+        }
+
+        throw error;
+      }
+
+      const parsedResponse = parseResponseBody(
+        responseBody,
+        schema,
+        context
+      ) as SchemaOutput<TResponseSchema>;
+      const result         = select
+        ? select(parsedResponse, response)
+        : parsedResponse as TResult;
+
+      await callResponseHooks(clientOptions.hooks?.onResponse, hooks?.onResponse, {
+        ...context,
+        data: parsedResponse,
+        response
+      });
+
+      return result;
+    } catch (error) {
+      const nextError = signal.isTimedOut()
+        ? new ApiTimeoutError(timeoutMs ?? 0, context)
+        : error;
+
+      if (nextError instanceof ApiHttpError) {
+        throw nextError;
+      }
+
+      await callErrorHooks(
+        clientOptions.hooks?.onRequestError,
+        hooks?.onRequestError,
+        {
+          ...context,
+          error: nextError
+        }
+      );
+
+      if (await shouldRetryRequest({
+        attempt,
+        authEnabled,
+        context,
+        error: nextError,
+        method,
+        retryOptions
+      })) {
+        await waitForRetry(retryOptions, {
+          ...context,
+          attempt: attempt + 1,
+          error: nextError
+        });
+        continue;
+      }
+
+      throw nextError;
+    } finally {
+      signal.cleanup();
+    }
   }
-
-  return parsedResponse as TResult;
 };
 
 // Auth helpers
-const shouldRetryWithRefresh = <TToken>(
+const shouldRefreshAuth = (
   error: unknown,
-  requestOptions: Pick<ApiRequestOptions, "retryOnUnauthorized">,
-  clientOptions: ApiClientOptions<TToken>
+  options: ApiFetcherOptions
 ): boolean => {
-  if (!clientOptions.token) {
+  if (!options.auth?.refresh) {
     return false;
   }
 
-  if (requestOptions.retryOnUnauthorized === false) {
+  if (options.auth.shouldRefreshOnError) {
+    return options.auth.shouldRefreshOnError(error);
+  }
+
+  return error instanceof ApiHttpError
+    && AUTH_REFRESH_STATUS_CODES.includes(error.status as 401 | 419);
+};
+
+// Retry helpers
+type ResolvedRetryOptions = Readonly<{
+  delay      : NonNullable<ApiRetryOptions["delay"]>;
+  limit      : number;
+  methods    : readonly ApiMethod[];
+  shouldRetry: ApiRetryOptions["shouldRetry"];
+  statusCodes: readonly number[];
+}>;
+
+const resolveRetryOptions = (
+  retry: ApiRetry | undefined
+): ResolvedRetryOptions => {
+  if (retry === undefined || retry === false) {
+    return {
+      delay      : 0,
+      limit      : 0,
+      methods    : DEFAULT_RETRY_METHODS,
+      shouldRetry: undefined,
+      statusCodes: DEFAULT_RETRY_STATUS_CODES
+    };
+  }
+
+  if (retry === true) {
+    return {
+      delay      : 0,
+      limit      : 1,
+      methods    : DEFAULT_RETRY_METHODS,
+      shouldRetry: undefined,
+      statusCodes: DEFAULT_RETRY_STATUS_CODES
+    };
+  }
+
+  if (typeof retry === "number") {
+    return {
+      delay      : 0,
+      limit      : retry,
+      methods    : DEFAULT_RETRY_METHODS,
+      shouldRetry: undefined,
+      statusCodes: DEFAULT_RETRY_STATUS_CODES
+    };
+  }
+
+  return {
+    delay      : retry.delay ?? 0,
+    limit      : retry.limit ?? 0,
+    methods    : retry.methods ?? DEFAULT_RETRY_METHODS,
+    shouldRetry: retry.shouldRetry,
+    statusCodes: retry.statusCodes ?? DEFAULT_RETRY_STATUS_CODES
+  };
+};
+
+const shouldRetryRequest = async ({
+  attempt,
+  authEnabled,
+  context,
+  error,
+  method,
+  response,
+  retryOptions
+}: Readonly<{
+  attempt     : number;
+  authEnabled : boolean;
+  context     : ApiRequestContext;
+  error       : unknown;
+  method      : ApiMethod;
+  response   ?: Response;
+  retryOptions: ResolvedRetryOptions;
+}>): Promise<boolean> => {
+  const retryContext = {
+    ...context,
+    attempt: attempt + 1,
+    error,
+    response,
+    status : response?.status
+  };
+  const customDecision = await retryOptions.shouldRetry?.(retryContext);
+
+  if (customDecision !== undefined) {
+    return customDecision && attempt < retryOptions.limit;
+  }
+
+  if (attempt >= retryOptions.limit) {
     return false;
   }
 
-  if (clientOptions.retryOnUnauthorized === false) {
+  if (!retryOptions.methods.includes(method)) {
     return false;
   }
 
-  if (clientOptions.token.shouldRefreshOnError) {
-    return clientOptions.token.shouldRefreshOnError(error);
+  if (!(error instanceof ApiHttpError)) {
+    return false;
   }
 
-  return error instanceof ApiHttpError && (error.status === 401 || error.status === 419);
+  if (authEnabled && AUTH_REFRESH_STATUS_CODES.includes(error.status as 401 | 419)) {
+    return false;
+  }
+
+  return retryOptions.statusCodes.includes(error.status);
+};
+
+const waitForRetry = async (
+  options: ResolvedRetryOptions,
+  context: ApiRetryContext
+): Promise<void> => {
+  const delay = typeof options.delay === "function"
+    ? options.delay(context)
+    : options.delay;
+
+  if (delay <= 0) {
+    return;
+  }
+
+  await new Promise((resolve) => {
+    setTimeout(resolve, delay);
+  });
+};
+
+// Signal helpers
+const createRequestSignal = (
+  sourceSignal: AbortSignal | null | undefined,
+  timeout: number | undefined
+): Readonly<{
+  cleanup   : () => void;
+  isTimedOut: () => boolean;
+  signal    : AbortSignal | undefined;
+}> => {
+  if (!timeout || timeout <= 0) {
+    return {
+      cleanup   : () => undefined,
+      isTimedOut: () => false,
+      signal    : sourceSignal ?? undefined
+    };
+  }
+
+  const controller = new AbortController();
+  let timedOut     = false;
+
+  const abortFromSource = (): void => {
+    controller.abort(sourceSignal?.reason);
+  };
+  const timeoutId = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeout);
+
+  if (sourceSignal?.aborted) {
+    abortFromSource();
+  } else {
+    sourceSignal?.addEventListener("abort", abortFromSource, {
+      once: true
+    });
+  }
+
+  return {
+    cleanup: () => {
+      clearTimeout(timeoutId);
+      sourceSignal?.removeEventListener("abort", abortFromSource);
+    },
+    isTimedOut: () => timedOut,
+    signal    : controller.signal
+  };
+};
+
+// Hook helpers
+const callRequestHooks = async (
+  ...args: [
+    ...hooks: Array<((context: ApiHookContext) => unknown) | undefined>,
+    context: ApiHookContext
+  ]
+): Promise<void> => {
+  const context = args[args.length - 1] as ApiHookContext;
+  const hooks   = args.slice(0, -1) as Array<((context: ApiHookContext) => unknown) | undefined>;
+
+  for (const hook of hooks) {
+    await hook?.(context);
+  }
+};
+
+const callResponseHooks = async (
+  ...args: [
+    ...hooks: Array<((context: ApiResponseHookContext) => unknown) | undefined>,
+    context: ApiResponseHookContext
+  ]
+): Promise<void> => {
+  const context = args[args.length - 1] as ApiResponseHookContext;
+  const hooks   = args.slice(0, -1) as Array<((context: ApiResponseHookContext) => unknown) | undefined>;
+
+  for (const hook of hooks) {
+    await hook?.(context);
+  }
+};
+
+const callErrorHooks = async (
+  ...args: [
+    ...hooks: Array<((context: ApiErrorHookContext) => unknown) | undefined>,
+    context: ApiErrorHookContext
+  ]
+): Promise<void> => {
+  const context = args[args.length - 1] as ApiErrorHookContext;
+  const hooks   = args.slice(0, -1) as Array<((context: ApiErrorHookContext) => unknown) | undefined>;
+
+  for (const hook of hooks) {
+    await hook?.(context);
+  }
 };

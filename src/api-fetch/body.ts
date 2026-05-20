@@ -6,35 +6,65 @@ import type {
   SchemaOutput
 } from "./types.js";
 
-// Request parsing
+// Request body parsing
+export type ParsedRequestBody = Readonly<{
+  body       : RequestInit["body"] | undefined;
+  isJsonBody : boolean;
+}>;
+
 export const parseRequestBody = <
-  TRequestSchema extends OptionalSchema,
+  TJsonSchema extends OptionalSchema,
   TResponseSchema extends OptionalSchema,
   TResult
 >(
-  options: ApiRequestOptions<TRequestSchema, TResponseSchema, TResult>,
+  options: ApiRequestOptions<TJsonSchema, TResponseSchema, TResult>,
+  context: ApiRequestContext
+): ParsedRequestBody => {
+  const hasJsonBody = "json" in options || options.jsonSchema !== undefined;
+
+  if (hasJsonBody && options.body !== undefined) {
+    throw new TypeError("Use either json or body for an API request, not both");
+  }
+
+  if (!hasJsonBody) {
+    return {
+      body      : options.body ?? undefined,
+      isJsonBody: false
+    };
+  }
+
+  const json = parseRequestJson(options, context);
+
+  return {
+    body      : JSON.stringify(json),
+    isJsonBody: true
+  };
+};
+
+const parseRequestJson = <
+  TJsonSchema extends OptionalSchema,
+  TResponseSchema extends OptionalSchema,
+  TResult
+>(
+  options: ApiRequestOptions<TJsonSchema, TResponseSchema, TResult>,
   context: ApiRequestContext
 ): unknown => {
-  if (options.body === undefined) {
-    return undefined;
+  if (!options.jsonSchema) {
+    return options.json;
   }
 
-  if (!options.requestSchema) {
-    return options.body;
-  }
+  const parsedJson = options.jsonSchema.safeParse(options.json);
 
-  const parsedBody = options.requestSchema.safeParse(options.body);
-
-  if (!parsedBody.success) {
+  if (!parsedJson.success) {
     throw new ApiValidationError(
       "request",
-      parsedBody.error,
-      options.body,
+      parsedJson.error,
+      options.json,
       context
     );
   }
 
-  return parsedBody.data;
+  return parsedJson.data;
 };
 
 // Response parsing

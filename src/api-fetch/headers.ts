@@ -24,11 +24,11 @@ export const mergeHeaders = (
 export const buildHeaders = (
   headers: ApiHeadersInit | undefined,
   accessToken: string | undefined,
-  hasBody: boolean
+  isJsonBody: boolean
 ): Headers => {
   const nextHeaders = new Headers(headers);
 
-  if (hasBody && !nextHeaders.has("Content-Type")) {
+  if (isJsonBody && !nextHeaders.has("Content-Type")) {
     nextHeaders.set("Content-Type", "application/json");
   }
 
