@@ -37,6 +37,7 @@ export {
   ApiMethod
 } from "./types.js";
 export type {
+  ApiResponse,
   AnyApiEndpoint,
   AnySchema,
   ApiAuthOptions,

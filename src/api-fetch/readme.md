@@ -9,6 +9,7 @@ import {
   createApiFetcher,
   endpoint,
   responseEnvelopeSchema,
+  type ApiResponse,
   z
 } from "@maxxuxx/ts-utils/api-fetch";
 ```
@@ -31,9 +32,12 @@ const User = z.object({
   name: z.string()
 });
 
-const user = await api.get("/users/1", {
+const response = await api.get("/users/1", {
   responseSchema: User
 });
+
+response.code; // HTTP status code
+response.data; // validated response body
 ```
 
 Send JSON with request and response validation
@@ -43,30 +47,46 @@ const CreateUser = z.object({
   name: z.string().min(1)
 });
 
-const user = await api.post("/users", {
+const response = await api.post("/users", {
   body          : { name: "haru" },
   bodySchema    : CreateUser,
   responseSchema: User
 });
+
+response.data;
 ```
 
 `bodySchema` is optional. If provided, the fetcher validates `body` before the request is sent. Without `bodySchema`, `body` is still serialized as JSON.
 
 Use `rawBody` for non-JSON request bodies such as `FormData`, `Blob`, or a prebuilt string.
 
+Successful calls return `ApiResponse<TData>` by default
+
+```ts
+type ApiResponse<TData> = {
+  code    : number;
+  message?: string;
+  data    : TData;
+};
+```
+
+`code` is the HTTP response status code, `message` is copied from `body.message` when it is a string, and `data` is the parsed and validated response body.
+
 Add query params with `query`
 
 ```ts
-const users = await api.get("/users", {
+const response = await api.get("/users", {
   query: {
     page : 1,
     limit: 20
   },
   responseSchema: z.array(User)
 });
+
+response.data;
 ```
 
-Use `select` to unwrap or reshape a validated response
+Use `select` to return a custom value instead of the default `ApiResponse`
 
 ```ts
 const user = await api.get("/users/1", {
@@ -87,9 +107,11 @@ const getUser = endpoint.get("/users/:id", {
   responseSchema: User
 });
 
-const user = await api.call(getUser, {
+const response = await api.call(getUser, {
   params: { id: "1" }
 });
+
+response.data;
 ```
 
 Endpoint paths support `:param` replacement and encode param values
@@ -100,9 +122,11 @@ const createUser = endpoint.post("/users", {
   responseSchema: User
 });
 
-const user = await api.call(createUser, {
+const response = await api.call(createUser, {
   body: { name: "haru" }
 });
+
+response.data;
 ```
 
 Endpoints can define shared query, headers, auth, retry, timeout, and select behavior
@@ -285,6 +309,6 @@ const api = createApiFetcher({
 
 ## Utilities
 
-`responseEnvelopeSchema(dataSchema)` builds a common `{ code, message, isOk, data }` response schema
+`responseEnvelopeSchema(dataSchema)` validates a body shaped like `{ code, message, isOk, data }`
 
 `buildApiUrl(path, baseURL, query)` builds absolute or relative URLs with query params

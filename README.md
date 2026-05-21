@@ -97,14 +97,19 @@ const User = z.object({
   name: z.string()
 });
 
-const user = await api.post("/users", {
+const response = await api.post("/users", {
   body      : { name: "haru" },
   bodySchema: z.object({
     name: z.string().min(1)
   }),
   responseSchema: User
 });
+
+response.code; // HTTP status code
+response.data; // validated response body
 ```
+
+Successful calls return `{ code, message?, data }` by default. `code` is the HTTP status code, `message` is copied from `body.message` when present, and `data` is the parsed body.
 
 Reusable endpoints can define method, path params, query strings, request body schema, response schema, and result selection
 
@@ -116,9 +121,11 @@ const getUser = endpoint.get("/users/:id", {
   responseSchema: User
 });
 
-const user = await api.call(getUser, {
+const response = await api.call(getUser, {
   params: { id: "1" }
 });
+
+response.data;
 ```
 
 Token refresh is injected so apps can use cookies, browser storage, iron-session, or custom stores

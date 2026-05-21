@@ -34,6 +34,12 @@ export type SchemaOutput<TSchema extends OptionalSchema> =
 // Shared types
 export type MaybePromise<TValue> = TValue | Promise<TValue>;
 
+export type ApiResponse<TData> = Readonly<{
+  code    : number;
+  message?: string;
+  data    : TData;
+}>;
+
 export type FetchLike = (
   input: string | URL | Request,
   init?: RequestInit
@@ -102,7 +108,7 @@ export type ApiAuthOptions = Readonly<{
 export type ApiRequestOptions<
   TBodySchema extends OptionalSchema = undefined,
   TResponseSchema extends OptionalSchema = undefined,
-  TResult = SchemaOutput<TResponseSchema>
+  TResult = ApiResponse<SchemaOutput<TResponseSchema>>
 > = Omit<RequestInit, "body" | "headers" | "method"> & {
   auth          ?: boolean;
   baseURL       ?: string;
@@ -120,7 +126,7 @@ export type ApiRequestOptions<
 
 export type ApiReadOptions<
   TResponseSchema extends OptionalSchema = undefined,
-  TResult = SchemaOutput<TResponseSchema>
+  TResult = ApiResponse<SchemaOutput<TResponseSchema>>
 > = Omit<
   ApiRequestOptions<undefined, TResponseSchema, TResult>,
   "body" | "bodySchema" | "rawBody"
@@ -129,17 +135,17 @@ export type ApiReadOptions<
 export type ApiWriteOptions<
   TBodySchema extends OptionalSchema = undefined,
   TResponseSchema extends OptionalSchema = undefined,
-  TResult = SchemaOutput<TResponseSchema>
+  TResult = ApiResponse<SchemaOutput<TResponseSchema>>
 > = ApiRequestOptions<TBodySchema, TResponseSchema, TResult>;
 
 export type ApiReadMethod = {
-  <TResponseSchema extends z.ZodType, TResult = SchemaOutput<TResponseSchema>>(
+  <TResponseSchema extends z.ZodType, TResult = ApiResponse<SchemaOutput<TResponseSchema>>>(
     path: string,
     options: ApiReadOptions<TResponseSchema, TResult> & {
       responseSchema: TResponseSchema;
     }
   ): Promise<TResult>;
-  <TData = unknown>(
+  <TData = ApiResponse<unknown>>(
     path: string,
     options?: ApiReadOptions<undefined, TData>
   ): Promise<TData>;
@@ -149,7 +155,7 @@ export type ApiWriteMethod = {
   <
     TBodySchema extends OptionalSchema = undefined,
     TResponseSchema extends z.ZodType = z.ZodType,
-    TResult = SchemaOutput<TResponseSchema>
+    TResult = ApiResponse<SchemaOutput<TResponseSchema>>
   >(
     path: string,
     options: ApiWriteOptions<TBodySchema, TResponseSchema, TResult> & {
@@ -157,7 +163,7 @@ export type ApiWriteMethod = {
     }
   ): Promise<TResult>;
   <
-    TData = unknown,
+    TData = ApiResponse<unknown>,
     TBodySchema extends OptionalSchema = undefined
   >(
     path: string,
@@ -169,7 +175,7 @@ export type ApiRequest = {
   <
     TBodySchema extends OptionalSchema = undefined,
     TResponseSchema extends z.ZodType = z.ZodType,
-    TResult = SchemaOutput<TResponseSchema>
+    TResult = ApiResponse<SchemaOutput<TResponseSchema>>
   >(
     method: ApiMethod,
     path: string,
@@ -178,7 +184,7 @@ export type ApiRequest = {
     }
   ): Promise<TResult>;
   <
-    TData = unknown,
+    TData = ApiResponse<unknown>,
     TBodySchema extends OptionalSchema = undefined
   >(
     method: ApiMethod,
@@ -228,7 +234,7 @@ export type ApiEndpointOptions<
   TParamsSchema extends OptionalSchema = undefined,
   TBodySchema extends OptionalSchema = undefined,
   TResponseSchema extends OptionalSchema = undefined,
-  TResult = SchemaOutput<TResponseSchema>
+  TResult = ApiResponse<SchemaOutput<TResponseSchema>>
 > = Readonly<{
   auth          ?: boolean;
   bodySchema    ?: TBodySchema;
@@ -245,7 +251,7 @@ export type ApiEndpoint<
   TParamsSchema extends OptionalSchema = OptionalSchema,
   TBodySchema extends OptionalSchema = OptionalSchema,
   TResponseSchema extends OptionalSchema = OptionalSchema,
-  TResult = SchemaOutput<TResponseSchema>
+  TResult = ApiResponse<SchemaOutput<TResponseSchema>>
 > = Readonly<{
   method : ApiMethod;
   options: ApiEndpointOptions<
@@ -264,7 +270,7 @@ export type EndpointFactory<TMethod extends ApiMethod> = {
     const TParamsSchema extends OptionalSchema = undefined,
     const TBodySchema extends OptionalSchema = undefined,
     const TResponseSchema extends z.ZodType = z.ZodType,
-    TResult = SchemaOutput<TResponseSchema>
+    TResult = ApiResponse<SchemaOutput<TResponseSchema>>
   >(
     path: string,
     options: ApiEndpointOptions<
@@ -277,7 +283,7 @@ export type EndpointFactory<TMethod extends ApiMethod> = {
   <
     const TParamsSchema extends OptionalSchema = undefined,
     const TBodySchema extends OptionalSchema = undefined,
-    TResult = unknown
+    TResult = ApiResponse<unknown>
   >(
     path: string,
     options?: ApiEndpointOptions<

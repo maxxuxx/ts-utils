@@ -52,7 +52,11 @@ Method shortcuts are the preferred public API because they avoid exposing method
 
 `body` is the request JSON payload and `bodySchema` validates it before the fetch call when provided
 
-`responseSchema` validates the parsed response body and `select` reshapes the validated response
+`responseSchema` validates the parsed response body
+
+By default successful requests return `{ code, message?, data }`, where `code` is the HTTP status code, `message` comes from `body.message` when it is a string, and `data` is the validated response body
+
+`select` returns a custom value instead of the default `{ code, message?, data }` result
 
 Endpoint definitions use `endpoint.get("/users/:id", { params, responseSchema })` so route declarations read like HTTP routes
 

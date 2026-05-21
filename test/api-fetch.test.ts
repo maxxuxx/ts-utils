@@ -43,8 +43,11 @@ describe("api-fetch", () => {
     });
 
     expect(data).toEqual({
-      id  : 1,
-      name: "haru"
+      code: 200,
+      data: {
+        id  : 1,
+        name: "haru"
+      }
     });
     expect(fetch).toHaveBeenCalledWith(
       "https://api.example.com/users?page=1",
@@ -89,6 +92,34 @@ describe("api-fetch", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it("normalizes successful responses with HTTP status, body message, and validated body", async () => {
+    const fetch = vi.fn<FetchLike>(async () => jsonResponse({
+      message: "created",
+      user   : {
+        id  : 2,
+        name: "haru"
+      }
+    }, 201));
+    const api = createApiFetcher({ fetch });
+
+    const data = await api.post("/users", {
+      responseSchema: z.object({
+        user: User
+      })
+    });
+
+    expect(data).toEqual({
+      code   : 201,
+      message: "created",
+      data   : {
+        user: {
+          id  : 2,
+          name: "haru"
+        }
+      }
+    });
+  });
+
   it("throws typed HTTP errors with parsed response bodies", async () => {
     const fetch = vi.fn<FetchLike>(async () => jsonResponse({ message: "unauthorized" }, 401));
     const api = createApiFetcher({ fetch });
@@ -131,7 +162,10 @@ describe("api-fetch", () => {
       })
     });
 
-    expect(data).toEqual({ ok: true });
+    expect(data).toEqual({
+      code: 200,
+      data: { ok: true }
+    });
     expect(refresh).toHaveBeenCalledTimes(1);
     expect(fetch).toHaveBeenCalledTimes(2);
   });
@@ -189,7 +223,7 @@ describe("api-fetch", () => {
       body: { name: "haru" }
     });
 
-    expect(user.id).toBe(8);
+    expect(user.data.id).toBe(8);
     expect(fetch.mock.calls[0]?.[0]).toBe("https://api.example.com/users");
   });
 
@@ -206,7 +240,10 @@ describe("api-fetch", () => {
       })
     });
 
-    expect(data).toEqual({ ok: true });
+    expect(data).toEqual({
+      code: 200,
+      data: { ok: true }
+    });
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 

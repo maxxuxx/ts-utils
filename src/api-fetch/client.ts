@@ -11,6 +11,7 @@ import type {
   ApiFetcher,
   ApiFetcherOptions,
   ApiHookContext,
+  ApiResponse,
   ApiRequest,
   ApiRequestContext,
   ApiRequestOptions,
@@ -76,7 +77,7 @@ export const createApiFetcher = (
   const request: ApiRequest = async <
     TBodySchema extends OptionalSchema = undefined,
     TResponseSchema extends OptionalSchema = undefined,
-    TResult = SchemaOutput<TResponseSchema>
+    TResult = ApiResponse<SchemaOutput<TResponseSchema>>
   >(
     method: ApiMethod,
     path: string,
@@ -250,7 +251,7 @@ const sendRequest = async <
       ) as SchemaOutput<TResponseSchema>;
       const result         = select
         ? select(parsedResponse, response)
-        : parsedResponse as TResult;
+        : createApiResponse(parsedResponse, response, responseBody) as TResult;
 
       await callResponseHooks(clientOptions.hooks?.onResponse, hooks?.onResponse, {
         ...context,
@@ -300,6 +301,37 @@ const sendRequest = async <
       signal.cleanup();
     }
   }
+};
+
+const createApiResponse = <TData>(
+  data: TData,
+  response: Response,
+  responseBody: unknown
+): ApiResponse<TData> => {
+  const message = getResponseMessage(responseBody);
+
+  if (message === undefined) {
+    return {
+      code: response.status,
+      data
+    };
+  }
+
+  return {
+    code: response.status,
+    message,
+    data
+  };
+};
+
+const getResponseMessage = (data: unknown): string | undefined => {
+  if (typeof data !== "object" || data === null || !("message" in data)) {
+    return undefined;
+  }
+
+  const message = data.message;
+
+  return typeof message === "string" ? message : undefined;
 };
 
 // Auth helpers
