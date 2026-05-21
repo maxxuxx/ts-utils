@@ -1,6 +1,6 @@
 {
   "name": "@maxxuxx/ts-utils",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "description": "Shared TypeScript utilities",
   "type": "module",
   "license": "MIT",
@@ -83,6 +83,22 @@
     "./electron-log/renderer": {
       "types": "./dist/electron-log/renderer.d.ts",
       "import": "./dist/electron-log/renderer.js"
+    },
+    "./electron-updater": {
+      "types": "./dist/electron-updater/index.d.ts",
+      "import": "./dist/electron-updater/index.js"
+    },
+    "./electron-updater/main": {
+      "types": "./dist/electron-updater/main.d.ts",
+      "import": "./dist/electron-updater/main.js"
+    },
+    "./electron-updater/preload": {
+      "types": "./dist/electron-updater/preload.d.ts",
+      "import": "./dist/electron-updater/preload.js"
+    },
+    "./electron-updater/builder": {
+      "types": "./dist/electron-updater/builder.d.ts",
+      "import": "./dist/electron-updater/builder.js"
     }
   },
   "types": "./dist/index.d.ts",
@@ -100,6 +116,18 @@
   "dependencies": {
     "electron-log": "^5.4.4",
     "zod": "^4.4.3"
+  },
+  "peerDependencies": {
+    "electron": ">=30",
+    "electron-updater": ">=6"
+  },
+  "peerDependenciesMeta": {
+    "electron": {
+      "optional": true
+    },
+    "electron-updater": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@types/node": "^24.10.0",

@@ -216,6 +216,27 @@ const logger = createBridgeLogger({
 
 See [src/electron-log/readme.md](https://github.com/maxxuxx/ts-utils/blob/main/src/electron-log/readme.md) for module details
 
+## Electron updater
+
+Electron update helpers are exported as process specific subpaths
+
+`electron` and `electron-updater` are optional peer dependencies and should be installed by the Electron app
+
+```bash
+npm install electron-updater
+npm install -D electron electron-builder
+```
+
+```ts
+import { createUpdaterService } from "@maxxuxx/ts-utils/electron-updater/main";
+import { createUpdaterBridge } from "@maxxuxx/ts-utils/electron-updater/preload";
+import { createPublishConfig } from "@maxxuxx/ts-utils/electron-updater/builder";
+```
+
+Main process update state, renderer IPC bridge helpers, and S3/GitHub/generic publish config helpers are included
+
+See [src/electron-updater/readme.md](https://github.com/maxxuxx/ts-utils/blob/main/src/electron-updater/readme.md) for module details
+
 ## Is
 
 Dependency free type guards are available through the `is` subpath
