@@ -169,6 +169,35 @@ Example output
 
 See [src/api-fetch/readme.md](https://github.com/maxxuxx/ts-utils/blob/main/src/api-fetch/readme.md) for module details
 
+## HTTP response
+
+HTTP response helpers are available through the `http-response` subpath
+
+```ts
+import {
+  badRequest,
+  jsonResponse,
+  unauthorized
+} from "@maxxuxx/ts-utils/http-response";
+```
+
+Use them in route handlers that return Web `Response` objects
+
+```ts
+return jsonResponse({
+  ok: true
+});
+```
+
+Status helpers accept caller-provided messages and use English defaults when omitted
+
+```ts
+return unauthorized("로그인이 필요합니다");
+return badRequest();
+```
+
+See [src/http-response/readme.md](https://github.com/maxxuxx/ts-utils/blob/main/src/http-response/readme.md) for module details
+
 ## Env
 
 Runtime environment helpers are available through the `env` subpath
