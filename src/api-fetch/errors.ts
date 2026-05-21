@@ -1,8 +1,13 @@
-import type { ApiRequestContext } from "./types.js";
+import type {
+  ApiErrorCode,
+  ApiHttpErrorOptions,
+  ApiRequestContext
+} from "./types.js";
 
 // HTTP errors
 export class ApiHttpError extends Error {
   readonly body: unknown;
+  readonly code: ApiErrorCode | undefined;
   readonly context: ApiRequestContext;
   readonly response: Response;
   readonly status: number;
@@ -12,12 +17,18 @@ export class ApiHttpError extends Error {
     response: Response,
     body: unknown,
     context: ApiRequestContext,
-    message = `API request failed: ${context.method} ${context.url} (${response.status})`
+    options: ApiHttpErrorOptions | string = {}
   ) {
+    const defaultMessage = `API request failed: ${context.method} ${context.url} (${response.status})`;
+    const message = typeof options === "string"
+      ? options
+      : options.message ?? defaultMessage;
+
     super(message);
 
     this.name       = "ApiHttpError";
     this.body       = body;
+    this.code       = typeof options === "string" ? undefined : options.code;
     this.context    = context;
     this.response   = response;
     this.status     = response.status;
@@ -33,6 +44,16 @@ export const getApiMessage = (data: unknown): string | undefined => {
   const message = data.message;
 
   return typeof message === "string" ? message : undefined;
+};
+
+export const getApiErrorCode = (data: unknown): ApiErrorCode | undefined => {
+  if (typeof data !== "object" || data === null || !("code" in data)) {
+    return undefined;
+  }
+
+  const code = data.code;
+
+  return typeof code === "string" || typeof code === "number" ? code : undefined;
 };
 
 // Validation errors

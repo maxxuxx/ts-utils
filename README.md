@@ -98,12 +98,14 @@ const User = z.object({
 });
 
 const response = await api.post("/users", {
-  body                : { name: "haru" },
-  bodySchema          : z.object({
+  body          : { name: "haru" },
+  bodySchema    : z.object({
     name: z.string().min(1)
   }),
-  responseSchema      : User,
-  fallbackErrorMessage: "사용자 정보를 저장하지 못했습니다"
+  responseSchema: User,
+  errorFallback : {
+    message: "사용자 정보를 저장하지 못했습니다"
+  }
 });
 
 response.code; // HTTP status code
@@ -112,7 +114,7 @@ response.data; // validated response body
 
 Successful calls return `{ code, message?, data }` by default. `code` is the HTTP status code, `message` is copied from `body.message` when present, and `data` is the parsed body.
 
-For non-2xx responses, `ApiHttpError.message` uses `body.message`, then `fallbackErrorMessage`, then the default technical request message.
+For non-2xx responses, `ApiHttpError.status` is the HTTP status code, `ApiHttpError.code` uses `body.code` then `errorFallback.code`, and `ApiHttpError.message` uses `body.message`, then `errorFallback.message`, then the default technical request message.
 
 Reusable endpoints can define method, path params, query strings, request body schema, response schema, and result selection
 

@@ -6,6 +6,7 @@ import type {
   AnyApiEndpoint,
   ApiEndpoint,
   ApiEndpointOptions,
+  ApiErrorFallback,
   ApiHeadersInit,
   ApiRequest,
   ApiRequestContext,
@@ -75,26 +76,46 @@ export const executeEndpoint = async <TEndpoint extends AnyApiEndpoint>(
 
   return request(apiEndpoint.method, path, {
     ...callOptions,
-    auth                : callOptions.auth ?? apiEndpoint.options.auth,
-    fallbackErrorMessage: callOptions.fallbackErrorMessage
-      ?? apiEndpoint.options.fallbackErrorMessage,
-    headers             : mergeHeaders(
+    auth         : callOptions.auth ?? apiEndpoint.options.auth,
+    errorFallback: mergeErrorFallback(
+      apiEndpoint.options.errorFallback,
+      callOptions.errorFallback
+    ),
+    headers: mergeHeaders(
       resolveEndpointHeaders(apiEndpoint.options.headers, params),
       callOptions.headers
     ),
-    body                : callOptions.body,
-    bodySchema          : apiEndpoint.options.bodySchema,
-    hooks               : callOptions.hooks,
-    query               : mergeQuery(
+    body      : callOptions.body,
+    bodySchema: apiEndpoint.options.bodySchema,
+    hooks     : callOptions.hooks,
+    query     : mergeQuery(
       resolveEndpointQuery(apiEndpoint.options.query, params),
       callOptions.query
     ),
-    rawBody             : callOptions.rawBody,
-    responseSchema      : apiEndpoint.options.responseSchema,
-    retry               : callOptions.retry ?? apiEndpoint.options.retry,
-    select              : apiEndpoint.options.select,
-    timeout             : callOptions.timeout ?? apiEndpoint.options.timeout
+    rawBody       : callOptions.rawBody,
+    responseSchema: apiEndpoint.options.responseSchema,
+    retry         : callOptions.retry ?? apiEndpoint.options.retry,
+    select        : apiEndpoint.options.select,
+    timeout       : callOptions.timeout ?? apiEndpoint.options.timeout
   }) as Promise<EndpointResult<TEndpoint>>;
+};
+
+const mergeErrorFallback = (
+  base: ApiErrorFallback | undefined,
+  override: ApiErrorFallback | undefined
+): ApiErrorFallback | undefined => {
+  if (!base) {
+    return override;
+  }
+
+  if (!override) {
+    return base;
+  }
+
+  return {
+    code   : override.code ?? base.code,
+    message: override.message ?? base.message
+  };
 };
 
 const parseEndpointParams = <TEndpoint extends AnyApiEndpoint>(

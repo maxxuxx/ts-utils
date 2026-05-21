@@ -7,6 +7,7 @@ import {
   createApiFetcher,
   endpoint,
   formatApiLogEvent,
+  getApiErrorCode,
   getApiMessage,
   responseEnvelopeSchema,
   type FetchLike,
@@ -122,49 +123,87 @@ describe("api-fetch", () => {
   });
 
   it("throws typed HTTP errors with parsed response bodies", async () => {
-    const fetch = vi.fn<FetchLike>(async () => jsonResponse({ message: "unauthorized" }, 401));
+    const fetch = vi.fn<FetchLike>(async () => jsonResponse({
+      code   : "UNAUTHORIZED",
+      message: "unauthorized"
+    }, 401));
     const api = createApiFetcher({ fetch });
 
     await expect(api.get("/me", {
       responseSchema: User
     })).rejects.toMatchObject({
-      body  : { message: "unauthorized" },
+      body  : {
+        code   : "UNAUTHORIZED",
+        message: "unauthorized"
+      },
+      code   : "UNAUTHORIZED",
       message: "unauthorized",
       status: 401
     } satisfies Partial<ApiHttpError>);
   });
 
-  it("uses fallback error messages when HTTP error bodies do not include message", async () => {
+  it("uses error fallback values when HTTP error bodies do not include code or message", async () => {
     const fetch = vi.fn<FetchLike>(async () => jsonResponse({ error: "denied" }, 403));
     const api = createApiFetcher({
-      fallbackErrorMessage: "request failed",
+      errorFallback: {
+        code   : "REQUEST_FAILED",
+        message: "request failed"
+      },
       fetch
     });
 
     await expect(api.get("/me")).rejects.toMatchObject({
+      code   : "REQUEST_FAILED",
       message: "request failed",
       status : 403
     } satisfies Partial<ApiHttpError>);
 
     await expect(api.get("/me", {
-      fallbackErrorMessage: "내 정보를 불러오지 못했습니다"
+      errorFallback: {
+        message: "내 정보를 불러오지 못했습니다"
+      }
     })).rejects.toMatchObject({
       body   : { error: "denied" },
+      code   : "REQUEST_FAILED",
       message: "내 정보를 불러오지 못했습니다",
       status : 403
     } satisfies Partial<ApiHttpError>);
   });
 
-  it("uses endpoint fallback error messages", async () => {
+  it("uses endpoint error fallback values", async () => {
     const fetch = vi.fn<FetchLike>(async () => jsonResponse({ error: "denied" }, 403));
     const api = createApiFetcher({ fetch });
     const getMe = endpoint.get("/me", {
-      fallbackErrorMessage: "내 정보를 불러오지 못했습니다"
+      errorFallback: {
+        code   : "ME_FETCH_FAILED",
+        message: "내 정보를 불러오지 못했습니다"
+      }
     });
 
     await expect(api.call(getMe)).rejects.toMatchObject({
+      code   : "ME_FETCH_FAILED",
       message: "내 정보를 불러오지 못했습니다",
       status : 403
+    } satisfies Partial<ApiHttpError>);
+  });
+
+  it("keeps server error code and message before fallback values", async () => {
+    const fetch = vi.fn<FetchLike>(async () => jsonResponse({
+      code   : 1001,
+      message: "server failed"
+    }, 500));
+    const api = createApiFetcher({
+      errorFallback: {
+        code   : "REQUEST_FAILED",
+        message: "request failed"
+      },
+      fetch
+    });
+
+    await expect(api.get("/server-error")).rejects.toMatchObject({
+      code   : 1001,
+      message: "server failed",
+      status : 500
     } satisfies Partial<ApiHttpError>);
   });
 
@@ -382,6 +421,13 @@ describe("api-fetch", () => {
     expect(getApiMessage({ message: "failed" })).toBe("failed");
     expect(getApiMessage({ message: 500 })).toBeUndefined();
     expect(getApiMessage(undefined)).toBeUndefined();
+  });
+
+  it("gets API error codes from code shaped bodies", () => {
+    expect(getApiErrorCode({ code: "TOKEN_EXPIRED" })).toBe("TOKEN_EXPIRED");
+    expect(getApiErrorCode({ code: 1001 })).toBe(1001);
+    expect(getApiErrorCode({ code: false })).toBeUndefined();
+    expect(getApiErrorCode(undefined)).toBeUndefined();
   });
 });
 

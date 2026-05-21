@@ -40,6 +40,15 @@ export type ApiResponse<TData> = Readonly<{
   data    : TData;
 }>;
 
+export type ApiErrorCode = string | number;
+
+export type ApiErrorFallback = Readonly<{
+  code   ?: ApiErrorCode;
+  message?: string;
+}>;
+
+export type ApiHttpErrorOptions = ApiErrorFallback;
+
 export type FetchLike = (
   input: string | URL | Request,
   init?: RequestInit
@@ -110,19 +119,19 @@ export type ApiRequestOptions<
   TResponseSchema extends OptionalSchema = undefined,
   TResult = ApiResponse<SchemaOutput<TResponseSchema>>
 > = Omit<RequestInit, "body" | "headers" | "method"> & {
-  auth                ?: boolean;
-  baseURL             ?: string;
-  body                ?: SchemaInput<TBodySchema>;
-  bodySchema          ?: TBodySchema;
-  fallbackErrorMessage?: string;
-  headers             ?: ApiHeadersInit;
-  hooks               ?: ApiHooks;
-  query               ?: QueryParams;
-  rawBody             ?: RequestInit["body"];
-  responseSchema      ?: TResponseSchema;
-  retry               ?: ApiRetry;
-  select              ?: (data: SchemaOutput<TResponseSchema>, response: Response) => TResult;
-  timeout             ?: number;
+  auth         ?: boolean;
+  baseURL      ?: string;
+  body         ?: SchemaInput<TBodySchema>;
+  bodySchema   ?: TBodySchema;
+  errorFallback?: ApiErrorFallback;
+  headers      ?: ApiHeadersInit;
+  hooks        ?: ApiHooks;
+  query        ?: QueryParams;
+  rawBody      ?: RequestInit["body"];
+  responseSchema?: TResponseSchema;
+  retry          ?: ApiRetry;
+  select         ?: (data: SchemaOutput<TResponseSchema>, response: Response) => TResult;
+  timeout        ?: number;
 };
 
 export type ApiReadOptions<
@@ -195,15 +204,15 @@ export type ApiRequest = {
 };
 
 export type ApiFetcherOptions = Readonly<{
-  auth                ?: ApiAuthOptions;
-  baseURL             ?: string;
-  fallbackErrorMessage?: string;
-  fetch               ?: FetchLike;
-  headers             ?: ApiHeadersInit;
-  hooks               ?: ApiHooks;
-  logging             ?: ApiLogging;
-  retry               ?: ApiRetry;
-  timeout             ?: number;
+  auth         ?: ApiAuthOptions;
+  baseURL      ?: string;
+  errorFallback?: ApiErrorFallback;
+  fetch        ?: FetchLike;
+  headers      ?: ApiHeadersInit;
+  hooks        ?: ApiHooks;
+  logging      ?: ApiLogging;
+  retry        ?: ApiRetry;
+  timeout      ?: number;
 }>;
 
 export type ApiFetcher = Readonly<{
@@ -238,16 +247,16 @@ export type ApiEndpointOptions<
   TResponseSchema extends OptionalSchema = undefined,
   TResult = ApiResponse<SchemaOutput<TResponseSchema>>
 > = Readonly<{
-  auth                ?: boolean;
-  bodySchema          ?: TBodySchema;
-  fallbackErrorMessage?: string;
-  headers             ?: EndpointHeaders<TParamsSchema>;
-  params              ?: TParamsSchema;
-  query               ?: EndpointQuery<TParamsSchema>;
-  responseSchema      ?: TResponseSchema;
-  retry               ?: ApiRetry;
-  select              ?: (data: SchemaOutput<TResponseSchema>, response: Response) => TResult;
-  timeout             ?: number;
+  auth         ?: boolean;
+  bodySchema   ?: TBodySchema;
+  errorFallback?: ApiErrorFallback;
+  headers      ?: EndpointHeaders<TParamsSchema>;
+  params       ?: TParamsSchema;
+  query        ?: EndpointQuery<TParamsSchema>;
+  responseSchema?: TResponseSchema;
+  retry         ?: ApiRetry;
+  select        ?: (data: SchemaOutput<TResponseSchema>, response: Response) => TResult;
+  timeout       ?: number;
 }>;
 
 export type ApiEndpoint<

@@ -10,6 +10,7 @@ export {
   ApiParseError,
   ApiTimeoutError,
   ApiValidationError,
+  getApiErrorCode,
   getApiMessage
 } from "./errors.js";
 export {
@@ -38,6 +39,8 @@ export {
   ApiMethod
 } from "./types.js";
 export type {
+  ApiErrorCode,
+  ApiErrorFallback,
   ApiResponse,
   AnyApiEndpoint,
   AnySchema,

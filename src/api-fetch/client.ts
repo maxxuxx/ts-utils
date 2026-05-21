@@ -1,5 +1,10 @@
 import { parseRequestBody, parseResponseBody, readResponseBody } from "./body.js";
-import { ApiHttpError, ApiTimeoutError, getApiMessage } from "./errors.js";
+import {
+  ApiHttpError,
+  ApiTimeoutError,
+  getApiErrorCode,
+  getApiMessage
+} from "./errors.js";
 import { executeEndpoint } from "./endpoint.js";
 import { buildHeaders, mergeHeaders } from "./headers.js";
 import { createApiLoggerHooks } from "./logging.js";
@@ -12,6 +17,7 @@ import type {
   ApiFetcherOptions,
   ApiHookContext,
   ApiResponse,
+  ApiErrorFallback,
   ApiRequest,
   ApiRequestContext,
   ApiRequestOptions,
@@ -165,7 +171,7 @@ const sendRequest = async <
     baseURL,
     body: _body,
     bodySchema: _bodySchema,
-    fallbackErrorMessage,
+    errorFallback,
     headers,
     hooks,
     query,
@@ -209,14 +215,18 @@ const sendRequest = async <
       const responseBody = await readResponseBody(response, context);
 
       if (!response.ok) {
-        const errorMessage = getApiMessage(responseBody)
-          ?? fallbackErrorMessage
-          ?? clientOptions.fallbackErrorMessage;
+        const resolvedErrorFallback = resolveErrorFallback(
+          clientOptions.errorFallback,
+          errorFallback
+        );
         const error = new ApiHttpError(
           response,
           responseBody,
           context,
-          errorMessage
+          {
+            code   : getApiErrorCode(responseBody) ?? resolvedErrorFallback?.code,
+            message: getApiMessage(responseBody) ?? resolvedErrorFallback?.message
+          }
         );
 
         await callErrorHooks(
@@ -330,6 +340,24 @@ const createApiResponse = <TData>(
     code: response.status,
     message,
     data
+  };
+};
+
+const resolveErrorFallback = (
+  base: ApiErrorFallback | undefined,
+  override: ApiErrorFallback | undefined
+): ApiErrorFallback | undefined => {
+  if (!base) {
+    return override;
+  }
+
+  if (!override) {
+    return base;
+  }
+
+  return {
+    code   : override.code ?? base.code,
+    message: override.message ?? base.message
   };
 };
 

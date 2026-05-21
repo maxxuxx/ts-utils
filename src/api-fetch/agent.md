@@ -20,7 +20,7 @@ import { createApiFetcher, endpoint, z } from "@maxxuxx/ts-utils/api-fetch";
 
 Primary request vocabulary should stay small and direct
 
-`get`, `post`, `put`, `patch`, `delete`, `query`, `body`, `bodySchema`, `responseSchema`, `fallbackErrorMessage`, and `select`
+`get`, `post`, `put`, `patch`, `delete`, `query`, `body`, `bodySchema`, `responseSchema`, `errorFallback`, and `select`
 
 ## Internal layout
 
@@ -58,7 +58,7 @@ By default successful requests return `{ code, message?, data }`, where `code` i
 
 `select` returns a custom value instead of the default `{ code, message?, data }` result
 
-`fallbackErrorMessage` sets the `ApiHttpError.message` fallback when an HTTP error body has no string `message`
+`errorFallback` sets optional `ApiHttpError.code` and `ApiHttpError.message` fallback values when an HTTP error body has no string or number `code` and no string `message`
 
 Endpoint definitions use `endpoint.get("/users/:id", { params, responseSchema })` so route declarations read like HTTP routes
 

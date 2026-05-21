@@ -8,6 +8,7 @@ Fetch based API utilities with Zod validation, method shortcuts, endpoint defini
 import {
   createApiFetcher,
   endpoint,
+  getApiErrorCode,
   getApiMessage,
   responseEnvelopeSchema,
   type ApiResponse,
@@ -21,8 +22,10 @@ Create a fetcher with shared defaults
 
 ```ts
 const api = createApiFetcher({
-  baseURL             : "https://api.example.com",
-  fallbackErrorMessage: "요청을 처리하지 못했습니다"
+  baseURL      : "https://api.example.com",
+  errorFallback: {
+    message: "요청을 처리하지 못했습니다"
+  }
 });
 ```
 
@@ -62,16 +65,18 @@ response.data;
 
 Use `rawBody` for non-JSON request bodies such as `FormData`, `Blob`, or a prebuilt string.
 
-Set request level `fallbackErrorMessage` when a specific caller should receive a user-facing message for HTTP errors whose body has no `message`
+Set request level `errorFallback` when a specific caller should receive fallback values for HTTP errors whose body has no `code` or `message`
 
 ```ts
 const response = await api.get("/users/me", {
-  responseSchema       : User,
-  fallbackErrorMessage : "내 정보를 불러오지 못했습니다"
+  responseSchema: User,
+  errorFallback: {
+    message: "내 정보를 불러오지 못했습니다"
+  }
 });
 ```
 
-For non-2xx responses, `ApiHttpError.message` is `body.message` when it is a string, then `fallbackErrorMessage`, then the default technical request message.
+For non-2xx responses, `ApiHttpError.status` is the HTTP status code. `ApiHttpError.code` is `body.code` when it is a string or number, then `errorFallback.code`. `ApiHttpError.message` is `body.message` when it is a string, then `errorFallback.message`, then the default technical request message.
 
 Successful calls return `ApiResponse<TData>` by default
 
@@ -161,8 +166,10 @@ Endpoints can also define a shared fallback error message
 
 ```ts
 const getMe = endpoint.get("/users/me", {
-  responseSchema       : User,
-  fallbackErrorMessage : "내 정보를 불러오지 못했습니다"
+  responseSchema: User,
+  errorFallback: {
+    message: "내 정보를 불러오지 못했습니다"
+  }
 });
 ```
 
@@ -321,9 +328,11 @@ const api = createApiFetcher({
 
 ## Errors
 
-`ApiHttpError` is thrown for non-2xx responses and includes `status`, `statusText`, parsed `body`, `response`, and request context
+`ApiHttpError` is thrown for non-2xx responses and includes `status`, optional `code`, `statusText`, parsed `body`, `response`, and request context
 
 `getApiMessage(body)` reads a string `message` property from unknown API bodies
+
+`getApiErrorCode(body)` reads a string or number `code` property from unknown API bodies
 
 `ApiValidationError` is thrown when request body or response schema validation fails
 
