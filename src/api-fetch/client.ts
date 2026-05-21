@@ -1,5 +1,5 @@
 import { parseRequestBody, parseResponseBody, readResponseBody } from "./body.js";
-import { ApiHttpError, ApiTimeoutError } from "./errors.js";
+import { ApiHttpError, ApiTimeoutError, getApiMessage } from "./errors.js";
 import { executeEndpoint } from "./endpoint.js";
 import { buildHeaders, mergeHeaders } from "./headers.js";
 import { createApiLoggerHooks } from "./logging.js";
@@ -165,6 +165,7 @@ const sendRequest = async <
     baseURL,
     body: _body,
     bodySchema: _bodySchema,
+    fallbackErrorMessage,
     headers,
     hooks,
     query,
@@ -208,7 +209,15 @@ const sendRequest = async <
       const responseBody = await readResponseBody(response, context);
 
       if (!response.ok) {
-        const error = new ApiHttpError(response, responseBody, context);
+        const errorMessage = getApiMessage(responseBody)
+          ?? fallbackErrorMessage
+          ?? clientOptions.fallbackErrorMessage;
+        const error = new ApiHttpError(
+          response,
+          responseBody,
+          context,
+          errorMessage
+        );
 
         await callErrorHooks(
           clientOptions.hooks?.onResponseError,
@@ -308,7 +317,7 @@ const createApiResponse = <TData>(
   response: Response,
   responseBody: unknown
 ): ApiResponse<TData> => {
-  const message = getResponseMessage(responseBody);
+  const message = getApiMessage(responseBody);
 
   if (message === undefined) {
     return {
@@ -322,16 +331,6 @@ const createApiResponse = <TData>(
     message,
     data
   };
-};
-
-const getResponseMessage = (data: unknown): string | undefined => {
-  if (typeof data !== "object" || data === null || !("message" in data)) {
-    return undefined;
-  }
-
-  const message = data.message;
-
-  return typeof message === "string" ? message : undefined;
 };
 
 // Auth helpers

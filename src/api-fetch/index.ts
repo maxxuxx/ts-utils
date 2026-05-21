@@ -9,7 +9,8 @@ export {
   ApiHttpError,
   ApiParseError,
   ApiTimeoutError,
-  ApiValidationError
+  ApiValidationError,
+  getApiMessage
 } from "./errors.js";
 export {
   createApiLoggerHooks,

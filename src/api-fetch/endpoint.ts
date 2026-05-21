@@ -75,23 +75,25 @@ export const executeEndpoint = async <TEndpoint extends AnyApiEndpoint>(
 
   return request(apiEndpoint.method, path, {
     ...callOptions,
-    auth      : callOptions.auth ?? apiEndpoint.options.auth,
-    headers   : mergeHeaders(
+    auth                : callOptions.auth ?? apiEndpoint.options.auth,
+    fallbackErrorMessage: callOptions.fallbackErrorMessage
+      ?? apiEndpoint.options.fallbackErrorMessage,
+    headers             : mergeHeaders(
       resolveEndpointHeaders(apiEndpoint.options.headers, params),
       callOptions.headers
     ),
-    body      : callOptions.body,
-    bodySchema: apiEndpoint.options.bodySchema,
-    hooks     : callOptions.hooks,
-    query     : mergeQuery(
+    body                : callOptions.body,
+    bodySchema          : apiEndpoint.options.bodySchema,
+    hooks               : callOptions.hooks,
+    query               : mergeQuery(
       resolveEndpointQuery(apiEndpoint.options.query, params),
       callOptions.query
     ),
-    rawBody       : callOptions.rawBody,
-    responseSchema: apiEndpoint.options.responseSchema,
-    retry         : callOptions.retry ?? apiEndpoint.options.retry,
-    select        : apiEndpoint.options.select,
-    timeout       : callOptions.timeout ?? apiEndpoint.options.timeout
+    rawBody             : callOptions.rawBody,
+    responseSchema      : apiEndpoint.options.responseSchema,
+    retry               : callOptions.retry ?? apiEndpoint.options.retry,
+    select              : apiEndpoint.options.select,
+    timeout             : callOptions.timeout ?? apiEndpoint.options.timeout
   }) as Promise<EndpointResult<TEndpoint>>;
 };
 

@@ -8,6 +8,7 @@ Fetch based API utilities with Zod validation, method shortcuts, endpoint defini
 import {
   createApiFetcher,
   endpoint,
+  getApiMessage,
   responseEnvelopeSchema,
   type ApiResponse,
   z
@@ -20,7 +21,8 @@ Create a fetcher with shared defaults
 
 ```ts
 const api = createApiFetcher({
-  baseURL: "https://api.example.com"
+  baseURL             : "https://api.example.com",
+  fallbackErrorMessage: "요청을 처리하지 못했습니다"
 });
 ```
 
@@ -59,6 +61,17 @@ response.data;
 `bodySchema` is optional. If provided, the fetcher validates `body` before the request is sent. Without `bodySchema`, `body` is still serialized as JSON.
 
 Use `rawBody` for non-JSON request bodies such as `FormData`, `Blob`, or a prebuilt string.
+
+Set request level `fallbackErrorMessage` when a specific caller should receive a user-facing message for HTTP errors whose body has no `message`
+
+```ts
+const response = await api.get("/users/me", {
+  responseSchema       : User,
+  fallbackErrorMessage : "내 정보를 불러오지 못했습니다"
+});
+```
+
+For non-2xx responses, `ApiHttpError.message` is `body.message` when it is a string, then `fallbackErrorMessage`, then the default technical request message.
 
 Successful calls return `ApiResponse<TData>` by default
 
@@ -141,6 +154,15 @@ const searchUsers = endpoint.get("/users", {
   }),
   responseSchema: responseEnvelopeSchema(z.array(User)),
   select: (response) => response.data ?? []
+});
+```
+
+Endpoints can also define a shared fallback error message
+
+```ts
+const getMe = endpoint.get("/users/me", {
+  responseSchema       : User,
+  fallbackErrorMessage : "내 정보를 불러오지 못했습니다"
 });
 ```
 
@@ -300,6 +322,8 @@ const api = createApiFetcher({
 ## Errors
 
 `ApiHttpError` is thrown for non-2xx responses and includes `status`, `statusText`, parsed `body`, `response`, and request context
+
+`getApiMessage(body)` reads a string `message` property from unknown API bodies
 
 `ApiValidationError` is thrown when request body or response schema validation fails
 

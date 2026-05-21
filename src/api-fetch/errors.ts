@@ -8,8 +8,13 @@ export class ApiHttpError extends Error {
   readonly status: number;
   readonly statusText: string;
 
-  constructor(response: Response, body: unknown, context: ApiRequestContext) {
-    super(`API request failed: ${context.method} ${context.url} (${response.status})`);
+  constructor(
+    response: Response,
+    body: unknown,
+    context: ApiRequestContext,
+    message = `API request failed: ${context.method} ${context.url} (${response.status})`
+  ) {
+    super(message);
 
     this.name       = "ApiHttpError";
     this.body       = body;
@@ -19,6 +24,16 @@ export class ApiHttpError extends Error {
     this.statusText = response.statusText;
   }
 }
+
+export const getApiMessage = (data: unknown): string | undefined => {
+  if (typeof data !== "object" || data === null || !("message" in data)) {
+    return undefined;
+  }
+
+  const message = data.message;
+
+  return typeof message === "string" ? message : undefined;
+};
 
 // Validation errors
 export class ApiValidationError extends Error {

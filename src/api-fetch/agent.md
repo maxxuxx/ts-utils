@@ -20,7 +20,7 @@ import { createApiFetcher, endpoint, z } from "@maxxuxx/ts-utils/api-fetch";
 
 Primary request vocabulary should stay small and direct
 
-`get`, `post`, `put`, `patch`, `delete`, `query`, `body`, `bodySchema`, `responseSchema`, and `select`
+`get`, `post`, `put`, `patch`, `delete`, `query`, `body`, `bodySchema`, `responseSchema`, `fallbackErrorMessage`, and `select`
 
 ## Internal layout
 
@@ -57,6 +57,8 @@ Method shortcuts are the preferred public API because they avoid exposing method
 By default successful requests return `{ code, message?, data }`, where `code` is the HTTP status code, `message` comes from `body.message` when it is a string, and `data` is the validated response body
 
 `select` returns a custom value instead of the default `{ code, message?, data }` result
+
+`fallbackErrorMessage` sets the `ApiHttpError.message` fallback when an HTTP error body has no string `message`
 
 Endpoint definitions use `endpoint.get("/users/:id", { params, responseSchema })` so route declarations read like HTTP routes
 
