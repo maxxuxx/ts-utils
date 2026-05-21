@@ -13,11 +13,12 @@ import { ApiMethod } from "./types.js";
 import type {
   AnyApiEndpoint,
   ApiErrorHookContext,
+  ApiErrorFallback,
   ApiFetcher,
   ApiFetcherOptions,
   ApiHookContext,
   ApiResponse,
-  ApiErrorFallback,
+  ApiResponseData,
   ApiRequest,
   ApiRequestContext,
   ApiRequestOptions,
@@ -326,22 +327,38 @@ const createApiResponse = <TData>(
   data: TData,
   response: Response,
   responseBody: unknown
-): ApiResponse<TData> => {
-  const message = getApiMessage(responseBody);
+): ApiResponse<ApiResponseData<TData>> => {
+  const message      = getApiMessage(responseBody);
+  const responseData = getApiResponseData(data);
 
   if (message === undefined) {
     return {
       code: response.status,
-      data
+      data: responseData
     };
   }
 
   return {
     code: response.status,
     message,
-    data
+    data: responseData
   };
 };
+
+const getApiResponseData = <TData>(data: TData): ApiResponseData<TData> => (
+  isApiResponseEnvelope(data)
+    ? data.data as ApiResponseData<TData>
+    : data as ApiResponseData<TData>
+);
+
+const isApiResponseEnvelope = (
+  data: unknown
+): data is { data: unknown } => (
+  typeof data === "object"
+  && data !== null
+  && "data" in data
+  && ("code" in data || "message" in data)
+);
 
 const resolveErrorFallback = (
   base: ApiErrorFallback | undefined,

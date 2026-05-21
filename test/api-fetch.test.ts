@@ -122,6 +122,35 @@ describe("api-fetch", () => {
     });
   });
 
+  it("unwraps successful response envelopes without select", async () => {
+    const fetch = vi.fn<FetchLike>(async () => jsonResponse({
+      code   : 2000,
+      message: "created",
+      data   : {
+        id  : 3,
+        name: "haru"
+      }
+    }));
+    const api = createApiFetcher({ fetch });
+    const responseSchema = z.object({
+      code   : z.number(),
+      message: z.string(),
+      data   : User
+    });
+
+    const { code, message, data } = await api.post("/users", {
+      responseSchema
+    });
+
+    expect(code).toBe(200);
+    expect(message).toBe("created");
+    expect(data.id).toBe(3);
+    expect(data).toEqual({
+      id  : 3,
+      name: "haru"
+    });
+  });
+
   it("throws typed HTTP errors with parsed response bodies", async () => {
     const fetch = vi.fn<FetchLike>(async () => jsonResponse({
       code   : "UNAUTHORIZED",

@@ -42,6 +42,7 @@ export type {
   ApiErrorCode,
   ApiErrorFallback,
   ApiResponse,
+  ApiResponseData,
   AnyApiEndpoint,
   AnySchema,
   ApiAuthOptions,

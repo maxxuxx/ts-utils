@@ -112,7 +112,7 @@ response.code; // HTTP status code
 response.data; // validated response body
 ```
 
-Successful calls return `{ code, message?, data }` by default. `code` is the HTTP status code, `message` is copied from `body.message` when present, and `data` is the parsed body.
+Successful calls return `{ code, message?, data }` by default. `code` is the HTTP status code, `message` is copied from `body.message` when present, and `data` is the parsed body. If the validated body has a `data` property plus `code` or `message`, `data` is automatically unwrapped to the inner `body.data` value unless `select` is provided.
 
 For non-2xx responses, `ApiHttpError.status` is the HTTP status code, `ApiHttpError.code` uses `body.code` then `errorFallback.code`, and `ApiHttpError.message` uses `body.message`, then `errorFallback.message`, then the default technical request message.
 

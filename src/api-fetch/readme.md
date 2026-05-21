@@ -88,7 +88,21 @@ type ApiResponse<TData> = {
 };
 ```
 
-`code` is the HTTP response status code, `message` is copied from `body.message` when it is a string, and `data` is the parsed and validated response body.
+`code` is the HTTP response status code and `message` is copied from `body.message` when it is a string.
+
+`data` is the parsed and validated response body by default. If the validated body looks like an API envelope with a `data` property plus `code` or `message`, `data` is unwrapped to the inner `body.data` value.
+
+```ts
+const { code, message, data } = await api.post("/auth/login", {
+  responseSchema: z.object({
+    code   : z.number(),
+    message: z.string(),
+    data   : User
+  })
+});
+
+data.id;
+```
 
 Add query params with `query`
 
@@ -104,7 +118,7 @@ const response = await api.get("/users", {
 response.data;
 ```
 
-Use `select` to return a custom value instead of the default `ApiResponse`
+Use `select` to return a custom value instead of the default `ApiResponse`. When `select` is provided, the automatic envelope unwrap does not run.
 
 ```ts
 const user = await api.get("/users/1", {
