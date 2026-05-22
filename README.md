@@ -263,6 +263,38 @@ const nested = url.join("/groups", groupId, "/members");
 
 See [src/url/readme.md](https://github.com/maxxuxx/ts-utils/blob/main/src/url/readme.md) for module details
 
+## Promise
+
+Promise helpers are available through the `promise` subpath
+
+```ts
+import { promise, retry, run } from "@maxxuxx/ts-utils/promise";
+
+const user = await run(fetchUser, {
+  timeoutMs: 5000,
+  retries: 2,
+  delayMs: 300
+});
+
+const { orders, notifications } = await promise.allObject({
+  orders: {
+    task: fetchOrders,
+    retries: 3
+  },
+  notifications: fetchNotifications
+}, {
+  timeoutMs: 5000,
+  retries: 2,
+  delayMs: 300
+});
+
+const retryOnly = await retry(fetchOrders, {
+  retries: 2
+});
+```
+
+See [src/promise/readme.md](https://github.com/maxxuxx/ts-utils/blob/main/src/promise/readme.md) for module details
+
 ## Electron log
 
 Electron logging helpers are exported as process specific subpaths
