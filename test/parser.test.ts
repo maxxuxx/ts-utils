@@ -32,6 +32,11 @@ describe("parser", () => {
     expect(parser.coerce.boolean.parse("false")).toBe(false);
     expect(parser.coerce.boolean.parse("1")).toBe(true);
     expect(parser.coerce.boolean.parse("0")).toBe(false);
+    expect(parser.coerce.boolean.parse("y")).toBe(true);
+    expect(parser.coerce.boolean.parse("n")).toBe(false);
+    expect(parser.coerce.boolean.parse("t")).toBe(true);
+    expect(parser.coerce.boolean.parse("f")).toBe(false);
+    expect(parser.coerce.boolean.parse(2)).toBe(true);
     expect(parser.coerce.boolean.safeParse("maybe").success).toBe(false);
   });
 

@@ -29,6 +29,10 @@ Node UUID reads are async because they execute platform commands.
 Command execution is injectable so tests and Electron apps can avoid direct OS
 process calls.
 
+When a platform command succeeds but does not contain a parseable UUID, keep a
+parse error in the final `AggregateError` so callers can inspect stdout and
+stderr diagnostics.
+
 Linux machine IDs are normalized from 32 hex characters into canonical UUID
 format.
 

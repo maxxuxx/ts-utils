@@ -38,6 +38,8 @@ Coerce parser presets are intended for route params, query strings, environment 
 
 `parser.coerce.boolean` intentionally does not use raw `z.coerce.boolean()` because JavaScript truthiness would convert `"false"` to `true`
 
+Boolean coercion accepts the same common true and false tokens used by `env` and `normalize`, including `t/f` and `y/n`
+
 `parser.page` and `parser.limit` treat empty strings as missing values so query strings can fall back to defaults
 
 `parser.id` accepts positive integer values and coerces string input

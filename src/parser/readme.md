@@ -59,6 +59,8 @@ parser.coerce.boolean.parse("true");
 parser.coerce.boolean.parse("false");
 parser.coerce.boolean.parse("1");
 parser.coerce.boolean.parse("0");
+parser.coerce.boolean.parse("y");
+parser.coerce.boolean.parse("n");
 ```
 
 `page` defaults to `1`, `limit` defaults to `20`, and `limit` is capped at `100`

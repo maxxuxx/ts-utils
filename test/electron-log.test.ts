@@ -108,6 +108,35 @@ describe("electron-log module", () => {
     expect(listener).toBeUndefined();
   });
 
+  it("ignores invalid main bridge payloads", () => {
+    let listener: ((event: unknown, payload: unknown) => void) | undefined;
+    const logger = createLogger();
+
+    registerMainBridge({
+      ipcMain: {
+        on: (_channel, nextListener) => {
+          listener = nextListener;
+        }
+      },
+      logger
+    });
+
+    expect(() => {
+      listener?.({}, {
+        createdAt: new Date().toISOString(),
+        data:      ["hidden"],
+        level:     "unknown"
+      });
+    }).not.toThrow();
+    expect(logger.info).not.toHaveBeenCalled();
+  });
+
+  it("imports the main logger entry without loading Electron immediately", async () => {
+    const module = await import("../src/electron-log/main.js");
+
+    expect(module.configureMainLogger).toBeTypeOf("function");
+  });
+
   it("creates renderer bridge client with production filtering", () => {
     const bridge = createBridge();
     const logger = createBridgeLogger({

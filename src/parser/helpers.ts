@@ -8,8 +8,8 @@ export const booleanLikeToBoolean = (value: unknown): unknown => {
     return value;
   }
 
-  if (typeof value === "number" && (value === 0 || value === 1)) {
-    return value === 1;
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value !== 0 : value;
   }
 
   if (typeof value !== "string") {
@@ -18,11 +18,11 @@ export const booleanLikeToBoolean = (value: unknown): unknown => {
 
   const normalized = value.trim().toLowerCase();
 
-  if (["1", "true", "yes", "on"].includes(normalized)) {
+  if (["1", "true", "t", "yes", "y", "on"].includes(normalized)) {
     return true;
   }
 
-  if (["0", "false", "no", "off"].includes(normalized)) {
+  if (["0", "false", "f", "no", "n", "off"].includes(normalized)) {
     return false;
   }
 

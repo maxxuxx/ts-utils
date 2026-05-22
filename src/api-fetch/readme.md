@@ -340,6 +340,8 @@ const api = createApiFetcher({
 
 `durationMs` is only available inside response and error hook contexts
 
+Response body parse errors and response schema validation errors are reported through `onResponseError` because an HTTP response was already received
+
 ## Errors
 
 `ApiHttpError` is thrown for non-2xx responses and includes `status`, optional `code`, `statusText`, parsed `body`, `response`, and request context

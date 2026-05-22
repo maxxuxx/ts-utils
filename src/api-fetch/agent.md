@@ -78,6 +78,10 @@ Timeout uses `AbortController` and throws `ApiTimeoutError`
 
 Hooks are available globally and per request for observability
 
+HTTP errors, response JSON parse failures, and response schema validation failures should call `onResponseError` because a response was received
+
+Network failures, aborts, and other pre-response failures should call `onRequestError`
+
 Use `createApiLoggerHooks` to enable built-in API call logs through the existing hook surface
 
 The default log format is `emoji METHOD code duration endpoint`

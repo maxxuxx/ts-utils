@@ -1,3 +1,4 @@
+import { LOG_LEVELS } from "./constants.js";
 import type { LogLevel, LogPayload } from "./types.js";
 
 type SerializedError = Readonly<{
@@ -6,6 +7,8 @@ type SerializedError = Readonly<{
   name: string;
   stack?: string;
 }>;
+
+const logLevels = new Set<string>(LOG_LEVELS);
 
 // Payload helpers
 export const serializeLogData = (data: unknown[]): unknown[] => (
@@ -34,10 +37,18 @@ export const createLogPayload = (
   level
 });
 
-export const isLogPayload = (payload: unknown): payload is LogPayload => (
-  typeof payload === "object"
-  && payload !== null
-  && "level" in payload
-  && "data" in payload
-  && Array.isArray((payload as { data?: unknown }).data)
-);
+export const isLogPayload = (payload: unknown): payload is LogPayload => {
+  if (typeof payload !== "object" || payload === null) {
+    return false;
+  }
+
+  const record = payload as Partial<LogPayload>;
+
+  return (
+    typeof record.createdAt === "string"
+    && Array.isArray(record.data)
+    && typeof record.level === "string"
+    && logLevels.has(record.level)
+    && (record.scope === undefined || typeof record.scope === "string")
+  );
+};

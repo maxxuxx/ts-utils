@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   ApiHttpError,
+  ApiParseError,
   ApiTimeoutError,
   ApiValidationError,
   createApiFetcher,
@@ -444,6 +445,61 @@ describe("api-fetch", () => {
     const message = logger.mock.calls[0]?.[0];
 
     expect(message).toMatch(/^❌ GET {4}ERR \d{1,4} {0,3}ms\s+\/offline$/);
+  });
+
+  it("routes response parse failures to response error hooks", async () => {
+    const onRequestError = vi.fn();
+    const onResponseError = vi.fn();
+    const fetch = vi.fn<FetchLike>(async () => new Response("{bad", {
+      headers: {
+        "Content-Type": "application/json"
+      }
+    }));
+    const api = createApiFetcher({
+      fetch,
+      hooks: {
+        onRequestError,
+        onResponseError
+      }
+    });
+
+    await expect(api.get("/broken-json")).rejects.toBeInstanceOf(ApiParseError);
+
+    expect(onRequestError).not.toHaveBeenCalled();
+    expect(onResponseError).toHaveBeenCalledWith(expect.objectContaining({
+      error   : expect.any(ApiParseError),
+      response: expect.any(Response)
+    }));
+  });
+
+  it("routes response validation failures to response error hooks", async () => {
+    const onRequestError = vi.fn();
+    const onResponseError = vi.fn();
+    const fetch = vi.fn<FetchLike>(async () => jsonResponse({
+      id  : "bad",
+      name: "haru"
+    }));
+    const api = createApiFetcher({
+      fetch,
+      hooks: {
+        onRequestError,
+        onResponseError
+      }
+    });
+
+    await expect(api.get("/users/1", {
+      responseSchema: User
+    })).rejects.toBeInstanceOf(ApiValidationError);
+
+    expect(onRequestError).not.toHaveBeenCalled();
+    expect(onResponseError).toHaveBeenCalledWith(expect.objectContaining({
+      data: {
+        id  : "bad",
+        name: "haru"
+      },
+      error   : expect.any(ApiValidationError),
+      response: expect.any(Response)
+    }));
   });
 
   it("gets API messages from message shaped bodies", () => {

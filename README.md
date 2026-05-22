@@ -162,9 +162,9 @@ const api = createApiFetcher({
 Example output
 
 ```text
-🌐 GET    200 8ms  /users/1
-⚠️ POST   500 42ms /users
-❌ GET    ERR 3ms  /offline
+🌐 GET    200 8   ms /users/1
+⚠️ POST   500 42  ms /users
+❌ GET    ERR 3   ms /offline
 ```
 
 See [src/api-fetch/readme.md](https://github.com/maxxuxx/ts-utils/blob/main/src/api-fetch/readme.md) for module details

@@ -15,6 +15,9 @@ import {
 
 `getNodeDeviceUuid` reads a stable machine identifier from the host platform.
 It accepts an injected command executor for tests and custom runtimes.
+If platform commands run but their output cannot be parsed, the thrown
+`AggregateError` includes per-command parse errors with stdout and stderr
+summaries.
 
 `getBrowserDeviceUuid` stores a temporary generated UUID in a cookie. It uses
 narrow `globalThis.document` and `globalThis.crypto` typings so consumers do

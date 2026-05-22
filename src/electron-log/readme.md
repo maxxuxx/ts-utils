@@ -38,6 +38,8 @@ registerMainBridge({
 });
 ```
 
+The main bridge validates renderer payload shape before writing to the logger so malformed IPC messages are ignored
+
 Set `productionLevel` to `false` to disable logging in production
 
 ```ts

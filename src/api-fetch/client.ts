@@ -1,7 +1,9 @@
 import { parseRequestBody, parseResponseBody, readResponseBody } from "./body.js";
 import {
   ApiHttpError,
+  ApiParseError,
   ApiTimeoutError,
+  ApiValidationError,
   getApiErrorCode,
   getApiMessage
 } from "./errors.js";
@@ -204,16 +206,18 @@ const sendRequest = async <
 
   for (let attempt = 0; ; attempt += 1) {
     const signal = createRequestSignal(fetchOptions.signal, timeoutMs);
+    let response: Response | undefined;
+    let responseBody: unknown;
 
     try {
-      const response = await fetchImpl(url, {
+      response = await fetchImpl(url, {
         ...fetchOptions,
         body: parsedBody.body,
         headers: headersInit,
         method,
         signal: signal.signal
       });
-      const responseBody = await readResponseBody(response, context);
+      responseBody = await readResponseBody(response, context);
 
       if (!response.ok) {
         const resolvedErrorFallback = resolveErrorFallback(
@@ -287,6 +291,22 @@ const sendRequest = async <
         : error;
 
       if (nextError instanceof ApiHttpError) {
+        throw nextError;
+      }
+
+      if (isResponseProcessingError(nextError) && response) {
+        await callErrorHooks(
+          clientOptions.hooks?.onResponseError,
+          hooks?.onResponseError,
+          {
+            ...context,
+            data: responseBody,
+            durationMs: getDurationMs(context),
+            error: nextError,
+            response
+          }
+        );
+
         throw nextError;
       }
 
@@ -377,6 +397,13 @@ const resolveErrorFallback = (
     message: override.message ?? base.message
   };
 };
+
+const isResponseProcessingError = (
+  error: unknown
+): error is ApiParseError | ApiValidationError => (
+  error instanceof ApiParseError
+  || (error instanceof ApiValidationError && error.target === "response")
+);
 
 // Auth helpers
 const shouldRefreshAuth = (

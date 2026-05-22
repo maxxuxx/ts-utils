@@ -143,8 +143,16 @@ const isNumberLike = (value: unknown): boolean => {
     return Number.isFinite(value);
   }
 
-  if (typeof value === "bigint" || typeof value === "boolean" || value instanceof Date) {
+  if (typeof value === "bigint") {
+    return Number.isSafeInteger(Number(value));
+  }
+
+  if (typeof value === "boolean") {
     return true;
+  }
+
+  if (value instanceof Date) {
+    return Number.isFinite(value.getTime());
   }
 
   if (typeof value !== "string" || value.trim().length === 0) {

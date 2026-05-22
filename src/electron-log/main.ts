@@ -1,6 +1,5 @@
 import path from "node:path";
-
-import electronLog from "electron-log/main";
+import { createRequire } from "node:module";
 
 import { resolveLogLevel } from "./levels.js";
 import { configureTransport, resolveTransportLevel } from "./transport.js";
@@ -10,6 +9,12 @@ import type {
   LogInstance,
   MainLoggerOptions
 } from "./types.js";
+
+const require = createRequire(import.meta.url);
+
+const loadDefaultElectronLog = (): LogInstance => (
+  require("electron-log/main") as LogInstance
+);
 
 const configureFileTransport = (
   transport: FileTransport | undefined,
@@ -64,7 +69,7 @@ const configureFileTransport = (
 export const configureMainLogger = (
   options: MainLoggerOptions = {}
 ): LogInstance => {
-  const logger = options.logger ?? electronLog as unknown as LogInstance;
+  const logger = options.logger ?? loadDefaultElectronLog();
   const baseLevel = resolveLogLevel(options);
 
   configureTransport(logger.transports.console, baseLevel, options.console);

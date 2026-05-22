@@ -52,9 +52,13 @@ Main, preload, and renderer APIs accept minimal Electron-like interfaces from th
 
 The main adapter statically imports `electron-log/main`, so it must only be imported from Electron main process code
 
+The default main logger loads `electron-log/main` lazily so the main subpath can be imported in tests without Electron installed when an injected logger is used
+
 The renderer adapter statically imports `electron-log/renderer`, so web-only renderer code should prefer `createBridgeLogger`
 
 The bridge uses fire and forget `ipcRenderer.send` because logging should not block UI work
+
+The main bridge must validate `createdAt`, `data`, `level`, and optional `scope` before dispatching renderer payloads to logger methods
 
 Renderer target `terminal` is an alias for sending logs to the main process
 

@@ -39,4 +39,6 @@ Date formatting uses lightweight token replacement rather than a date library
 
 Invalid inputs should return a fallback string instead of throwing
 
+Invalid `Date` values and unsafe `bigint` values must use the fallback instead of formatting through `0`
+
 Keep module docs updated whenever exports or formatting behavior changes

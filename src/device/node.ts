@@ -19,6 +19,25 @@ const invalidUuidValues = new Set([
   "ffffffff-ffff-ffff-ffff-ffffffffffff"
 ]);
 
+class DeviceUuidParseError extends Error {
+  readonly command: DeviceCommand;
+  readonly stderr: string | undefined;
+  readonly stdout: string;
+
+  constructor(command: DeviceCommand, result: DeviceCommandResult | string) {
+    const output = normalizeCommandResult(result);
+    const summary = summarizeCommandOutput(output);
+    const commandText = [command.command, ...command.args].join(" ");
+
+    super(`Unable to parse device UUID from command: ${commandText}${summary ? `, output: ${summary}` : ""}`);
+
+    this.name    = "DeviceUuidParseError";
+    this.command = command;
+    this.stderr  = output.stderr;
+    this.stdout  = output.stdout;
+  }
+}
+
 export const defaultExecuteDeviceCommand: DeviceCommandExecutor = async ({
   args,
   command
@@ -69,6 +88,29 @@ export const parseNodeDeviceUuidOutput = (
     : `${output.stdout}\n${output.stderr ?? ""}`;
 
   return normalizeDeviceUuid(text);
+};
+
+const normalizeCommandResult = (
+  result: DeviceCommandResult | string
+): DeviceCommandResult => (
+  typeof result === "string"
+    ? { stdout: result }
+    : result
+);
+
+const summarizeCommandOutput = (
+  result: DeviceCommandResult
+): string => {
+  const summary = [
+    result.stdout,
+    result.stderr
+  ]
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .join("\n")
+    .trim()
+    .replace(/\s+/g, " ");
+
+  return summary.length > 120 ? `${summary.slice(0, 117)}...` : summary;
 };
 
 export const getNodeDeviceUuidCommands = (
@@ -154,6 +196,8 @@ export const getNodeDeviceUuid = async (
       if (uuid) {
         return uuid;
       }
+
+      errors.push(new DeviceUuidParseError(command, result));
     } catch (error) {
       errors.push(error);
     }

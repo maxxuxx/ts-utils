@@ -21,6 +21,15 @@ describe("format module", () => {
     expect(format.number(1000)).toBe("1,000");
   });
 
+  it("returns fallback for invalid dates and unsafe bigints", () => {
+    expect(formatNumber(new Date("bad"), {
+      fallback: "n/a"
+    })).toBe("n/a");
+    expect(formatNumber(999999999999999999999999999999999999n, {
+      fallback: "n/a"
+    })).toBe("n/a");
+  });
+
   it("formats currency", () => {
     expect(formatCurrency(12000)).toBe("12,000원");
     expect(formatCurrency("12.5", {

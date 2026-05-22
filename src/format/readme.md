@@ -50,3 +50,5 @@ The default locale is `ko-KR`
 `formatValueUnit` formats the number first, then appends the unit with a configurable separator
 
 Invalid inputs return a fallback string, which defaults to an empty string
+
+Invalid `Date` values and `bigint` values that cannot be safely converted to a JavaScript number are treated as invalid number inputs

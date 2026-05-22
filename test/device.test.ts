@@ -90,6 +90,33 @@ describe("device module", () => {
     ]);
   });
 
+  it("keeps parse failure details when node commands do not contain a UUID", async () => {
+    try {
+      await getNodeDeviceUuid({
+        executeCommand: async (command) => ({
+          stdout: `not-a-uuid from ${command.command}`,
+          stderr: "empty machine id"
+        }),
+        platform: "linux"
+      });
+
+      throw new Error("expected failure");
+    } catch (error) {
+      expect(error).toBeInstanceOf(AggregateError);
+      expect((error as AggregateError).errors).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          command: expect.objectContaining({
+            command: "cat"
+          }),
+          message: expect.stringContaining("not-a-uuid from cat"),
+          name: "DeviceUuidParseError",
+          stderr: "empty machine id",
+          stdout: "not-a-uuid from cat"
+        })
+      ]));
+    }
+  });
+
   it("reads an existing browser cookie UUID", () => {
     const document = createDocument(`other=value; device_uuid=${uuid}`);
     const store = createCookieDeviceUuidStore({
