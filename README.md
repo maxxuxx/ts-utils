@@ -162,9 +162,9 @@ const api = createApiFetcher({
 Example output
 
 ```text
-🌐 GET    200 8   ms /users/1
-⚠️ POST   500 42  ms /users
-❌ GET    ERR 3   ms /offline
+✅ GET    200    8 ms /users/1
+⚠️ POST   500   42 ms /users
+❌ GET    ERR    3 ms /offline
 ```
 
 See [src/api-fetch/readme.md](https://github.com/maxxuxx/ts-utils/blob/main/src/api-fetch/readme.md) for module details
@@ -216,6 +216,52 @@ const apiUrl = env.require("API_URL");
 ```
 
 See [src/env/readme.md](https://github.com/maxxuxx/ts-utils/blob/main/src/env/readme.md) for module details
+
+## Object
+
+Object helpers are available through the `object` subpath
+
+```ts
+import { compact, mergeDefaults, object, omit, pick } from "@maxxuxx/ts-utils/object";
+
+const publicUser = omit(user, ["passwordHash"]);
+const summary = object.pick(user, ["id", "name"]);
+const query = compact({
+  page: 1,
+  keyword: "",
+  categoryId: null,
+  locale: undefined
+});
+const options = mergeDefaults({
+  timeout: 5000
+}, {
+  timeout: 10000,
+  retry: 1
+});
+```
+
+See [src/object/readme.md](https://github.com/maxxuxx/ts-utils/blob/main/src/object/readme.md) for module details
+
+## URL
+
+URL helpers are available through the `url` subpath
+
+```ts
+import { appendQuery, buildUrl, joinPath, url } from "@maxxuxx/ts-utils/url";
+
+const path = joinPath("/api/v1", "/users/", 1);
+const usersPath = appendQuery("/users", {
+  page: 1,
+  keyword: "",
+  categoryId: null
+});
+const href = buildUrl("https://api.example.com/api", "/users", {
+  page: 1
+});
+const nested = url.join("/groups", groupId, "/members");
+```
+
+See [src/url/readme.md](https://github.com/maxxuxx/ts-utils/blob/main/src/url/readme.md) for module details
 
 ## Electron log
 

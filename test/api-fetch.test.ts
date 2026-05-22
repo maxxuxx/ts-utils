@@ -385,10 +385,10 @@ describe("api-fetch", () => {
 
     const message = logger.mock.calls[0]?.[0];
 
-    expect(message).toMatch(/^🌐 POST {3}200 \d{1,4} {0,3}ms\s+\/health$/);
+    expect(message).toMatch(/^✅ POST {3}200 {1,4}\d{1,4} ms\s+\/health$/);
   });
 
-  it("left aligns API log durations to a four digit field", () => {
+  it("right aligns API log durations to a four digit field", () => {
     const event = {
       method: "GET",
       path  : "/health",
@@ -400,15 +400,15 @@ describe("api-fetch", () => {
     expect(formatApiLogEvent({
       ...event,
       durationMs: 1000
-    })).toBe("🌐 GET    200 1000ms /health");
+    })).toBe("✅ GET    200 1000 ms /health");
     expect(formatApiLogEvent({
       ...event,
       durationMs: 213
-    })).toBe("🌐 GET    200 213 ms /health");
+    })).toBe("✅ GET    200  213 ms /health");
     expect(formatApiLogEvent({
       ...event,
       durationMs: 21
-    })).toBe("🌐 GET    200 21  ms /health");
+    })).toBe("✅ GET    200   21 ms /health");
   });
 
   it("logs API failures with warning emoji and endpoint path", async () => {
@@ -425,7 +425,7 @@ describe("api-fetch", () => {
 
     const message = logger.mock.calls[0]?.[0];
 
-    expect(message).toMatch(/^⚠️ GET {4}500 \d{1,4} {0,3}ms\s+\/broken$/);
+    expect(message).toMatch(/^⚠️ GET {4}500 {1,4}\d{1,4} ms\s+\/broken$/);
   });
 
   it("logs request failures with error emoji and ERR code", async () => {
@@ -444,7 +444,7 @@ describe("api-fetch", () => {
 
     const message = logger.mock.calls[0]?.[0];
 
-    expect(message).toMatch(/^❌ GET {4}ERR \d{1,4} {0,3}ms\s+\/offline$/);
+    expect(message).toMatch(/^❌ GET {4}ERR {1,4}\d{1,4} ms\s+\/offline$/);
   });
 
   it("routes response parse failures to response error hooks", async () => {

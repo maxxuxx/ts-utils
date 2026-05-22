@@ -86,7 +86,7 @@ Use `createApiLoggerHooks` to enable built-in API call logs through the existing
 
 The default log format is `emoji METHOD code duration endpoint`
 
-The duration number is left aligned to a 4 character field before `ms`
+The duration number is right aligned to a 4 character field before `ms`
 
 Default log messages never include request bodies, headers, or bearer tokens
 
