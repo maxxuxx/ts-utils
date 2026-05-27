@@ -295,6 +295,49 @@ const retryOnly = await retry(fetchOrders, {
 
 See [src/promise/readme.md](https://github.com/maxxuxx/ts-utils/blob/main/src/promise/readme.md) for module details
 
+## JSON
+
+JSON helpers are available through the `json` subpath
+
+```ts
+import { json, parseJson, safeStringifyJson } from "@maxxuxx/ts-utils/json";
+
+const config = parseJson(localStorage.getItem("config"), {
+  fallback: {
+    theme: "light"
+  }
+});
+
+const result = json.safeParseWithSchema(input, UserSchema);
+
+if (result.ok) {
+  result.data;
+}
+
+const text = json.stringify(config);
+const textResult = safeStringifyJson(config);
+```
+
+See [src/json/readme.md](https://github.com/maxxuxx/ts-utils/blob/main/src/json/readme.md) for module details
+
+## Encoding
+
+Encoding helpers are available through the `encoding` subpath
+
+```ts
+import { base64, encoding, hex, utf8 } from "@maxxuxx/ts-utils/encoding";
+
+const bytes = utf8.encode("안녕");
+const text = utf8.decode(bytes);
+const token = base64.encode(text);
+const restored = base64.decode(token);
+const encodedHex = hex.encode(restored);
+
+encoding.base64.toBytes(token);
+```
+
+See [src/encoding/readme.md](https://github.com/maxxuxx/ts-utils/blob/main/src/encoding/readme.md) for module details
+
 ## Electron log
 
 Electron logging helpers are exported as process specific subpaths
