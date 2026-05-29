@@ -338,6 +338,28 @@ encoding.base64.toBytes(token);
 
 See [src/encoding/readme.md](https://github.com/maxxuxx/ts-utils/blob/main/src/encoding/readme.md) for module details
 
+## JWT
+
+JWT helpers are available through the `jwt` subpath
+
+```ts
+import { decodeJwt, decodeJwtHeader, jwt } from "@maxxuxx/ts-utils/jwt";
+
+const claims = decodeJwt(token);
+const header = decodeJwtHeader(token);
+
+if (claims) {
+  claims.token;
+  claims.exp;
+}
+
+jwt.decode(token);
+```
+
+These helpers only decode JWT segments. They do not verify signatures, issuers, audiences, or expiration policy
+
+See [src/jwt/readme.md](https://github.com/maxxuxx/ts-utils/blob/main/src/jwt/readme.md) for module details
+
 ## Electron log
 
 Electron logging helpers are exported as process specific subpaths

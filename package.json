@@ -1,6 +1,6 @@
 {
   "name": "@maxxuxx/ts-utils",
-  "version": "0.7.9",
+  "version": "0.7.10",
   "description": "Shared TypeScript utilities",
   "type": "module",
   "license": "MIT",
@@ -71,6 +71,10 @@
     "./encoding": {
       "types": "./dist/encoding/index.d.ts",
       "import": "./dist/encoding/index.js"
+    },
+    "./jwt": {
+      "types": "./dist/jwt/index.d.ts",
+      "import": "./dist/jwt/index.js"
     },
     "./env": {
       "types": "./dist/env/index.d.ts",
