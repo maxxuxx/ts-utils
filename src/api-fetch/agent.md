@@ -36,6 +36,8 @@ Primary request vocabulary should stay small and direct
 
 `logging.ts` contains built-in API call logging formatters and hook adapters
 
+`route.ts` contains route-handler adapters that convert known API fetch errors into Web `Response` objects
+
 `errors.ts` contains typed errors for HTTP, validation, parse, auth, and timeout failures
 
 `schemas.ts` contains common API response schema helpers
@@ -83,6 +85,8 @@ HTTP errors, response JSON parse failures, and response schema validation failur
 Network failures, aborts, and other pre-response failures should call `onRequestError`
 
 Use `createApiLoggerHooks` to enable built-in API call logs through the existing hook surface
+
+Use `handleApiRoute` in Web `Response` route handlers when repeated try/catch blocks only convert `ApiAuthError`, `ApiHttpError`, `ApiParseError`, and response-target `ApiValidationError` into HTTP responses
 
 The default log format is `emoji METHOD code duration endpoint`
 

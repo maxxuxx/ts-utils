@@ -31,6 +31,14 @@ export {
   mergeQuery,
   toQueryEntries
 } from "./query.js";
+export {
+  handleApiRoute,
+  toApiRouteErrorResponse
+} from "./route.js";
+export type {
+  ApiRouteErrorOptions,
+  ApiRouteHandler
+} from "./route.js";
 export { responseEnvelopeSchema } from "./schemas.js";
 export type { ResponseEnvelope } from "./schemas.js";
 export { buildApiUrl } from "./url.js";

@@ -81,6 +81,7 @@ API fetch utilities are available through the `api-fetch` subpath
 import {
   createApiFetcher,
   endpoint,
+  handleApiRoute,
   z
 } from "@maxxuxx/ts-utils/api-fetch";
 ```
@@ -165,6 +166,17 @@ Example output
 ✅ GET    200    8 ms /users/1
 ⚠️ POST   500   42 ms /users
 ❌ GET    ERR    3 ms /offline
+```
+
+Route handlers can share error-to-response handling
+
+```ts
+export async function GET() {
+  return handleApiRoute(getUserResponse, {
+    authMessage    : "로그인이 필요합니다",
+    responseMessage: "사용자 응답이 올바르지 않습니다"
+  });
+}
 ```
 
 See [src/api-fetch/readme.md](https://github.com/maxxuxx/ts-utils/blob/main/src/api-fetch/readme.md) for module details

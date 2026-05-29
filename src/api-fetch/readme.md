@@ -8,6 +8,7 @@ Fetch based API utilities with Zod validation, method shortcuts, endpoint defini
 import {
   createApiFetcher,
   endpoint,
+  handleApiRoute,
   getApiErrorCode,
   getApiMessage,
   responseEnvelopeSchema,
@@ -341,6 +342,35 @@ const api = createApiFetcher({
 `durationMs` is only available inside response and error hook contexts
 
 Response body parse errors and response schema validation errors are reported through `onResponseError` because an HTTP response was already received
+
+## Route handlers
+
+Use `handleApiRoute` when a Web `Response` route should convert known API fetch errors into HTTP responses
+
+```ts
+export async function GET() {
+  return handleApiRoute(getUserResponse, {
+    authMessage    : "로그인이 필요합니다",
+    responseMessage: "사용자 응답이 올바르지 않습니다"
+  });
+}
+
+async function getUserResponse() {
+  const { data } = await api.get("/users/me", {
+    responseSchema: User
+  });
+
+  return Response.json({ user: data });
+}
+```
+
+`ApiAuthError` becomes `401`
+
+`ApiHttpError` keeps the upstream HTTP status and message
+
+`ApiParseError` and response-target `ApiValidationError` become `502`
+
+Unknown errors are rethrown so the host framework can handle them
 
 ## Errors
 

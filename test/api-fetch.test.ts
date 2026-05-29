@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  ApiAuthError,
   ApiHttpError,
   ApiParseError,
   ApiTimeoutError,
@@ -10,7 +11,9 @@ import {
   formatApiLogEvent,
   getApiErrorCode,
   getApiMessage,
+  handleApiRoute,
   responseEnvelopeSchema,
+  toApiRouteErrorResponse,
   type FetchLike,
   z
 } from "../src/api-fetch/index.js";
@@ -500,6 +503,95 @@ describe("api-fetch", () => {
       error   : expect.any(ApiValidationError),
       response: expect.any(Response)
     }));
+  });
+
+  it("handles API route errors as Web responses", async () => {
+    await expect(handleApiRoute(() => {
+      throw new ApiAuthError("로그인이 필요합니다");
+    }, {
+      responseMessage: "외부 응답이 올바르지 않습니다"
+    })).resolves.toMatchObject({
+      status: 401
+    });
+
+    const authResponse = await handleApiRoute(() => {
+      throw new ApiAuthError("expired");
+    }, {
+      authMessage    : "다시 로그인해주세요",
+      responseMessage: "외부 응답이 올바르지 않습니다"
+    });
+
+    await expect(authResponse.json()).resolves.toEqual({
+      message: "다시 로그인해주세요"
+    });
+
+    const httpResponse = await handleApiRoute(() => {
+      throw new ApiHttpError(jsonResponse({
+        message: "server failed"
+      }, 418), {
+        message: "server failed"
+      }, {
+        method: "GET",
+        path  : "/teapot",
+        url   : "https://api.example.com/teapot"
+      }, {
+        message: "server failed"
+      });
+    }, {
+      responseMessage: "외부 응답이 올바르지 않습니다"
+    });
+
+    expect(httpResponse.status).toBe(418);
+    await expect(httpResponse.json()).resolves.toEqual({
+      message: "server failed"
+    });
+  });
+
+  it("handles response parsing and validation route errors as bad gateway", async () => {
+    const context = {
+      method: "GET",
+      path  : "/users",
+      url   : "https://api.example.com/users"
+    } as const;
+
+    const parseResponse = await handleApiRoute(() => {
+      throw new ApiParseError(new Response("{bad", {
+        status: 200
+      }), "{bad", context);
+    }, {
+      responseMessage: "외부 응답이 올바르지 않습니다"
+    });
+
+    expect(parseResponse.status).toBe(502);
+    await expect(parseResponse.json()).resolves.toEqual({
+      message: "외부 응답이 올바르지 않습니다"
+    });
+
+    const validationResponse = toApiRouteErrorResponse(
+      new ApiValidationError("response", { issues: [] }, { id: "bad" }, context),
+      {
+        responseMessage: "응답 스키마가 올바르지 않습니다"
+      }
+    );
+
+    expect(validationResponse?.status).toBe(502);
+    await expect(validationResponse?.json()).resolves.toEqual({
+      message: "응답 스키마가 올바르지 않습니다"
+    });
+  });
+
+  it("does not convert unknown API route errors", async () => {
+    const error = new Error("boom");
+
+    await expect(handleApiRoute(() => {
+      throw error;
+    }, {
+      responseMessage: "외부 응답이 올바르지 않습니다"
+    })).rejects.toBe(error);
+
+    expect(toApiRouteErrorResponse(error, {
+      responseMessage: "외부 응답이 올바르지 않습니다"
+    })).toBeNull();
   });
 
   it("gets API messages from message shaped bodies", () => {
