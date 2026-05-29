@@ -355,10 +355,12 @@ See [src/encoding/readme.md](https://github.com/maxxuxx/ts-utils/blob/main/src/e
 JWT helpers are available through the `jwt` subpath
 
 ```ts
-import { decodeJwt, decodeJwtHeader, jwt } from "@maxxuxx/ts-utils/jwt";
+import { decodeJwt, decodeJwtHeader, isJwtExpired, jwt } from "@maxxuxx/ts-utils/jwt";
 
 const claims = decodeJwt(token);
 const header = decodeJwtHeader(token);
+const expired = isJwtExpired(token);
+const shouldRefresh = isJwtExpired(token, 30);
 
 if (claims) {
   claims.token;
@@ -366,9 +368,12 @@ if (claims) {
 }
 
 jwt.decode(token);
+jwt.isExpired(token, {
+  withinSeconds: 30
+});
 ```
 
-These helpers only decode JWT segments. They do not verify signatures, issuers, audiences, or expiration policy
+These helpers only decode JWT segments and compare decoded `exp` values. They do not verify signatures, issuers, or audiences
 
 See [src/jwt/readme.md](https://github.com/maxxuxx/ts-utils/blob/main/src/jwt/readme.md) for module details
 

@@ -17,6 +17,7 @@ Provide named exports plus the grouped `jwt` namespace
 ```ts
 const claims = jwt.decode(token);
 const header = jwt.decodeHeader(token);
+const shouldRefresh = jwt.isExpired(token, 30);
 ```
 
 ## Design decisions
@@ -30,6 +31,10 @@ This module only decodes JWT segments. Do not add signature verification, issuer
 `decodeJwt` and `decodeJwtHeader` return `null` on failure. Use `safeDecodeJwt` and `safeDecodeJwtHeader` when callers need an error object
 
 JWT `exp`, `iat`, and app-specific claims are not required by the decoder. App auth modules should validate required claims after decoding
+
+`isJwtExpired(token, seconds)` treats a token as expired when it is already expired or will expire within the provided number of seconds. Use this for pre-refresh decisions
+
+`isJwtExpired` may compare the decoded `exp` NumericDate against the current clock, but it must not perform signature, issuer, audience, cookie, refresh, redirect, or logout behavior
 
 Keep this module focused on JWT string decoding. Use app-local code for iron-session, cookies, redirects, refresh endpoints, and logout policy
 

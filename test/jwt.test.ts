@@ -4,6 +4,7 @@ import {
   JwtDecodeError,
   decodeJwt,
   decodeJwtHeader,
+  isJwtExpired,
   jwt,
   safeDecodeJwt,
   safeDecodeJwtHeader
@@ -91,13 +92,73 @@ describe("jwt module", () => {
     }
   });
 
+  it("checks JWT expiration using the exp claim", () => {
+    const nowSeconds = 1_700_000_000;
+    const nowMs      = nowSeconds * 1000;
+
+    expect(isJwtExpired(createToken({
+      exp: nowSeconds - 1
+    }), {
+      now: nowMs
+    })).toBe(true);
+
+    expect(isJwtExpired(createToken({
+      exp: nowSeconds
+    }), {
+      now: nowMs
+    })).toBe(true);
+
+    expect(isJwtExpired(createToken({
+      exp: nowSeconds + 1
+    }), {
+      now: nowMs
+    })).toBe(false);
+  });
+
+  it("supports a future expiration window when checking JWT expiration", () => {
+    const nowSeconds = 1_700_000_000;
+
+    expect(isJwtExpired(createToken({
+      exp: nowSeconds + 5
+    }), {
+      now          : new Date(nowSeconds * 1000),
+      withinSeconds: 10
+    })).toBe(true);
+
+    expect(isJwtExpired(createToken({
+      exp: nowSeconds + 15
+    }), {
+      now          : new Date(nowSeconds * 1000),
+      withinSeconds: 10
+    })).toBe(false);
+
+    expect(isJwtExpired(createToken({
+      exp: Math.floor(Date.now() / 1000) + 5
+    }), 10)).toBe(true);
+  });
+
+  it("treats malformed tokens and missing exp claims as expired", () => {
+    expect(isJwtExpired("bad-token")).toBe(true);
+    expect(isJwtExpired(createToken({
+      sub: "user-1"
+    }))).toBe(true);
+    expect(isJwtExpired(createToken({
+      exp: Number.NaN
+    }))).toBe(true);
+  });
+
   it("provides grouped namespace helpers", () => {
     const token = createToken({
+      exp: 2_000_000_000,
       sub: "user-1"
     });
 
     expect(jwt.decode(token)?.sub).toBe("user-1");
     expect(jwt.decodeHeader(token)?.typ).toBe("JWT");
+    expect(jwt.isExpired(token, {
+      now          : 1_700_000_000_000,
+      withinSeconds: 30
+    })).toBe(false);
     expect(jwt.safeDecode(token).ok).toBe(true);
     expect(jwt.safeHeader(token).ok).toBe(true);
   });

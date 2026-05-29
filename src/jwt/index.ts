@@ -19,6 +19,15 @@ export type JwtPayloadWithToken<TPayload extends JwtPayload = JwtPayload> =
     token: string;
   };
 
+export type JwtClockInput = Date | number;
+
+export type JwtExpirationOptions = Readonly<{
+  now?: JwtClockInput;
+  withinSeconds?: number;
+}>;
+
+export type JwtExpirationInput = JwtExpirationOptions | number;
+
 export type JwtResult<TData, TError = unknown> =
   | {
       ok: true;
@@ -111,6 +120,21 @@ export const safeDecodeJwtHeader = <THeader extends JwtHeader = JwtHeader>(
   }
 };
 
+// Expiration helpers
+export const isJwtExpired = (
+  token: string | null | undefined,
+  options: JwtExpirationInput = 0
+): boolean => {
+  const result = safeDecodeJwt(token);
+  const expirationOptions = resolveExpirationOptions(options);
+
+  if (!result.ok || !isNumericDate(result.data.exp)) {
+    return true;
+  }
+
+  return result.data.exp * 1000 <= resolveNowMs(expirationOptions.now) + resolveWithinMs(expirationOptions);
+};
+
 // Segment helpers
 const readJwtToken = (token: string | null | undefined): string => {
   if (typeof token !== "string" || !token.trim()) {
@@ -176,9 +200,34 @@ const isJwtObject = (value: unknown): value is JwtObject => (
   typeof value === "object" && value !== null && !Array.isArray(value)
 );
 
+const isNumericDate = (value: unknown): value is number => (
+  typeof value === "number" && Number.isFinite(value)
+);
+
+const resolveNowMs = (now: JwtClockInput | undefined): number => {
+  const value = now instanceof Date
+    ? now.getTime()
+    : typeof now === "number" ? now : Date.now();
+
+  return Number.isFinite(value) ? value : Date.now();
+};
+
+const resolveExpirationOptions = (options: JwtExpirationInput): JwtExpirationOptions => (
+  typeof options === "number" ? {
+    withinSeconds: options
+  } : options
+);
+
+const resolveWithinMs = (options: JwtExpirationOptions): number => {
+  const seconds = options.withinSeconds ?? 0;
+
+  return Number.isFinite(seconds) ? Math.max(0, seconds) * 1000 : 0;
+};
+
 export const jwt = Object.freeze({
   decode      : decodeJwt,
   decodeHeader: decodeJwtHeader,
+  isExpired   : isJwtExpired,
   safeDecode  : safeDecodeJwt,
   safeHeader  : safeDecodeJwtHeader
 });
