@@ -20,11 +20,11 @@ import type {
   ApiFetcherOptions,
   ApiHookContext,
   ApiResponse,
-  ApiResponseData,
   ApiRequest,
   ApiRequestContext,
   ApiRequestOptions,
   ApiResponseHookContext,
+  ApiResponsePayload,
   ApiRetry,
   ApiRetryContext,
   ApiRetryOptions,
@@ -86,7 +86,7 @@ export const createApiFetcher = (
   const request: ApiRequest = async <
     TBodySchema extends OptionalSchema = undefined,
     TResponseSchema extends OptionalSchema = undefined,
-    TResult = ApiResponse<SchemaOutput<TResponseSchema>>
+    TResult = ApiResponse<ApiResponsePayload<SchemaOutput<TResponseSchema>>>
   >(
     method: ApiMethod,
     path: string,
@@ -345,30 +345,30 @@ const sendRequest = async <
 
 const createApiResponse = <TData>(
   data: TData,
-  response: Response,
+  httpResponse: Response,
   responseBody: unknown
-): ApiResponse<ApiResponseData<TData>> => {
-  const message      = getApiMessage(responseBody);
-  const responseData = getApiResponseData(data);
+): ApiResponse<ApiResponsePayload<TData>> => {
+  const message         = getApiMessage(responseBody);
+  const responsePayload = getApiResponsePayload(data);
 
   if (message === undefined) {
     return {
-      code: response.status,
-      data: responseData
+      code    : httpResponse.status,
+      response: responsePayload
     };
   }
 
   return {
-    code: response.status,
+    code: httpResponse.status,
     message,
-    data: responseData
+    response: responsePayload
   };
 };
 
-const getApiResponseData = <TData>(data: TData): ApiResponseData<TData> => (
+const getApiResponsePayload = <TData>(data: TData): ApiResponsePayload<TData> => (
   isApiResponseEnvelope(data)
-    ? data.data as ApiResponseData<TData>
-    : data as ApiResponseData<TData>
+    ? data.data as ApiResponsePayload<TData>
+    : data as ApiResponsePayload<TData>
 );
 
 const isApiResponseEnvelope = (

@@ -38,12 +38,12 @@ const User = z.object({
   name: z.string()
 });
 
-const response = await api.get("/users/1", {
+const result = await api.get("/users/1", {
   responseSchema: User
 });
 
-response.code; // HTTP status code
-response.data; // validated response body
+result.code; // HTTP status code
+result.response; // validated response body
 ```
 
 Send JSON with request and response validation
@@ -53,13 +53,13 @@ const CreateUser = z.object({
   name: z.string().min(1)
 });
 
-const response = await api.post("/users", {
+const result = await api.post("/users", {
   body          : { name: "haru" },
   bodySchema    : CreateUser,
   responseSchema: User
 });
 
-response.data;
+result.response;
 ```
 
 `bodySchema` is optional. If provided, the fetcher validates `body` before the request is sent. Without `bodySchema`, `body` is still serialized as JSON.
@@ -79,22 +79,22 @@ const response = await api.get("/users/me", {
 
 For non-2xx responses, `ApiHttpError.status` is the HTTP status code. `ApiHttpError.code` is `body.code` when it is a string or number, then `errorFallback.code`. `ApiHttpError.message` is `body.message` when it is a string, then `errorFallback.message`, then the default technical request message.
 
-Successful calls return `ApiResponse<TData>` by default
+Successful calls return `ApiResponse<TResponse>` by default
 
 ```ts
-type ApiResponse<TData> = {
-  code    : number;
-  message?: string;
-  data    : TData;
+type ApiResponse<TResponse> = {
+  code     : number;
+  message ?: string;
+  response : TResponse;
 };
 ```
 
 `code` is the HTTP response status code and `message` is copied from `body.message` when it is a string.
 
-`data` is the parsed and validated response body by default. If the validated body looks like an API envelope with a `data` property plus `code` or `message`, `data` is unwrapped to the inner `body.data` value.
+`response` is the parsed and validated response body by default. If the validated body looks like an API envelope with a `data` property plus `code` or `message`, `response` is unwrapped to the inner `body.data` value.
 
 ```ts
-const { code, message, data } = await api.post("/auth/login", {
+const { code, message, response } = await api.post("/auth/login", {
   responseSchema: z.object({
     code   : z.number(),
     message: z.string(),
@@ -102,13 +102,13 @@ const { code, message, data } = await api.post("/auth/login", {
   })
 });
 
-data.id;
+response.id;
 ```
 
 Add query params with `query`
 
 ```ts
-const response = await api.get("/users", {
+const result = await api.get("/users", {
   query: {
     page : 1,
     limit: 20
@@ -116,7 +116,7 @@ const response = await api.get("/users", {
   responseSchema: z.array(User)
 });
 
-response.data;
+result.response;
 ```
 
 Use `select` to return a custom value instead of the default `ApiResponse`. When `select` is provided, the automatic envelope unwrap does not run.
@@ -140,11 +140,11 @@ const getUser = endpoint.get("/users/:id", {
   responseSchema: User
 });
 
-const response = await api.call(getUser, {
+const result = await api.call(getUser, {
   params: { id: "1" }
 });
 
-response.data;
+result.response;
 ```
 
 Endpoint paths support `:param` replacement and encode param values
@@ -155,11 +155,11 @@ const createUser = endpoint.post("/users", {
   responseSchema: User
 });
 
-const response = await api.call(createUser, {
+const result = await api.call(createUser, {
   body: { name: "haru" }
 });
 
-response.data;
+result.response;
 ```
 
 Endpoints can define shared query, headers, auth, retry, timeout, and select behavior
@@ -356,11 +356,11 @@ export async function GET() {
 }
 
 async function getUserResponse() {
-  const { data } = await api.get("/users/me", {
+  const { response } = await api.get("/users/me", {
     responseSchema: User
   });
 
-  return Response.json({ user: data });
+  return Response.json({ user: response });
 }
 ```
 

@@ -56,11 +56,11 @@ Method shortcuts are the preferred public API because they avoid exposing method
 
 `responseSchema` validates the parsed response body
 
-By default successful requests return `{ code, message?, data }`, where `code` is the HTTP status code, `message` comes from `body.message` when it is a string, and `data` is the validated response body
+By default successful requests return `{ code, message?, response }`, where `code` is the HTTP status code, `message` comes from `body.message` when it is a string, and `response` is the validated response body
 
-If the validated response body has a `data` property plus `code` or `message`, the default response unwraps `data` to `body.data`
+If the validated response body has a `data` property plus `code` or `message`, the default `response` value unwraps to `body.data`
 
-`select` returns a custom value instead of the default `{ code, message?, data }` result and disables the automatic envelope unwrap for that call
+`select` returns a custom value instead of the default `{ code, message?, response }` result and disables the automatic envelope unwrap for that call
 
 `errorFallback` sets optional `ApiHttpError.code` and `ApiHttpError.message` fallback values when an HTTP error body has no string or number `code` and no string `message`
 

@@ -98,7 +98,7 @@ const User = z.object({
   name: z.string()
 });
 
-const response = await api.post("/users", {
+const result = await api.post("/users", {
   body          : { name: "haru" },
   bodySchema    : z.object({
     name: z.string().min(1)
@@ -109,11 +109,11 @@ const response = await api.post("/users", {
   }
 });
 
-response.code; // HTTP status code
-response.data; // validated response body
+result.code; // HTTP status code
+result.response; // validated response body
 ```
 
-Successful calls return `{ code, message?, data }` by default. `code` is the HTTP status code, `message` is copied from `body.message` when present, and `data` is the parsed body. If the validated body has a `data` property plus `code` or `message`, `data` is automatically unwrapped to the inner `body.data` value unless `select` is provided.
+Successful calls return `{ code, message?, response }` by default. `code` is the HTTP status code, `message` is copied from `body.message` when present, and `response` is the parsed body. If the validated body has a `data` property plus `code` or `message`, `response` is automatically unwrapped to the inner `body.data` value unless `select` is provided.
 
 For non-2xx responses, `ApiHttpError.status` is the HTTP status code, `ApiHttpError.code` uses `body.code` then `errorFallback.code`, and `ApiHttpError.message` uses `body.message`, then `errorFallback.message`, then the default technical request message.
 
@@ -127,11 +127,11 @@ const getUser = endpoint.get("/users/:id", {
   responseSchema: User
 });
 
-const response = await api.call(getUser, {
+const result = await api.call(getUser, {
   params: { id: "1" }
 });
 
-response.data;
+result.response;
 ```
 
 Token refresh is injected so apps can use cookies, browser storage, iron-session, or custom stores

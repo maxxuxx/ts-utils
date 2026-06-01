@@ -49,8 +49,8 @@ describe("api-fetch", () => {
     });
 
     expect(data).toEqual({
-      code: 200,
-      data: {
+      code    : 200,
+      response: {
         id  : 1,
         name: "haru"
       }
@@ -117,7 +117,7 @@ describe("api-fetch", () => {
     expect(data).toEqual({
       code   : 201,
       message: "created",
-      data   : {
+      response: {
         user: {
           id  : 2,
           name: "haru"
@@ -142,17 +142,54 @@ describe("api-fetch", () => {
       data   : User
     });
 
-    const { code, message, data } = await api.post("/users", {
+    const { code, message, response } = await api.post("/users", {
       responseSchema
     });
 
     expect(code).toBe(200);
     expect(message).toBe("created");
-    expect(data.id).toBe(3);
-    expect(data).toEqual({
+    expect(response.id).toBe(3);
+    expect(response).toEqual({
       id  : 3,
       name: "haru"
     });
+  });
+
+  it("keeps non-envelope data bodies under the response key", async () => {
+    const fetch = vi.fn<FetchLike>(async () => jsonResponse({
+      data: {
+        list: [
+          {
+            id  : 4,
+            name: "haru"
+          }
+        ]
+      }
+    }));
+    const api = createApiFetcher({ fetch });
+
+    const result = await api.get("/users", {
+      responseSchema: z.object({
+        data: z.object({
+          list: z.array(User)
+        })
+      })
+    });
+
+    expect(result).toEqual({
+      code    : 200,
+      response: {
+        data: {
+          list: [
+            {
+              id  : 4,
+              name: "haru"
+            }
+          ]
+        }
+      }
+    });
+    expect(result.response.data.list[0]?.id).toBe(4);
   });
 
   it("throws typed HTTP errors with parsed response bodies", async () => {
@@ -271,8 +308,8 @@ describe("api-fetch", () => {
     });
 
     expect(data).toEqual({
-      code: 200,
-      data: { ok: true }
+      code    : 200,
+      response: { ok: true }
     });
     expect(refresh).toHaveBeenCalledTimes(1);
     expect(fetch).toHaveBeenCalledTimes(2);
@@ -331,7 +368,7 @@ describe("api-fetch", () => {
       body: { name: "haru" }
     });
 
-    expect(user.data.id).toBe(8);
+    expect(user.response.id).toBe(8);
     expect(fetch.mock.calls[0]?.[0]).toBe("https://api.example.com/users");
   });
 
@@ -349,8 +386,8 @@ describe("api-fetch", () => {
     });
 
     expect(data).toEqual({
-      code: 200,
-      data: { ok: true }
+      code    : 200,
+      response: { ok: true }
     });
     expect(fetch).toHaveBeenCalledTimes(2);
   });
