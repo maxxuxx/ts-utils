@@ -318,6 +318,59 @@ describe("api-fetch", () => {
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 
+  it("formats token headers with custom auth header logic", async () => {
+    const fetch = vi.fn<FetchLike>(async (_input, init) => {
+      const headers = new Headers(init?.headers);
+
+      return jsonResponse({
+        authorization: headers.get("Authorization"),
+        token        : headers.get("X-Access-Token")
+      });
+    });
+    const api = createApiFetcher({
+      fetch,
+      auth: {
+        formatTokenHeader: (accessToken) => ({
+          "X-Access-Token": accessToken
+        }),
+        getAccessToken: () => "access-token"
+      }
+    });
+
+    const result = await api.get("/me");
+
+    expect(result.response).toEqual({
+      authorization: null,
+      token        : "access-token"
+    });
+  });
+
+  it("keeps explicit request auth headers before formatted token headers", async () => {
+    const fetch = vi.fn<FetchLike>(async (_input, init) => {
+      const headers = new Headers(init?.headers);
+
+      return jsonResponse({
+        authorization: headers.get("Authorization")
+      });
+    });
+    const api = createApiFetcher({
+      fetch,
+      auth: {
+        getAccessToken: () => "access-token"
+      }
+    });
+
+    const result = await api.get("/me", {
+      headers: {
+        Authorization: "Token explicit"
+      }
+    });
+
+    expect(result.response).toEqual({
+      authorization: "Token explicit"
+    });
+  });
+
   it("creates SvelteKit fetchers with cookie-bound auth callbacks", async () => {
     const cookies = {
       accessToken: "token"
@@ -349,6 +402,37 @@ describe("api-fetch", () => {
     });
     expect(getAccessToken).toHaveBeenCalledWith(cookies);
     expect(clear).not.toHaveBeenCalled();
+  });
+
+  it("passes custom token header formatting through SvelteKit fetchers", async () => {
+    const cookies = {
+      accessToken: "token"
+    };
+    const fetch = vi.fn<FetchLike>(async (_input, init) => {
+      const headers = new Headers(init?.headers);
+
+      return jsonResponse({
+        authorization: headers.get("Authorization"),
+        token        : headers.get("X-Access-Token")
+      });
+    });
+    const api = createSvelteKitApiFetcher({
+      cookies,
+      fetch,
+      auth: {
+        formatTokenHeader: (accessToken) => ({
+          "X-Access-Token": accessToken
+        }),
+        getAccessToken: ({ accessToken }) => accessToken
+      }
+    });
+
+    const result = await api.get("/me");
+
+    expect(result.response).toEqual({
+      authorization: null,
+      token        : "token"
+    });
   });
 
   it("dedupes SvelteKit auth refreshes across fetcher instances with the same access token", async () => {

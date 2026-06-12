@@ -73,6 +73,7 @@ export type {
   ApiRetryContext,
   ApiRetryOptions,
   ApiTimedRequestContext,
+  ApiTokenHeaderFormatter,
   ApiWriteMethod,
   ApiWriteOptions,
   EndpointCallArgs,

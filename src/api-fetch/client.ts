@@ -197,7 +197,8 @@ const sendRequest = async <
   const headersInit = buildHeaders(
     mergeHeaders(clientOptions.headers, headers),
     accessToken,
-    parsedBody.isJsonBody
+    parsedBody.isJsonBody,
+    clientOptions.auth?.formatTokenHeader
   );
   const retryOptions = resolveRetryOptions(retry ?? clientOptions.retry);
   const timeoutMs    = timeout ?? clientOptions.timeout;

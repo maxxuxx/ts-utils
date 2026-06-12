@@ -152,6 +152,19 @@ const api = createApiFetcher({
 });
 ```
 
+Use `formatTokenHeader` when an API expects a token header other than `Authorization: Bearer <accessToken>`
+
+```ts
+const api = createApiFetcher({
+  auth: {
+    getAccessToken: () => tokenStore.get()?.accessToken,
+    formatTokenHeader: (accessToken) => ({
+      "X-Access-Token": accessToken
+    })
+  }
+});
+```
+
 API calls can log method, status code, elapsed time, and endpoint path
 
 ```ts
@@ -180,6 +193,36 @@ export async function GET() {
 ```
 
 See [src/api-fetch/readme.md](https://github.com/maxxuxx/ts-utils/blob/main/src/api-fetch/readme.md) for module details
+
+## Session
+
+Session helpers are exported as core, SvelteKit, and React subpaths
+
+```ts
+import { createTokenSession } from "@maxxuxx/ts-utils/session";
+```
+
+Use `mode: "access-token"` when a service only issues access tokens and there is no refresh token
+
+```ts
+const session = createTokenSession({
+  mode: "access-token",
+  readSession: () => store.get() ?? {},
+  writeSession: (_context, nextSession) => store.set(nextSession),
+  clearSession: () => store.clear()
+});
+
+const accessToken = await session.getAccessToken(undefined);
+```
+
+SvelteKit sessions use `iron-session` cookies. React sessions use browser storage and `useSyncExternalStore`
+
+```ts
+import { createSvelteKitTokenSession } from "@maxxuxx/ts-utils/session/sveltekit";
+import { createReactTokenSession } from "@maxxuxx/ts-utils/session/react";
+```
+
+See [src/session/readme.md](https://github.com/maxxuxx/ts-utils/blob/main/src/session/readme.md) for module details
 
 ## HTTP response
 

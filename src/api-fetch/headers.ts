@@ -1,4 +1,7 @@
-import type { ApiHeadersInit } from "./types.js";
+import type {
+  ApiHeadersInit,
+  ApiTokenHeaderFormatter
+} from "./types.js";
 
 // Header helpers
 export const mergeHeaders = (
@@ -21,10 +24,15 @@ export const mergeHeaders = (
   return hasValue ? headers : undefined;
 };
 
+const defaultFormatTokenHeader: ApiTokenHeaderFormatter = (accessToken) => ({
+  Authorization: `Bearer ${accessToken}`
+});
+
 export const buildHeaders = (
   headers: ApiHeadersInit | undefined,
   accessToken: string | undefined,
-  isJsonBody: boolean
+  isJsonBody: boolean,
+  formatTokenHeader: ApiTokenHeaderFormatter = defaultFormatTokenHeader
 ): Headers => {
   const nextHeaders = new Headers(headers);
 
@@ -32,9 +40,24 @@ export const buildHeaders = (
     nextHeaders.set("Content-Type", "application/json");
   }
 
-  if (accessToken && !nextHeaders.has("Authorization")) {
-    nextHeaders.set("Authorization", `Bearer ${accessToken}`);
+  if (accessToken) {
+    mergeMissingHeaders(nextHeaders, formatTokenHeader(accessToken) ?? undefined);
   }
 
   return nextHeaders;
+};
+
+const mergeMissingHeaders = (
+  target: Headers,
+  source: ApiHeadersInit | undefined
+): void => {
+  if (!source) {
+    return;
+  }
+
+  new Headers(source).forEach((value, key) => {
+    if (!target.has(key)) {
+      target.set(key, value);
+    }
+  });
 };

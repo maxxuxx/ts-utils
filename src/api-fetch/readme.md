@@ -211,6 +211,21 @@ const api = createApiFetcher({
 
 When auth is configured, requests add `Authorization: Bearer <token>`
 
+Use `formatTokenHeader` when an API expects a different token header
+
+```ts
+const api = createApiFetcher({
+  auth: {
+    getAccessToken: () => tokenStore.get()?.accessToken,
+    formatTokenHeader: (accessToken) => ({
+      "X-Access-Token": accessToken
+    })
+  }
+});
+```
+
+Request-level headers take precedence over generated token headers
+
 If a response is `401` or `419`, the fetcher refreshes once and retries the original request
 
 Concurrent refresh attempts are deduped per fetcher instance

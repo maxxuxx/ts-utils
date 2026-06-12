@@ -68,7 +68,11 @@ Endpoint definitions use `endpoint.get("/users/:id", { params, responseSchema })
 
 Endpoint path params are replaced from parsed `params` and encoded with `encodeURIComponent`
 
-Auth is intentionally bearer-token oriented and only requires `getAccessToken`, optional `refresh`, and optional `clear`
+Auth only requires `getAccessToken`, optional `refresh`, optional `clear`, and optional `formatTokenHeader`
+
+The default token header is `Authorization: Bearer <accessToken>`
+
+Use `formatTokenHeader` when a project sends the access token through a different header shape, such as `X-Access-Token`
 
 Refresh retry happens once after `401` or `419` by default
 

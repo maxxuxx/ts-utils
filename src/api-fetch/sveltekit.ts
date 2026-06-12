@@ -14,6 +14,7 @@ const refreshPromises = new Map<string, RefreshPromise>();
 
 export type SvelteKitApiAuthOptions<TCookies> = Readonly<{
   clear               ?: (cookies: TCookies) => MaybePromise<void>;
+  formatTokenHeader   ?: ApiAuthOptions["formatTokenHeader"];
   getAccessToken       : (cookies: TCookies) => MaybePromise<string | null | undefined>;
   refresh            ?: (cookies: TCookies, error: unknown) => MaybePromise<string | null | undefined>;
   shouldRefreshOnError?: ApiAuthOptions["shouldRefreshOnError"];
@@ -45,6 +46,7 @@ export const createApiFetcher = <TCookies>(
       clear: auth.clear
         ? () => auth.clear?.(cookies)
         : undefined,
+      formatTokenHeader: auth.formatTokenHeader,
       getAccessToken: () => auth.getAccessToken(cookies),
       refresh: auth.refresh
         ? (error) => refreshWithDedupe({

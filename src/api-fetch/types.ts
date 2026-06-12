@@ -115,8 +115,13 @@ export type ApiRetryOptions = Readonly<{
 export type ApiRetry = boolean | number | ApiRetryOptions;
 
 // Auth
+export type ApiTokenHeaderFormatter = (
+  accessToken: string
+) => ApiHeadersInit | null | undefined;
+
 export type ApiAuthOptions = Readonly<{
   clear               ?: () => MaybePromise<void>;
+  formatTokenHeader   ?: ApiTokenHeaderFormatter;
   getAccessToken       : () => MaybePromise<string | null | undefined>;
   refresh            ?: (error: unknown) => MaybePromise<string | null | undefined>;
   shouldRefreshOnError?: (error: unknown) => boolean;

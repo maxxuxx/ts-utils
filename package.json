@@ -1,6 +1,6 @@
 {
   "name": "@maxxuxx/ts-utils",
-  "version": "0.7.14",
+  "version": "0.7.15",
   "description": "Shared TypeScript utilities",
   "type": "module",
   "license": "MIT",
@@ -88,6 +88,18 @@
       "types": "./dist/device/index.d.ts",
       "import": "./dist/device/index.js"
     },
+    "./session": {
+      "types": "./dist/session/index.d.ts",
+      "import": "./dist/session/index.js"
+    },
+    "./session/sveltekit": {
+      "types": "./dist/session/sveltekit.d.ts",
+      "import": "./dist/session/sveltekit.js"
+    },
+    "./session/react": {
+      "types": "./dist/session/react.d.ts",
+      "import": "./dist/session/react.js"
+    },
     "./api-fetch": {
       "types": "./dist/api-fetch/index.d.ts",
       "import": "./dist/api-fetch/index.js"
@@ -151,7 +163,9 @@
   },
   "peerDependencies": {
     "electron": ">=30",
-    "electron-updater": ">=6"
+    "electron-updater": ">=6",
+    "iron-session": ">=8",
+    "react": ">=18"
   },
   "peerDependenciesMeta": {
     "electron": {
@@ -159,10 +173,19 @@
     },
     "electron-updater": {
       "optional": true
+    },
+    "iron-session": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
     }
   },
   "devDependencies": {
     "@types/node": "^24.10.0",
+    "@types/react": "^19.2.17",
+    "iron-session": "^8.0.4",
+    "react": "^19.2.7",
     "typescript": "^5.9.3",
     "vitest": "^4.0.14"
   },
