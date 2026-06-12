@@ -21,7 +21,7 @@ import type { JwtPayload } from "../jwt/index.js";
 // SvelteKit cookie bridge
 export type SvelteKitCookies = Readonly<{
   get: (name: string) => string | undefined;
-  set: (name: string, value: string, options?: Record<string, unknown>) => void;
+  set: (name: string, value: string, options: any) => void;
 }>;
 
 export type SvelteKitTokenSessionOptions<
