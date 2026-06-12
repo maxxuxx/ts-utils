@@ -3,9 +3,15 @@ import {
   type IronSession,
   type SessionOptions
 } from "iron-session";
-import { createTokenSession } from "./core.js";
+import {
+  TokenSessionError,
+  createTokenSession
+} from "./core.js";
+import {
+  TokenSessionReason
+} from "./types.js";
 import type {
-  TokenSessionController,
+  MaybePromise,
   TokenSessionData,
   TokenSessionOptions,
   TokenSessionTokens
@@ -24,24 +30,28 @@ export type SvelteKitTokenSessionOptions<
   TClaims extends JwtPayload = JwtPayload
 > = Omit<
   TokenSessionOptions<SvelteKitCookies, TUser, TTokens, TClaims>,
-  "clearSession" | "readSession" | "writeSession"
+  "clear" | "read" | "write"
 > & Readonly<{
+  getCookies?: () => MaybePromise<SvelteKitCookies>;
   sessionOptions: SessionOptions;
 }>;
 
 export type SvelteKitTokenSession<
   TUser,
   TTokens extends TokenSessionTokens
-> = Omit<
-  TokenSessionController<SvelteKitCookies, TUser, TTokens>,
-  "getSession"
-> & Readonly<{
-  getSession: (
-    cookies: SvelteKitCookies
-  ) => Promise<IronSession<TokenSessionData<TUser, TTokens>>>;
-  getSessionData: (
-    cookies: SvelteKitCookies
-  ) => Promise<TokenSessionData<TUser, TTokens>>;
+> = Readonly<{
+  clear: (cookies?: SvelteKitCookies) => Promise<void>;
+  ensure: (cookies?: SvelteKitCookies) => Promise<TUser>;
+  getAccessToken: (cookies?: SvelteKitCookies) => Promise<string | undefined>;
+  getSession: (cookies?: SvelteKitCookies) => Promise<IronSession<TokenSessionData<TUser, TTokens>>>;
+  getData: (cookies?: SvelteKitCookies) => Promise<TokenSessionData<TUser, TTokens>>;
+  parseTokens: (tokens: unknown) => Pick<TokenSessionData<TUser, TTokens>, "tokens"> | null;
+  refresh: (cookies?: SvelteKitCookies) => Promise<string>;
+  set: (
+    session: TokenSessionData<TUser, TTokens>,
+    cookies?: SvelteKitCookies
+  ) => Promise<void>;
+  updateUser: (user: TUser, cookies?: SvelteKitCookies) => Promise<void>;
 }>;
 
 export const createSvelteKitTokenSession = <
@@ -51,21 +61,21 @@ export const createSvelteKitTokenSession = <
 >(
   options: SvelteKitTokenSessionOptions<TUser, TTokens, TClaims>
 ): SvelteKitTokenSession<TUser, TTokens> => {
-  const getSession = (cookies: SvelteKitCookies) => getIronSession<
+  const getSession = async (cookies?: SvelteKitCookies) => getIronSession<
     TokenSessionData<TUser, TTokens>
   >(
-    createCookieStore(cookies) as never,
+    createCookieStore(await resolveCookies(cookies, options.getCookies)) as never,
     options.sessionOptions
   );
 
   const controller = createTokenSession<SvelteKitCookies, TUser, TTokens, TClaims>({
     ...options,
-    clearSession: async (cookies) => {
+    clear: async (cookies) => {
       const session = await getSession(cookies);
 
       session.destroy();
     },
-    readSession: async (cookies) => {
+    read: async (cookies) => {
       const session = await getSession(cookies);
 
       return {
@@ -73,7 +83,7 @@ export const createSvelteKitTokenSession = <
         user  : session.user
       };
     },
-    writeSession: async (cookies, data) => {
+    write: async (cookies, data) => {
       const session = await getSession(cookies);
 
       session.tokens = data.tokens;
@@ -84,13 +94,54 @@ export const createSvelteKitTokenSession = <
   });
 
   return Object.freeze({
-    ...controller,
+    clear: async (cookies) => {
+      await controller.clear(await resolveCookies(cookies, options.getCookies));
+    },
+    ensure: async (cookies) => (
+      controller.ensure(await resolveCookies(cookies, options.getCookies))
+    ),
+    getAccessToken: async (cookies) => (
+      controller.getAccessToken(await resolveCookies(cookies, options.getCookies))
+    ),
     getSession,
-    getSessionData: controller.getSession
+    getData: async (cookies) => (
+      controller.get(await resolveCookies(cookies, options.getCookies))
+    ),
+    parseTokens: controller.parseTokens,
+    refresh: async (cookies) => (
+      controller.refresh(await resolveCookies(cookies, options.getCookies))
+    ),
+    set: async (session, cookies) => {
+      await controller.set(
+        await resolveCookies(cookies, options.getCookies),
+        session
+      );
+    },
+    updateUser: async (user, cookies) => {
+      await controller.updateUser(
+        await resolveCookies(cookies, options.getCookies),
+        user
+      );
+    }
   });
 };
 
 export const createIronTokenSession = createSvelteKitTokenSession;
+
+export const createSvelteKitSession = createSvelteKitTokenSession;
+
+const resolveCookies = async (
+  cookies: SvelteKitCookies | undefined,
+  getCookies: (() => MaybePromise<SvelteKitCookies>) | undefined
+): Promise<SvelteKitCookies> => {
+  const resolved = cookies ?? await getCookies?.();
+
+  if (!resolved) {
+    throw new TokenSessionError(TokenSessionReason.INVALID);
+  }
+
+  return resolved;
+};
 
 const createCookieStore = (cookies: SvelteKitCookies) => ({
   get: (name: string) => {

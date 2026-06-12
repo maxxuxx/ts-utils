@@ -23,7 +23,7 @@ export type ReactTokenSessionOptions<
   TClaims extends JwtPayload = JwtPayload
 > = Omit<
   TokenSessionOptions<void, TUser, TTokens, TClaims>,
-  "clearSession" | "readSession" | "writeSession"
+  "clear" | "read" | "write"
 > & Readonly<{
   initialSession?: TokenSessionData<TUser, TTokens>;
   serverSession?: TokenSessionData<TUser, TTokens>;
@@ -36,22 +36,22 @@ export type ReactTokenSession<
   TTokens extends TokenSessionTokens
 > = Omit<
   TokenSessionController<void, TUser, TTokens>,
-  | "clearSession"
-  | "ensureSession"
+  | "clear"
+  | "ensure"
+  | "get"
   | "getAccessToken"
-  | "getSession"
-  | "refreshSession"
-  | "setSession"
+  | "refresh"
+  | "set"
   | "updateUser"
 > & Readonly<{
-  clearSession: () => Promise<void>;
-  ensureSession: () => Promise<TUser>;
+  clear: () => Promise<void>;
+  ensure: () => Promise<TUser>;
+  get: () => TokenSessionData<TUser, TTokens>;
   getAccessToken: () => Promise<string | undefined>;
   getServerSnapshot: () => TokenSessionData<TUser, TTokens>;
-  getSession: () => TokenSessionData<TUser, TTokens>;
   getSnapshot: () => TokenSessionData<TUser, TTokens>;
-  refreshSession: () => Promise<string>;
-  setSession: (session: TokenSessionData<TUser, TTokens>) => Promise<void>;
+  refresh: () => Promise<string>;
+  set: (session: TokenSessionData<TUser, TTokens>) => Promise<void>;
   subscribe: (listener: () => void) => () => void;
   updateUser: (user: TUser) => Promise<void>;
   useSession: () => TokenSessionData<TUser, TTokens>;
@@ -95,9 +95,9 @@ export const createReactTokenSession = <
 
   const controller = createTokenSession<void, TUser, TTokens, TClaims>({
     ...options,
-    clearSession: async () => clearSnapshot(),
-    readSession : () => snapshot,
-    writeSession: async (_context, session) => writeSnapshot(session)
+    clear: async () => clearSnapshot(),
+    read : () => snapshot,
+    write: async (_context, session) => writeSnapshot(session)
   });
 
   const subscribe = (listener: () => void) => {
@@ -123,15 +123,15 @@ export const createReactTokenSession = <
   );
 
   return Object.freeze({
-    clearSession : () => controller.clearSession(undefined),
-    ensureSession: () => controller.ensureSession(undefined),
+    clear : () => controller.clear(undefined),
+    ensure: () => controller.ensure(undefined),
+    get   : getSnapshot,
     getAccessToken: () => controller.getAccessToken(undefined),
     getServerSnapshot,
-    getSession   : getSnapshot,
     getSnapshot,
-    parseTokenData: controller.parseTokenData,
-    refreshSession: () => controller.refreshSession(undefined),
-    setSession    : (session) => controller.setSession(undefined, session),
+    parseTokens: controller.parseTokens,
+    refresh: () => controller.refresh(undefined),
+    set    : (session) => controller.set(undefined, session),
     subscribe,
     updateUser: (user) => controller.updateUser(undefined, user),
     useSession,

@@ -202,14 +202,14 @@ Session helpers are exported as core, SvelteKit, and React subpaths
 import { createTokenSession } from "@maxxuxx/ts-utils/session";
 ```
 
-Use `mode: "access-token"` when a service only issues access tokens and there is no refresh token
+`useRefreshToken` defaults to `true`. Set `useRefreshToken: false` when a service only issues access tokens and there is no refresh token
 
 ```ts
 const session = createTokenSession({
-  mode: "access-token",
-  readSession: () => store.get() ?? {},
-  writeSession: (_context, nextSession) => store.set(nextSession),
-  clearSession: () => store.clear()
+  read: () => store.get() ?? {},
+  write: (_context, nextSession) => store.set(nextSession),
+  clear: () => store.clear(),
+  useRefreshToken: false
 });
 
 const accessToken = await session.getAccessToken(undefined);

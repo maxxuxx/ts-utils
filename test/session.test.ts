@@ -46,22 +46,43 @@ describe("session module", () => {
       }
     };
     const session = createTokenSession<void, TestUser, TestTokens>({
-      clearSession: () => {
+      clear: () => {
         storedSession = {};
       },
-      mode       : "access-token",
-      readSession: () => storedSession,
+      read: () => storedSession,
       tokenSchema: Tokens,
+      useRefreshToken: false,
       userSchema : User,
-      writeSession: (_context, nextSession) => {
+      write: (_context, nextSession) => {
         storedSession = nextSession;
       }
     });
 
-    await expect(session.ensureSession(undefined)).resolves.toEqual({
+    await expect(session.ensure(undefined)).resolves.toEqual({
       id: "user-1"
     });
     await expect(session.getAccessToken(undefined)).resolves.toBe("opaque-access-token");
+  });
+
+  it("requires refresh tokens by default", async () => {
+    const session = createTokenSession<void, TestUser, TestTokens>({
+      clear: () => undefined,
+      read : () => ({
+        tokens: {
+          accessToken: "opaque-access-token"
+        },
+        user: {
+          id: "user-1"
+        }
+      }),
+      tokenSchema : Tokens,
+      userSchema  : User,
+      write: () => undefined
+    });
+
+    await expect(session.ensure(undefined)).rejects.toMatchObject({
+      reason: "invalid_token"
+    } satisfies Partial<TokenSessionError>);
   });
 
   it("refreshes expiring JWT token pairs and stores the next tokens", async () => {
@@ -80,22 +101,22 @@ describe("session module", () => {
       refreshToken: "next-refresh-token"
     }));
     const session = createTokenSession<void, TestUser, TestTokens>({
-      clearSession: () => {
+      clear: () => {
         storedSession = {};
       },
       jwtSchema : Claims,
       now       : () => nowSeconds * 1000,
-      readSession: () => storedSession,
+      read: () => storedSession,
       refreshThresholdSeconds: 300,
       refreshTokens,
       tokenSchema: Tokens,
       userSchema : User,
-      writeSession: (_context, nextSession) => {
+      write: (_context, nextSession) => {
         storedSession = nextSession;
       }
     });
 
-    await expect(session.ensureSession(undefined)).resolves.toEqual({
+    await expect(session.ensure(undefined)).resolves.toEqual({
       id: "user-1"
     });
     expect(refreshTokens).toHaveBeenCalledWith(
@@ -109,11 +130,10 @@ describe("session module", () => {
 
   it("throws a session error for expired access-token-only JWT sessions", async () => {
     const session = createTokenSession<void, TestUser, TestTokens>({
-      clearSession: () => undefined,
+      clear: () => undefined,
       jwtSchema   : Claims,
-      mode        : "access-token",
       now         : () => 1_700_000_000_000,
-      readSession : () => ({
+      read : () => ({
         tokens: {
           accessToken: createToken({ exp: 1_699_999_999 })
         },
@@ -122,11 +142,12 @@ describe("session module", () => {
         }
       }),
       tokenSchema : Tokens,
+      useRefreshToken: false,
       userSchema  : User,
-      writeSession: () => undefined
+      write: () => undefined
     });
 
-    await expect(session.ensureSession(undefined)).rejects.toMatchObject({
+    await expect(session.ensure(undefined)).rejects.toMatchObject({
       reason: "expired"
     } satisfies Partial<TokenSessionError>);
   });
@@ -134,16 +155,17 @@ describe("session module", () => {
   it("stores SvelteKit token sessions with iron-session cookies", async () => {
     const cookies = createMemoryCookies();
     const session = createSvelteKitTokenSession<TestUser, TestTokens>({
-      mode          : "access-token",
+      getCookies    : () => cookies,
       sessionOptions: {
         cookieName: "app_session",
         password  : "replace-with-at-least-32-characters"
       },
       tokenSchema: Tokens,
+      useRefreshToken: false,
       userSchema : User
     });
 
-    await session.setSession(cookies, {
+    await session.set({
       tokens: {
         accessToken: "sveltekit-token"
       },
@@ -152,12 +174,12 @@ describe("session module", () => {
       }
     });
 
-    await expect(session.getAccessToken(cookies)).resolves.toBe("sveltekit-token");
-    await expect(session.ensureSession(cookies)).resolves.toEqual({
+    await expect(session.getAccessToken()).resolves.toBe("sveltekit-token");
+    await expect(session.ensure()).resolves.toEqual({
       id: "user-1"
     });
 
-    const ironSession = await session.getSession(cookies);
+    const ironSession = await session.getSession();
 
     expect(ironSession.user).toEqual({
       id: "user-1"
@@ -167,16 +189,16 @@ describe("session module", () => {
   it("stores React token sessions in browser storage and notifies subscribers", async () => {
     const storage = createMemoryStorage();
     const session = createReactTokenSession<TestUser, TestTokens>({
-      mode      : "access-token",
       storage,
       storageKey: "auth-session",
       tokenSchema: Tokens,
+      useRefreshToken: false,
       userSchema : User
     });
     const listener = vi.fn();
     const unsubscribe = session.subscribe(listener);
 
-    await session.setSession({
+    await session.set({
       tokens: {
         accessToken: "react-token"
       },
@@ -186,20 +208,20 @@ describe("session module", () => {
     });
 
     expect(listener).toHaveBeenCalledTimes(1);
-    expect(session.getSession().user).toEqual({
+    expect(session.get().user).toEqual({
       id: "user-1"
     });
     await expect(session.getAccessToken()).resolves.toBe("react-token");
 
     const restoredSession = createReactTokenSession<TestUser, TestTokens>({
-      mode      : "access-token",
       storage,
       storageKey: "auth-session",
       tokenSchema: Tokens,
+      useRefreshToken: false,
       userSchema : User
     });
 
-    expect(restoredSession.getSession().tokens?.accessToken).toBe("react-token");
+    expect(restoredSession.get().tokens?.accessToken).toBe("react-token");
 
     unsubscribe();
   });

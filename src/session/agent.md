@@ -40,17 +40,17 @@ The default session data shape is `{ user, tokens }`
 
 Tokens must include an `accessToken` when a session is considered authenticated
 
-Use `mode: "access-token"` for APIs that only issue access tokens and have no refresh token
+`useRefreshToken` defaults to `true`, so refresh tokens are required unless the caller sets `useRefreshToken: false`
 
-Use `mode: "refresh-token"` when refresh tokens are mandatory
+Use `useRefreshToken: false` for APIs that only issue access tokens and have no refresh token
 
-When `mode` is omitted and `refreshTokens` exists, refresh tokens are treated as required
+SvelteKit helpers can receive `getCookies` so callers can use `getSession()`, `ensure()`, and other methods without passing cookies at every call site
 
 JWT parsing and expiration checks only run when `jwtSchema` is provided, so opaque access tokens are valid in access-token-only apps
 
 `refreshThresholdSeconds` refreshes only when a JWT is present, a refresh token exists, and `refreshTokens` is configured
 
-The core controller is storage agnostic. Apps provide `readSession`, `writeSession`, and `clearSession`
+The core controller is storage agnostic. Apps provide `read`, `write`, and `clear`
 
 Keep API request header formatting in `api-fetch` through `formatTokenHeader`; session should store token data and expose access tokens, not own request headers
 

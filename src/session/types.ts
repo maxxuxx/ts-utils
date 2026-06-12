@@ -21,7 +21,12 @@ export type SafeSchema<TData> = Readonly<{
 }>;
 
 // Session data
-export type TokenSessionMode = "access-token" | "refresh-token";
+export const TokenSessionReason = {
+  EXPIRED      : "expired",
+  INVALID      : "invalid",
+  INVALID_TOKEN: "invalid_token",
+  UNAUTHORIZED : "unauthorized"
+} as const;
 
 export type TokenSessionTokens = Readonly<{
   accessToken?: string | null;
@@ -37,18 +42,16 @@ export type TokenSessionData<
 };
 
 export type TokenSessionReason =
-  | "expired"
-  | "invalid_token"
-  | "unauthorized";
+  (typeof TokenSessionReason)[keyof typeof TokenSessionReason];
 
 export type TokenSessionStore<
   TContext,
   TUser,
   TTokens extends TokenSessionTokens
 > = Readonly<{
-  clearSession: (context: TContext) => MaybePromise<void>;
-  readSession: (context: TContext) => MaybePromise<TokenSessionData<TUser, TTokens>>;
-  writeSession: (
+  clear: (context: TContext) => MaybePromise<void>;
+  read: (context: TContext) => MaybePromise<TokenSessionData<TUser, TTokens>>;
+  write: (
     context: TContext,
     session: TokenSessionData<TUser, TTokens>
   ) => MaybePromise<void>;
@@ -75,7 +78,6 @@ export type TokenSessionOptions<
   TClaims extends JwtPayload = JwtPayload
 > = TokenSessionStore<TContext, TUser, TTokens> & Readonly<{
   jwtSchema?: SafeSchema<TClaims>;
-  mode?: TokenSessionMode;
   now?: () => number;
   refreshThresholdSeconds?: number;
   refreshTokens?: (
@@ -83,6 +85,7 @@ export type TokenSessionOptions<
     context: TokenRefreshContext<TContext, TUser, TTokens, TClaims>
   ) => MaybePromise<TTokens>;
   tokenSchema?: SafeSchema<TTokens>;
+  useRefreshToken?: boolean;
   userSchema?: SafeSchema<TUser>;
 }>;
 
@@ -91,13 +94,13 @@ export type TokenSessionController<
   TUser,
   TTokens extends TokenSessionTokens
 > = Readonly<{
-  clearSession: (context: TContext) => Promise<void>;
-  ensureSession: (context: TContext) => Promise<TUser>;
+  clear: (context: TContext) => Promise<void>;
+  ensure: (context: TContext) => Promise<TUser>;
+  get: (context: TContext) => Promise<TokenSessionData<TUser, TTokens>>;
   getAccessToken: (context: TContext) => Promise<string | undefined>;
-  getSession: (context: TContext) => Promise<TokenSessionData<TUser, TTokens>>;
-  parseTokenData: (tokens: unknown) => Pick<TokenSessionData<TUser, TTokens>, "tokens"> | null;
-  refreshSession: (context: TContext) => Promise<string>;
-  setSession: (
+  parseTokens: (tokens: unknown) => Pick<TokenSessionData<TUser, TTokens>, "tokens"> | null;
+  refresh: (context: TContext) => Promise<string>;
+  set: (
     context: TContext,
     session: TokenSessionData<TUser, TTokens>
   ) => Promise<void>;

@@ -2,6 +2,9 @@ export {
   TokenSessionError,
   createTokenSession
 } from "./core.js";
+export {
+  TokenSessionReason
+} from "./types.js";
 export type {
   MaybePromise,
   SafeParseResult,
@@ -9,9 +12,7 @@ export type {
   TokenRefreshContext,
   TokenSessionController,
   TokenSessionData,
-  TokenSessionMode,
   TokenSessionOptions,
-  TokenSessionReason,
   TokenSessionStore,
   TokenSessionTokens
 } from "./types.js";

@@ -15,6 +15,7 @@ import type {
 // Errors
 const DEFAULT_ERROR_MESSAGES: Record<TokenSessionReason, string> = {
   expired      : "Session token expired",
+  invalid      : "Session is invalid",
   invalid_token: "Session token is invalid",
   unauthorized : "Session is unauthorized"
 };
@@ -41,6 +42,8 @@ export const createTokenSession = <
 >(
   options: TokenSessionOptions<TContext, TUser, TTokens, TClaims>
 ): TokenSessionController<TContext, TUser, TTokens> => {
+  const useRefreshToken = options.useRefreshToken ?? true;
+
   const parseUser = (value: unknown): TUser => {
     if (value === null || value === undefined) {
       throw createSessionError("unauthorized");
@@ -86,14 +89,14 @@ export const createTokenSession = <
     };
   };
 
-  const refreshSession = async (context: TContext): Promise<string> => {
-    const session      = await options.readSession(context);
+  const refresh = async (context: TContext): Promise<string> => {
+    const session      = await options.read(context);
     const user         = parseUser(session.user);
     const tokens       = parseTokens(session.tokens);
     const accessToken  = readAccessToken(tokens);
     const refreshToken = readRefreshToken(tokens);
 
-    if (!accessToken || !refreshToken || !options.refreshTokens) {
+    if (!useRefreshToken || !accessToken || !refreshToken || !options.refreshTokens) {
       throw createSessionError("invalid_token");
     }
 
@@ -107,7 +110,7 @@ export const createTokenSession = <
       user
     }));
 
-    await options.writeSession(context, {
+    await options.write(context, {
       ...session,
       tokens: nextTokens,
       user
@@ -116,8 +119,8 @@ export const createTokenSession = <
     return readAccessToken(nextTokens) ?? "";
   };
 
-  const ensureSession = async (context: TContext): Promise<TUser> => {
-    const session      = await options.readSession(context);
+  const ensure = async (context: TContext): Promise<TUser> => {
+    const session      = await options.read(context);
     const user         = parseUser(session.user);
     const tokens       = parseTokens(session.tokens);
     const accessToken  = readAccessToken(tokens);
@@ -127,7 +130,7 @@ export const createTokenSession = <
       throw createSessionError("invalid_token");
     }
 
-    if (requiresRefreshToken(options.mode, options.refreshTokens) && !refreshToken) {
+    if (useRefreshToken && !refreshToken) {
       throw createSessionError("invalid_token");
     }
 
@@ -138,8 +141,8 @@ export const createTokenSession = <
     }
 
     if (isExpired(claims, options.now)) {
-      if (refreshToken && options.refreshTokens) {
-        await refreshSession(context);
+      if (useRefreshToken && refreshToken && options.refreshTokens) {
+        await refresh(context);
 
         return user;
       }
@@ -148,39 +151,40 @@ export const createTokenSession = <
     }
 
     if (isExpiringSoon(claims, options.refreshThresholdSeconds, options.now)
+      && useRefreshToken
       && refreshToken
       && options.refreshTokens) {
-      await refreshSession(context);
+      await refresh(context);
     }
 
     return user;
   };
 
   return Object.freeze({
-    clearSession: async (context) => {
-      await options.clearSession(context);
+    clear: async (context) => {
+      await options.clear(context);
     },
-    ensureSession,
+    ensure,
+    get: async (context) => options.read(context),
     getAccessToken: async (context) => {
-      const session = await options.readSession(context);
+      const session = await options.read(context);
       const tokens  = parseTokensOrNull(session.tokens, options.tokenSchema);
 
       return readAccessToken(tokens);
     },
-    getSession: async (context) => options.readSession(context),
-    parseTokenData: (tokens) => {
+    parseTokens: (tokens) => {
       const parsedTokens = parseTokensOrNull(tokens, options.tokenSchema);
 
       return parsedTokens ? { tokens: parsedTokens } : null;
     },
-    refreshSession,
-    setSession: async (context, session) => {
-      await options.writeSession(context, session);
+    refresh,
+    set: async (context, session) => {
+      await options.write(context, session);
     },
     updateUser: async (context, user) => {
-      const session = await options.readSession(context);
+      const session = await options.read(context);
 
-      await options.writeSession(context, {
+      await options.write(context, {
         ...session,
         user
       });
@@ -254,14 +258,6 @@ const readRefreshToken = (
   typeof tokens?.refreshToken === "string" && tokens.refreshToken.trim()
     ? tokens.refreshToken
     : undefined
-);
-
-const requiresRefreshToken = (
-  mode: TokenSessionOptions<unknown, unknown, TokenSessionTokens, JwtPayload>["mode"],
-  refreshTokens: unknown
-): boolean => (
-  mode === "refresh-token"
-  || (mode === undefined && refreshTokens !== undefined)
 );
 
 // Expiration helpers

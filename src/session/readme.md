@@ -12,7 +12,7 @@ import {
 } from "@maxxuxx/ts-utils/session";
 ```
 
-The core controller is storage agnostic. Provide `readSession`, `writeSession`, and `clearSession` for the runtime where the session lives
+The core controller is storage agnostic. Provide `read`, `write`, and `clear` for the runtime where the session lives
 
 ```ts
 type User = {
@@ -25,17 +25,17 @@ type Tokens = TokenSessionTokens & {
 };
 
 const session = createTokenSession<void, User, Tokens>({
-  mode: "access-token",
-  readSession: () => store.get() ?? {},
-  writeSession: (_context, nextSession) => store.set(nextSession),
-  clearSession: () => store.clear()
+  read: () => store.get() ?? {},
+  write: (_context, nextSession) => store.set(nextSession),
+  clear: () => store.clear(),
+  useRefreshToken: false
 });
 ```
 
-Use `mode: "access-token"` when an API only issues access tokens and there is no refresh token
+`useRefreshToken` defaults to `true`. Use `useRefreshToken: false` when an API only issues access tokens and there is no refresh token
 
 ```ts
-await session.setSession(undefined, {
+await session.set(undefined, {
   user: {
     id: "user-1"
   },
@@ -44,21 +44,21 @@ await session.setSession(undefined, {
   }
 });
 
-const user = await session.ensureSession(undefined);
+const user = await session.ensure(undefined);
 const accessToken = await session.getAccessToken(undefined);
 ```
 
 JWT parsing and expiration checks only run when `jwtSchema` is provided. Opaque access tokens are accepted when no JWT schema is configured
 
-## Refresh token mode
+## Refresh token sessions
 
 Add `refreshTokens` when the session can rotate tokens
 
 ```ts
 const session = createTokenSession<void, User, Tokens>({
-  readSession: () => store.get() ?? {},
-  writeSession: (_context, nextSession) => store.set(nextSession),
-  clearSession: () => store.clear(),
+  read: () => store.get() ?? {},
+  write: (_context, nextSession) => store.set(nextSession),
+  clear: () => store.clear(),
   refreshThresholdSeconds: 60,
   refreshTokens: async (refreshToken) => {
     const response = await fetch("/auth/refresh", {
@@ -73,7 +73,7 @@ const session = createTokenSession<void, User, Tokens>({
 });
 ```
 
-When `mode` is omitted and `refreshTokens` exists, a refresh token is required. Set `mode: "access-token"` for access-token-only sessions
+Refresh tokens are required by default. Set `useRefreshToken: false` for access-token-only sessions
 
 ## SvelteKit
 
@@ -85,23 +85,25 @@ npm install iron-session
 
 ```ts
 import { createSvelteKitTokenSession } from "@maxxuxx/ts-utils/session/sveltekit";
+import { getRequestEvent } from "$app/server";
 
 export const authSession = createSvelteKitTokenSession<User, Tokens>({
-  mode: "access-token",
+  getCookies: () => getRequestEvent().cookies,
   sessionOptions: {
     cookieName: "app_session",
     password: process.env.SESSION_PASSWORD
-  }
+  },
+  useRefreshToken: false
 });
 ```
 
-Use it with SvelteKit `cookies` in server routes and hooks
+Use the configured session in server routes and hooks
 
 ```ts
-const user = await authSession.ensureSession(event.cookies);
-const accessToken = await authSession.getAccessToken(event.cookies);
+const user = await authSession.ensure();
+const accessToken = await authSession.getAccessToken();
 
-await authSession.setSession(event.cookies, {
+await authSession.set({
   user,
   tokens: {
     accessToken
@@ -121,8 +123,8 @@ npm install react
 import { createReactTokenSession } from "@maxxuxx/ts-utils/session/react";
 
 export const authSession = createReactTokenSession<User, Tokens>({
-  mode: "access-token",
-  storageKey: "app_session"
+  storageKey: "app_session",
+  useRefreshToken: false
 });
 ```
 
