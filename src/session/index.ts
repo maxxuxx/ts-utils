@@ -9,7 +9,6 @@ export type {
   TokenRefreshContext,
   TokenSessionController,
   TokenSessionData,
-  TokenSessionErrorFactory,
   TokenSessionMode,
   TokenSessionOptions,
   TokenSessionReason,

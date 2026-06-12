@@ -41,30 +41,23 @@ export const createTokenSession = <
 >(
   options: TokenSessionOptions<TContext, TUser, TTokens, TClaims>
 ): TokenSessionController<TContext, TUser, TTokens> => {
-  const createError = (
-    reason: TokenSessionReason,
-    cause?: unknown
-  ): Error => (
-    options.createError?.(reason, cause) ?? new TokenSessionError(reason, cause)
-  );
-
   const parseUser = (value: unknown): TUser => {
     if (value === null || value === undefined) {
-      throw createError("unauthorized");
+      throw createSessionError("unauthorized");
     }
 
-    return parseSchema(value, options.userSchema, "unauthorized", createError);
+    return parseSchema(value, options.userSchema, "unauthorized");
   };
 
   const parseTokens = (value: unknown): TTokens => {
     if (!isRecord(value)) {
-      throw createError("invalid_token");
+      throw createSessionError("invalid_token");
     }
 
-    const tokens = parseSchema(value, options.tokenSchema, "invalid_token", createError);
+    const tokens = parseSchema(value, options.tokenSchema, "invalid_token");
 
     if (!readAccessToken(tokens)) {
-      throw createError("invalid_token");
+      throw createSessionError("invalid_token");
     }
 
     return tokens;
@@ -78,14 +71,13 @@ export const createTokenSession = <
     const decoded = safeDecodeJwt<TClaims>(accessToken);
 
     if (!decoded.ok) {
-      throw createError("invalid_token", decoded.error);
+      throw createSessionError("invalid_token", decoded.error);
     }
 
     const claims = parseSchema(
       decoded.data,
       options.jwtSchema,
-      "invalid_token",
-      createError
+      "invalid_token"
     );
 
     return {
@@ -102,7 +94,7 @@ export const createTokenSession = <
     const refreshToken = readRefreshToken(tokens);
 
     if (!accessToken || !refreshToken || !options.refreshTokens) {
-      throw createError("invalid_token");
+      throw createSessionError("invalid_token");
     }
 
     const claims = readClaims(accessToken);
@@ -132,11 +124,11 @@ export const createTokenSession = <
     const refreshToken = readRefreshToken(tokens);
 
     if (!accessToken) {
-      throw createError("invalid_token");
+      throw createSessionError("invalid_token");
     }
 
     if (requiresRefreshToken(options.mode, options.refreshTokens) && !refreshToken) {
-      throw createError("invalid_token");
+      throw createSessionError("invalid_token");
     }
 
     const claims = readClaims(accessToken);
@@ -152,7 +144,7 @@ export const createTokenSession = <
         return user;
       }
 
-      throw createError("expired");
+      throw createSessionError("expired");
     }
 
     if (isExpiringSoon(claims, options.refreshThresholdSeconds, options.now)
@@ -200,8 +192,7 @@ export const createTokenSession = <
 const parseSchema = <TData>(
   value: unknown,
   schema: SafeSchema<TData> | undefined,
-  reason: TokenSessionReason,
-  createError: (reason: TokenSessionReason, cause?: unknown) => Error
+  reason: TokenSessionReason
 ): TData => {
   if (!schema) {
     return value as TData;
@@ -210,11 +201,18 @@ const parseSchema = <TData>(
   const parsed = schema.safeParse(value);
 
   if (!parsed.success) {
-    throw createError(reason, parsed.error);
+    throw createSessionError(reason, parsed.error);
   }
 
   return parsed.data;
 };
+
+const createSessionError = (
+  reason: TokenSessionReason,
+  cause?: unknown
+): TokenSessionError => (
+  new TokenSessionError(reason, cause)
+);
 
 const parseTokensOrNull = <TTokens extends TokenSessionTokens>(
   value: unknown,

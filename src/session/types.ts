@@ -41,11 +41,6 @@ export type TokenSessionReason =
   | "invalid_token"
   | "unauthorized";
 
-export type TokenSessionErrorFactory = (
-  reason: TokenSessionReason,
-  cause?: unknown
-) => Error;
-
 export type TokenSessionStore<
   TContext,
   TUser,
@@ -79,7 +74,6 @@ export type TokenSessionOptions<
   TTokens extends TokenSessionTokens,
   TClaims extends JwtPayload = JwtPayload
 > = TokenSessionStore<TContext, TUser, TTokens> & Readonly<{
-  createError?: TokenSessionErrorFactory;
   jwtSchema?: SafeSchema<TClaims>;
   mode?: TokenSessionMode;
   now?: () => number;
