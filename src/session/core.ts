@@ -168,12 +168,18 @@ export const createTokenSession = <
     get: async (context) => options.read(context),
     getAccessToken: async (context) => {
       const session = await options.read(context);
-      const tokens  = parseTokensOrNull(session.tokens, options.tokenSchema);
+      const tokens  = parseTokensOrNull(session.tokens, {
+        tokenSchema: options.tokenSchema
+      });
 
       return readAccessToken(tokens);
     },
     parseTokens: (tokens) => {
-      const parsedTokens = parseTokensOrNull(tokens, options.tokenSchema);
+      const parsedTokens = parseTokensOrNull(tokens, {
+        jwtSchema          : options.jwtSchema,
+        requireRefreshToken: useRefreshToken,
+        tokenSchema        : options.tokenSchema
+      });
 
       return parsedTokens ? { tokens: parsedTokens } : null;
     },
@@ -218,30 +224,72 @@ const createSessionError = (
   new TokenSessionError(reason, cause)
 );
 
-const parseTokensOrNull = <TTokens extends TokenSessionTokens>(
+const parseTokensOrNull = <
+  TTokens extends TokenSessionTokens,
+  TClaims extends JwtPayload
+>(
   value: unknown,
-  schema: SafeSchema<TTokens> | undefined
+  options: Readonly<{
+    jwtSchema?: SafeSchema<TClaims>;
+    requireRefreshToken?: boolean;
+    tokenSchema?: SafeSchema<TTokens>;
+  }>
 ): TTokens | null => {
   if (!isRecord(value)) {
     return null;
   }
 
-  if (!schema) {
-    return readAccessToken(value) ? value as TTokens : null;
-  }
+  const tokens = parseSchemaOrNull(value, options.tokenSchema);
+  const accessToken = readAccessToken(tokens);
 
-  const parsed = schema.safeParse(value);
-
-  if (!parsed.success || !readAccessToken(parsed.data)) {
+  if (!accessToken) {
     return null;
   }
 
-  return parsed.data;
+  if (options.requireRefreshToken && !readRefreshToken(tokens)) {
+    return null;
+  }
+
+  if (!hasValidClaims(accessToken, options.jwtSchema)) {
+    return null;
+  }
+
+  return tokens;
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   typeof value === "object" && value !== null
 );
+
+const parseSchemaOrNull = <TData>(
+  value: unknown,
+  schema: SafeSchema<TData> | undefined
+): TData | null => {
+  if (!schema) {
+    return value as TData;
+  }
+
+  const parsed = schema.safeParse(value);
+
+  return parsed.success ? parsed.data : null;
+};
+
+const hasValidClaims = <TClaims extends JwtPayload>(
+  accessToken: string,
+  schema: SafeSchema<TClaims> | undefined
+): boolean => {
+  if (!schema) {
+    return true;
+  }
+
+  const decoded = safeDecodeJwt<TClaims>(accessToken);
+
+  if (!decoded.ok) {
+    return false;
+  }
+
+  return schema.safeParse(decoded.data).success;
+};
 
 // Token helpers
 const readAccessToken = (

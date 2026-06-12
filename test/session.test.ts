@@ -6,7 +6,7 @@ import {
   createTokenSession
 } from "../src/session/index.js";
 import { createReactTokenSession } from "../src/session/react.js";
-import { createSvelteKitTokenSession } from "../src/session/sveltekit.js";
+import { createSession } from "../src/session/sveltekit.js";
 
 type TestUser = {
   id: string;
@@ -34,6 +34,8 @@ const Tokens = z.object({
 const Claims = z.object({
   exp: z.number()
 }).passthrough();
+
+type TestClaims = z.infer<typeof Claims>;
 
 describe("session module", () => {
   it("supports access-token-only sessions without refresh tokens", async () => {
@@ -83,6 +85,86 @@ describe("session module", () => {
     await expect(session.ensure(undefined)).rejects.toMatchObject({
       reason: "invalid_token"
     } satisfies Partial<TokenSessionError>);
+  });
+
+  it("parses token pairs with configured token and JWT schemas", () => {
+    const accessToken = createToken({
+      exp: 1_700_003_600
+    });
+    const session = createTokenSession<void, TestUser, TestTokens, TestClaims>({
+      clear: () => undefined,
+      jwtSchema: Claims,
+      read: () => ({}),
+      tokenSchema: Tokens,
+      userSchema : User,
+      write: () => undefined
+    });
+
+    expect(session.parseTokens({
+      accessToken,
+      refreshToken: "refresh-token"
+    })).toEqual({
+      tokens: {
+        accessToken,
+        refreshToken: "refresh-token"
+      }
+    });
+  });
+
+  it("rejects invalid JWTs when parsing tokens with a JWT schema", () => {
+    const session = createTokenSession<void, TestUser, TestTokens, TestClaims>({
+      clear: () => undefined,
+      jwtSchema: Claims,
+      read: () => ({}),
+      tokenSchema: Tokens,
+      userSchema : User,
+      write: () => undefined
+    });
+
+    expect(session.parseTokens({
+      accessToken : "not-a-jwt",
+      refreshToken: "refresh-token"
+    })).toBeNull();
+  });
+
+  it("requires refresh tokens when parsing tokens by default", () => {
+    const session = createTokenSession<void, TestUser, TestTokens, TestClaims>({
+      clear: () => undefined,
+      jwtSchema: Claims,
+      read: () => ({}),
+      tokenSchema: Tokens,
+      userSchema : User,
+      write: () => undefined
+    });
+
+    expect(session.parseTokens({
+      accessToken: createToken({
+        exp: 1_700_003_600
+      })
+    })).toBeNull();
+  });
+
+  it("parses access-token-only tokens when refresh tokens are disabled", () => {
+    const accessToken = createToken({
+      exp: 1_700_003_600
+    });
+    const session = createTokenSession<void, TestUser, TestTokens, TestClaims>({
+      clear: () => undefined,
+      jwtSchema: Claims,
+      read: () => ({}),
+      tokenSchema: Tokens,
+      useRefreshToken: false,
+      userSchema : User,
+      write: () => undefined
+    });
+
+    expect(session.parseTokens({
+      accessToken
+    })).toEqual({
+      tokens: {
+        accessToken
+      }
+    });
   });
 
   it("refreshes expiring JWT token pairs and stores the next tokens", async () => {
@@ -154,7 +236,7 @@ describe("session module", () => {
 
   it("stores SvelteKit token sessions with iron-session cookies", async () => {
     const cookies = createMemoryCookies();
-    const session = createSvelteKitTokenSession<TestUser, TestTokens>({
+    const session = createSession<TestUser, TestTokens>({
       getCookies    : () => cookies,
       sessionOptions: {
         cookieName: "app_session",

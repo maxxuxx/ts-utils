@@ -218,7 +218,7 @@ const accessToken = await session.getAccessToken(undefined);
 SvelteKit sessions use `iron-session` cookies. React sessions use browser storage and `useSyncExternalStore`
 
 ```ts
-import { createSvelteKitTokenSession } from "@maxxuxx/ts-utils/session/sveltekit";
+import { createSession } from "@maxxuxx/ts-utils/session/sveltekit";
 import { createReactTokenSession } from "@maxxuxx/ts-utils/session/react";
 ```
 

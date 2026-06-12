@@ -54,7 +54,7 @@ export type SvelteKitTokenSession<
   updateUser: (user: TUser, cookies?: SvelteKitCookies) => Promise<void>;
 }>;
 
-export const createSvelteKitTokenSession = <
+export const createSession = <
   TUser,
   TTokens extends TokenSessionTokens,
   TClaims extends JwtPayload = JwtPayload
@@ -125,10 +125,6 @@ export const createSvelteKitTokenSession = <
     }
   });
 };
-
-export const createIronTokenSession = createSvelteKitTokenSession;
-
-export const createSvelteKitSession = createSvelteKitTokenSession;
 
 const resolveCookies = async (
   cookies: SvelteKitCookies | undefined,

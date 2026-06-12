@@ -50,6 +50,8 @@ const accessToken = await session.getAccessToken(undefined);
 
 JWT parsing and expiration checks only run when `jwtSchema` is provided. Opaque access tokens are accepted when no JWT schema is configured
 
+Use `parseTokens` to validate login or refresh response tokens before storing them in a session. It returns `{ tokens }` only when the token schema, access token, configured JWT schema, and required refresh token rule pass
+
 ## Refresh token sessions
 
 Add `refreshTokens` when the session can rotate tokens
@@ -84,10 +86,10 @@ npm install iron-session
 ```
 
 ```ts
-import { createSvelteKitTokenSession } from "@maxxuxx/ts-utils/session/sveltekit";
+import { createSession } from "@maxxuxx/ts-utils/session/sveltekit";
 import { getRequestEvent } from "$app/server";
 
-export const authSession = createSvelteKitTokenSession<User, Tokens>({
+export const authSession = createSession<User, Tokens>({
   getCookies: () => getRequestEvent().cookies,
   sessionOptions: {
     cookieName: "app_session",
