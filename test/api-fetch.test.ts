@@ -17,6 +17,9 @@ import {
   type FetchLike,
   z
 } from "../src/api-fetch/index.js";
+import {
+  createApiFetcher as createSvelteKitApiFetcher
+} from "../src/api-fetch/sveltekit.js";
 
 const User = z.object({
   id  : z.number(),
@@ -313,6 +316,141 @@ describe("api-fetch", () => {
     });
     expect(refresh).toHaveBeenCalledTimes(1);
     expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("creates SvelteKit fetchers with cookie-bound auth callbacks", async () => {
+    const cookies = {
+      accessToken: "token"
+    };
+    const fetch = vi.fn<FetchLike>(async (_input, init) => {
+      const headers = new Headers(init?.headers);
+
+      return jsonResponse({
+        authorization: headers.get("Authorization")
+      });
+    });
+    const getAccessToken = vi.fn((input: typeof cookies) => input.accessToken);
+    const clear = vi.fn((input: typeof cookies) => {
+      input.accessToken = "";
+    });
+    const api = createSvelteKitApiFetcher({
+      cookies,
+      fetch,
+      auth: {
+        clear,
+        getAccessToken
+      }
+    });
+
+    const result = await api.get("/me");
+
+    expect(result.response).toEqual({
+      authorization: "Bearer token"
+    });
+    expect(getAccessToken).toHaveBeenCalledWith(cookies);
+    expect(clear).not.toHaveBeenCalled();
+  });
+
+  it("dedupes SvelteKit auth refreshes across fetcher instances with the same access token", async () => {
+    const cookiesA = { accessToken: "expired" };
+    const cookiesB = { accessToken: "expired" };
+    const refreshGate = createDeferred<void>();
+    const fetch = vi.fn<FetchLike>(async (_input, init) => {
+      const headers = new Headers(init?.headers);
+
+      if (headers.get("Authorization") === "Bearer fresh") {
+        return jsonResponse({ ok: true });
+      }
+
+      return jsonResponse({ message: "expired" }, 401);
+    });
+    const refresh = vi.fn(async (cookies: typeof cookiesA) => {
+      await refreshGate.promise;
+      cookies.accessToken = "fresh";
+
+      return "fresh";
+    });
+    const auth = {
+      getAccessToken: (cookies: typeof cookiesA) => cookies.accessToken,
+      refresh
+    };
+    const apiA = createSvelteKitApiFetcher({
+      cookies: cookiesA,
+      fetch,
+      auth
+    });
+    const apiB = createSvelteKitApiFetcher({
+      cookies: cookiesB,
+      fetch,
+      auth
+    });
+
+    const requestA = apiA.get("/me", {
+      responseSchema: z.object({ ok: z.boolean() })
+    });
+    const requestB = apiB.get("/me", {
+      responseSchema: z.object({ ok: z.boolean() })
+    });
+
+    await vi.waitFor(() => {
+      expect(refresh).toHaveBeenCalledTimes(1);
+    });
+
+    refreshGate.resolve();
+
+    await expect(Promise.all([requestA, requestB])).resolves.toEqual([
+      {
+        code    : 200,
+        response: { ok: true }
+      },
+      {
+        code    : 200,
+        response: { ok: true }
+      }
+    ]);
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledTimes(4);
+  });
+
+  it("keeps SvelteKit auth refreshes separate for different access tokens", async () => {
+    const cookiesA = { accessToken: "expired-a" };
+    const cookiesB = { accessToken: "expired-b" };
+    const fetch = vi.fn<FetchLike>(async (_input, init) => {
+      const headers = new Headers(init?.headers);
+      const authorization = headers.get("Authorization");
+
+      if (authorization === "Bearer fresh-expired-a" || authorization === "Bearer fresh-expired-b") {
+        return jsonResponse({ ok: true });
+      }
+
+      return jsonResponse({ message: "expired" }, 401);
+    });
+    const refresh = vi.fn(async (cookies: typeof cookiesA) => {
+      const accessToken = `fresh-${cookies.accessToken}`;
+
+      cookies.accessToken = accessToken;
+
+      return accessToken;
+    });
+    const auth = {
+      getAccessToken: (cookies: typeof cookiesA) => cookies.accessToken,
+      refresh
+    };
+
+    await Promise.all([
+      createSvelteKitApiFetcher({
+        cookies: cookiesA,
+        fetch,
+        auth
+      }).get("/me"),
+      createSvelteKitApiFetcher({
+        cookies: cookiesB,
+        fetch,
+        auth
+      }).get("/me")
+    ]);
+
+    expect(refresh).toHaveBeenCalledTimes(2);
   });
 
   it("creates reusable endpoints with path params, query, response schema, and select", async () => {
@@ -654,3 +792,18 @@ const jsonResponse = (body: unknown, status = 200): Response => new Response(
     }
   }
 );
+
+function createDeferred<TValue>() {
+  let reject!: (reason?: unknown) => void;
+  let resolve!: (value: TValue | PromiseLike<TValue>) => void;
+  const promise = new Promise<TValue>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject  = promiseReject;
+  });
+
+  return {
+    promise,
+    reject,
+    resolve
+  };
+}

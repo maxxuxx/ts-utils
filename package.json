@@ -1,6 +1,6 @@
 {
   "name": "@maxxuxx/ts-utils",
-  "version": "0.7.13",
+  "version": "0.7.14",
   "description": "Shared TypeScript utilities",
   "type": "module",
   "license": "MIT",
@@ -91,6 +91,10 @@
     "./api-fetch": {
       "types": "./dist/api-fetch/index.d.ts",
       "import": "./dist/api-fetch/index.js"
+    },
+    "./api-fetch/sveltekit": {
+      "types": "./dist/api-fetch/sveltekit.d.ts",
+      "import": "./dist/api-fetch/sveltekit.js"
     },
     "./http-response": {
       "types": "./dist/http-response/index.d.ts",
