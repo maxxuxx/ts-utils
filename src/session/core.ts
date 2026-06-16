@@ -4,21 +4,29 @@ import {
   type JwtPayloadWithToken
 } from "../jwt/index.js";
 import type {
+  MaybePromise,
   SafeSchema,
   TokenSessionController,
   TokenSessionData,
   TokenSessionOptions,
   TokenSessionReason,
+  TokenSessionRefreshDedupeOptions,
   TokenSessionTokens
 } from "./types.js";
 
 // Errors
+const DEFAULT_REFRESH_CACHE_MS = 2_000;
+
 const DEFAULT_ERROR_MESSAGES: Record<TokenSessionReason, string> = {
   expired      : "Session token expired",
   invalid      : "Session is invalid",
   invalid_token: "Session token is invalid",
   unauthorized : "Session is unauthorized"
 };
+
+type RefreshPromise = Promise<TokenSessionTokens>;
+
+const refreshPromises = new Map<string, RefreshPromise>();
 
 export class TokenSessionError extends Error {
   readonly cause: unknown;
@@ -95,20 +103,31 @@ export const createTokenSession = <
     const tokens       = parseTokens(session.tokens);
     const accessToken  = readAccessToken(tokens);
     const refreshToken = readRefreshToken(tokens);
+    const refreshTokens = options.refreshTokens;
 
-    if (!useRefreshToken || !accessToken || !refreshToken || !options.refreshTokens) {
+    if (!useRefreshToken || !accessToken || !refreshToken || !refreshTokens) {
       throw createSessionError("invalid_token");
     }
 
     const claims = readClaims(accessToken);
-    const nextTokens = parseTokens(await options.refreshTokens(refreshToken, {
+    const refreshContext = {
       claims,
       context,
       refreshToken,
       session,
       tokens,
       user
-    }));
+    };
+    const executeRefresh = async (): Promise<TTokens> => parseTokens(
+      await refreshTokens(refreshToken, refreshContext)
+    );
+    const nextTokens = options.dedupeRefresh === false
+      ? await executeRefresh()
+      : await runRefreshOnce(
+        refreshToken,
+        executeRefresh,
+        resolveRefreshCacheMs(options.dedupeRefresh)
+      );
 
     await options.write(context, {
       ...session,
@@ -223,6 +242,56 @@ const createSessionError = (
 ): TokenSessionError => (
   new TokenSessionError(reason, cause)
 );
+
+const resolveRefreshCacheMs = (
+  dedupeRefresh: boolean | TokenSessionRefreshDedupeOptions | undefined
+): number => {
+  if (dedupeRefresh === true || dedupeRefresh === undefined) {
+    return DEFAULT_REFRESH_CACHE_MS;
+  }
+
+  if (dedupeRefresh === false) {
+    return 0;
+  }
+
+  return dedupeRefresh.cacheSuccessMs ?? DEFAULT_REFRESH_CACHE_MS;
+};
+
+const runRefreshOnce = <TTokens extends TokenSessionTokens>(
+  key: string,
+  refresh: () => MaybePromise<TTokens>,
+  cacheSuccessMs: number
+): Promise<TTokens> => {
+  const existing = refreshPromises.get(key);
+
+  if (existing) {
+    return existing as Promise<TTokens>;
+  }
+
+  const promise = Promise.resolve()
+    .then(refresh)
+    .then((tokens) => {
+      if (cacheSuccessMs > 0) {
+        setTimeout(() => {
+          if (refreshPromises.get(key) === promise) {
+            refreshPromises.delete(key);
+          }
+        }, cacheSuccessMs);
+      } else {
+        refreshPromises.delete(key);
+      }
+
+      return tokens;
+    })
+    .catch((error) => {
+      refreshPromises.delete(key);
+      throw error;
+    });
+
+  refreshPromises.set(key, promise);
+
+  return promise;
+};
 
 const parseTokensOrNull = <
   TTokens extends TokenSessionTokens,

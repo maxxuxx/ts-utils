@@ -71,12 +71,17 @@ export type TokenRefreshContext<
   user: TUser;
 }>;
 
+export type TokenSessionRefreshDedupeOptions = Readonly<{
+  cacheSuccessMs?: number;
+}>;
+
 export type TokenSessionOptions<
   TContext,
   TUser,
   TTokens extends TokenSessionTokens,
   TClaims extends JwtPayload = JwtPayload
 > = TokenSessionStore<TContext, TUser, TTokens> & Readonly<{
+  dedupeRefresh?: boolean | TokenSessionRefreshDedupeOptions;
   jwtSchema?: SafeSchema<TClaims>;
   now?: () => number;
   refreshThresholdSeconds?: number;

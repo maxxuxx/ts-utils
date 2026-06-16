@@ -75,6 +75,8 @@ const session = createTokenSession<void, User, Tokens>({
 });
 ```
 
+Concurrent refreshes with the same refresh token are deduped by default and the successful token pair is shared briefly with other in-flight requests. Use `dedupeRefresh: false` to disable this, or `dedupeRefresh: { cacheSuccessMs: 1000 }` to tune the short success cache
+
 Refresh tokens are required by default. Set `useRefreshToken: false` for access-token-only sessions
 
 ## SvelteKit

@@ -2,6 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
 import {
+  createApiFetcher,
+  type FetchLike
+} from "../src/api-fetch/index.js";
+import {
   TokenSessionError,
   createTokenSession
 } from "../src/session/index.js";
@@ -210,6 +214,268 @@ describe("session module", () => {
     expect(storedSession.tokens?.refreshToken).toBe("next-refresh-token");
   });
 
+  it("dedupes concurrent refresh token rotation and writes next tokens to every request context", async () => {
+    const nowSeconds = 1_700_000_000;
+    const expiringAccessToken = createToken({
+      exp: nowSeconds + 60
+    });
+    const nextAccessToken = createToken({
+      exp    : nowSeconds + 3600,
+      version: "next"
+    });
+    type RequestContext = {
+      endpoint: string;
+      session: TestSession;
+    };
+    const createRequestContext = (endpoint: string): RequestContext => ({
+      endpoint,
+      session: {
+        tokens: {
+          accessToken : expiringAccessToken,
+          refreshToken: "concurrent-refresh-token"
+        },
+        user: {
+          id: "user-1"
+        }
+      }
+    });
+    const contexts = [
+      createRequestContext("/me"),
+      createRequestContext("/threads"),
+      createRequestContext("/notifications")
+    ];
+    const refreshGate = createDeferred<void>();
+    const rotatedRefreshTokens = new Set<string>();
+    const refreshTokens = vi.fn(async (refreshToken: string) => {
+      if (rotatedRefreshTokens.has(refreshToken)) {
+        throw new Error("refresh token already rotated");
+      }
+
+      rotatedRefreshTokens.add(refreshToken);
+      await refreshGate.promise;
+
+      return {
+        accessToken : nextAccessToken,
+        refreshToken: "next-refresh-token"
+      };
+    });
+    const session = createTokenSession<RequestContext, TestUser, TestTokens>({
+      clear: (context) => {
+        context.session = {};
+      },
+      jwtSchema: Claims,
+      now      : () => nowSeconds * 1000,
+      read     : (context) => context.session,
+      refreshThresholdSeconds: 300,
+      refreshTokens,
+      tokenSchema: Tokens,
+      userSchema : User,
+      write: (context, nextSession) => {
+        context.session = nextSession;
+      }
+    });
+    const callProtectedApi = async (context: RequestContext) => {
+      await session.ensure(context);
+
+      return {
+        authorization: `Bearer ${await session.getAccessToken(context)}`,
+        endpoint     : context.endpoint,
+        refreshToken : context.session.tokens?.refreshToken
+      };
+    };
+
+    const requests = contexts.map(callProtectedApi);
+
+    await vi.waitFor(() => {
+      expect(refreshTokens).toHaveBeenCalledTimes(1);
+    });
+
+    refreshGate.resolve();
+
+    await expect(Promise.all(requests)).resolves.toEqual([
+      {
+        authorization: `Bearer ${nextAccessToken}`,
+        endpoint     : "/me",
+        refreshToken : "next-refresh-token"
+      },
+      {
+        authorization: `Bearer ${nextAccessToken}`,
+        endpoint     : "/threads",
+        refreshToken : "next-refresh-token"
+      },
+      {
+        authorization: `Bearer ${nextAccessToken}`,
+        endpoint     : "/notifications",
+        refreshToken : "next-refresh-token"
+      }
+    ]);
+    expect(refreshTokens).toHaveBeenCalledTimes(1);
+    expect(contexts.map((context) => context.session.tokens)).toEqual([
+      {
+        accessToken : nextAccessToken,
+        refreshToken: "next-refresh-token"
+      },
+      {
+        accessToken : nextAccessToken,
+        refreshToken: "next-refresh-token"
+      },
+      {
+        accessToken : nextAccessToken,
+        refreshToken: "next-refresh-token"
+      }
+    ]);
+  });
+
+  it("shares rotated session tokens across concurrent retried API requests", async () => {
+    const nowSeconds = 1_700_000_000;
+    const expiringAccessToken = createToken({
+      exp: nowSeconds + 60
+    });
+    const nextAccessToken = createToken({
+      exp    : nowSeconds + 3600,
+      version: "api-retry"
+    });
+    type RequestContext = {
+      endpoint: string;
+      session: TestSession;
+    };
+    const createRequestContext = (endpoint: string): RequestContext => ({
+      endpoint,
+      session: {
+        tokens: {
+          accessToken : expiringAccessToken,
+          refreshToken: "api-retry-refresh-token"
+        },
+        user: {
+          id: "user-1"
+        }
+      }
+    });
+    const contexts = [
+      createRequestContext("/me"),
+      createRequestContext("/threads"),
+      createRequestContext("/notifications")
+    ];
+    const refreshGate = createDeferred<void>();
+    const rotatedRefreshTokens = new Set<string>();
+    const refreshTokens = vi.fn(async (refreshToken: string) => {
+      if (rotatedRefreshTokens.has(refreshToken)) {
+        throw new Error("refresh token already rotated");
+      }
+
+      rotatedRefreshTokens.add(refreshToken);
+      await refreshGate.promise;
+
+      return {
+        accessToken : nextAccessToken,
+        refreshToken: "api-retry-next-refresh-token"
+      };
+    });
+    const session = createTokenSession<RequestContext, TestUser, TestTokens>({
+      clear: (context) => {
+        context.session = {};
+      },
+      jwtSchema: Claims,
+      now      : () => nowSeconds * 1000,
+      read     : (context) => context.session,
+      refreshThresholdSeconds: 300,
+      refreshTokens,
+      tokenSchema: Tokens,
+      userSchema : User,
+      write: (context, nextSession) => {
+        context.session = nextSession;
+      }
+    });
+    const fetch = vi.fn<FetchLike>(async (input, init) => {
+      const headers = new Headers(init?.headers);
+      const authorization = headers.get("Authorization");
+      const path = String(input).replace("https://api.example.com", "");
+
+      if (authorization === `Bearer ${nextAccessToken}`) {
+        return jsonResponse({
+          ok: true,
+          path
+        });
+      }
+
+      return jsonResponse({
+        message: "expired"
+      }, 401);
+    });
+    const createApi = (context: RequestContext) => createApiFetcher({
+      baseURL: "https://api.example.com",
+      fetch,
+      auth: {
+        getAccessToken: () => session.getAccessToken(context),
+        refresh       : () => session.refresh(context)
+      }
+    });
+    const requests = contexts.map((context) => (
+      createApi(context).get(context.endpoint, {
+        responseSchema: z.object({
+          ok  : z.boolean(),
+          path: z.string()
+        })
+      })
+    ));
+
+    await vi.waitFor(() => {
+      expect(refreshTokens).toHaveBeenCalledTimes(1);
+    });
+
+    refreshGate.resolve();
+
+    await expect(Promise.all(requests)).resolves.toEqual([
+      {
+        code    : 200,
+        response: {
+          ok  : true,
+          path: "/me"
+        }
+      },
+      {
+        code    : 200,
+        response: {
+          ok  : true,
+          path: "/threads"
+        }
+      },
+      {
+        code    : 200,
+        response: {
+          ok  : true,
+          path: "/notifications"
+        }
+      }
+    ]);
+    expect(refreshTokens).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledTimes(6);
+    expect(fetch.mock.calls.map(([, init]) => (
+      new Headers(init?.headers).get("Authorization")
+    ))).toEqual([
+      `Bearer ${expiringAccessToken}`,
+      `Bearer ${expiringAccessToken}`,
+      `Bearer ${expiringAccessToken}`,
+      `Bearer ${nextAccessToken}`,
+      `Bearer ${nextAccessToken}`,
+      `Bearer ${nextAccessToken}`
+    ]);
+    expect(contexts.map((context) => context.session.tokens)).toEqual([
+      {
+        accessToken : nextAccessToken,
+        refreshToken: "api-retry-next-refresh-token"
+      },
+      {
+        accessToken : nextAccessToken,
+        refreshToken: "api-retry-next-refresh-token"
+      },
+      {
+        accessToken : nextAccessToken,
+        refreshToken: "api-retry-next-refresh-token"
+      }
+    ]);
+  });
+
   it("throws a session error for expired access-token-only JWT sessions", async () => {
     const session = createTokenSession<void, TestUser, TestTokens>({
       clear: () => undefined,
@@ -323,6 +589,16 @@ const encodeBase64Url = (value: unknown): string => (
     .toString("base64url")
 );
 
+const jsonResponse = (body: unknown, status = 200): Response => new Response(
+  JSON.stringify(body),
+  {
+    status,
+    headers: {
+      "Content-Type": "application/json"
+    }
+  }
+);
+
 const createMemoryCookies = () => {
   const values = new Map<string, string>();
 
@@ -347,3 +623,18 @@ const createMemoryStorage = () => {
     }
   };
 };
+
+function createDeferred<TValue>() {
+  let reject!: (reason?: unknown) => void;
+  let resolve!: (value: TValue | PromiseLike<TValue>) => void;
+  const promise = new Promise<TValue>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject  = promiseReject;
+  });
+
+  return {
+    promise,
+    reject,
+    resolve
+  };
+}

@@ -13,6 +13,7 @@ export type {
   TokenSessionController,
   TokenSessionData,
   TokenSessionOptions,
+  TokenSessionRefreshDedupeOptions,
   TokenSessionStore,
   TokenSessionTokens
 } from "./types.js";
