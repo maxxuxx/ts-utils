@@ -1,14 +1,17 @@
+/** Success variant returned by try-catch helpers */
 // Result types
 export type ResultSuccess<TData> = Readonly<{
   ok  : true;
   data: TData;
 }>;
 
+/** Failure variant returned by try-catch helpers */
 export type ResultFailure<TError = unknown> = Readonly<{
   ok   : false;
   error: TError;
 }>;
 
+/** Result returned by result */
 export type Result<TData, TError = unknown> =
   | ResultSuccess<TData>
   | ResultFailure<TError>;
@@ -25,6 +28,7 @@ const failure = <TError>(error: TError): ResultFailure<TError> => ({
 });
 
 // Try catch helpers
+/** Runs catch and returns a result object */
 export const tryCatch = <TData, TError = unknown>(
   fn: () => TData
 ): Result<TData, TError> => {
@@ -35,6 +39,7 @@ export const tryCatch = <TData, TError = unknown>(
   }
 };
 
+/** Runs catch async and returns a result object */
 export const tryCatchAsync = async <TData, TError = unknown>(
   fn: () => PromiseLike<TData>
 ): Promise<Result<TData, TError>> => {
@@ -46,6 +51,7 @@ export const tryCatchAsync = async <TData, TError = unknown>(
 };
 
 // Error helpers
+/** Returns error message */
 export const getErrorMessage = (error: unknown): string => {
   if (error instanceof Error) {
     return error.message;
@@ -62,6 +68,7 @@ export const getErrorMessage = (error: unknown): string => {
   return stringifyError(error);
 };
 
+/** Normalizes error */
 export const normalizeError = (error: unknown): Error => {
   if (error instanceof Error) {
     return error;

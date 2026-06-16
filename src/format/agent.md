@@ -42,3 +42,6 @@ Invalid inputs should return a fallback string instead of throwing
 Invalid `Date` values and unsafe `bigint` values must use the fallback instead of formatting through `0`
 
 Keep module docs updated whenever exports or formatting behavior changes
+## Public documentation
+
+Every exported function, class, constant, interface, and type alias must have concise JSDoc before the declaration so editor hover explains purpose, important behavior, and expected usage

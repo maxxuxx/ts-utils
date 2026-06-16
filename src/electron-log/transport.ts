@@ -5,6 +5,7 @@ import type {
 } from "./types.js";
 
 // Transport helpers
+/** Resolves transport level */
 export const resolveTransportLevel = (
   baseLevel: LogLevelOption,
   options?: TransportOptions
@@ -16,6 +17,7 @@ export const resolveTransportLevel = (
   return options?.level ?? baseLevel;
 };
 
+/** Configures transport */
 export const configureTransport = (
   transport: LogTransport | undefined,
   baseLevel: LogLevelOption,

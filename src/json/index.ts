@@ -1,16 +1,21 @@
+/** Represents json primitive */
 export type JsonPrimitive = string | number | boolean | null;
 
+/** Represents json object */
 export type JsonObject = {
   [key: string]: JsonValue;
 };
 
+/** Represents json array */
 export type JsonArray = JsonValue[];
 
+/** Represents json value */
 export type JsonValue =
   | JsonArray
   | JsonObject
   | JsonPrimitive;
 
+/** Result returned by json */
 export type JsonResult<TData, TError = unknown> =
   | {
       ok: true;
@@ -21,23 +26,28 @@ export type JsonResult<TData, TError = unknown> =
       error: TError;
     };
 
+/** Schema contract for json */
 export type JsonSchema<TValue> = {
   parse: (value: unknown) => TValue;
 };
 
+/** Options for json parse */
 export type JsonParseOptions<TFallback = never> = {
   fallback?: TFallback;
 };
 
+/** Options for json stringify */
 export type JsonStringifyOptions<TFallback = never> = {
   fallback?: TFallback;
   replacer?: (this: unknown, key: string, value: unknown) => unknown;
   space?: number | string;
 };
 
+/** Options for json parse with schema */
 export type JsonParseWithSchemaOptions<TFallback = never> =
   JsonParseOptions<TFallback>;
 
+/** Error raised for json parse failures */
 export class JsonParseError extends Error {
   readonly cause: unknown;
 
@@ -49,6 +59,7 @@ export class JsonParseError extends Error {
   }
 }
 
+/** Error raised for json stringify failures */
 export class JsonStringifyError extends Error {
   readonly cause: unknown;
 
@@ -139,10 +150,12 @@ const isJsonValueInternal = (
   return Object.values(value).every((item) => isJsonValueInternal(item, seen));
 };
 
+/** Checks whether a value is json value */
 export const isJsonValue = (value: unknown): value is JsonValue => (
   isJsonValueInternal(value, new WeakSet())
 );
 
+/** Safely parses json */
 export const safeParseJson = <TValue = unknown>(
   text: string | null | undefined
 ): JsonResult<TValue, JsonParseError> => {
@@ -153,6 +166,7 @@ export const safeParseJson = <TValue = unknown>(
   }
 };
 
+/** Parses json */
 export const parseJson = <TValue = unknown, TFallback = never>(
   text: string | null | undefined,
   options: JsonParseOptions<TFallback> = {}
@@ -170,6 +184,7 @@ export const parseJson = <TValue = unknown, TFallback = never>(
   throw result.error;
 };
 
+/** Provides the safe stringify json helper */
 export const safeStringifyJson = (
   value: unknown,
   options: Omit<JsonStringifyOptions, "fallback"> = {}
@@ -189,6 +204,7 @@ export const safeStringifyJson = (
   }
 };
 
+/** Provides the stringify json helper */
 export const stringifyJson = <TFallback = never>(
   value: unknown,
   options: JsonStringifyOptions<TFallback> = {}
@@ -206,6 +222,7 @@ export const stringifyJson = <TFallback = never>(
   throw result.error;
 };
 
+/** Safely parses json with schema */
 export const safeParseJsonWithSchema = <TValue>(
   text: string | null | undefined,
   schema: JsonSchema<TValue>
@@ -223,6 +240,7 @@ export const safeParseJsonWithSchema = <TValue>(
   }
 };
 
+/** Parses json with schema */
 export const parseJsonWithSchema = <TValue, TFallback = never>(
   text: string | null | undefined,
   schema: JsonSchema<TValue>,
@@ -241,6 +259,7 @@ export const parseJsonWithSchema = <TValue, TFallback = never>(
   throw result.error;
 };
 
+/** Grouped helpers for the json module */
 export const json = Object.freeze({
   isValue: isJsonValue,
   parse: parseJson,

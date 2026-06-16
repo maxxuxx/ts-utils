@@ -40,3 +40,6 @@ Do not wrap or replace Node's `node:path`
 `buildUrl` should join relative paths onto the base path instead of treating a leading slash as host root replacement
 
 Keep module docs updated whenever URL behavior, exports, or internal file layout changes
+## Public documentation
+
+Every exported function, class, constant, interface, and type alias must have concise JSDoc before the declaration so editor hover explains purpose, important behavior, and expected usage

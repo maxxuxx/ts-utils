@@ -48,6 +48,8 @@ SvelteKit helpers can receive `getCookies` so callers can use `getSession()`, `e
 
 JWT parsing and expiration checks only run when `jwtSchema` is provided, so opaque access tokens are valid in access-token-only apps
 
+Refresh results are parsed through `tokenSchema` and, when configured, `jwtSchema` before being written back to storage
+
 `refreshThresholdSeconds` refreshes only when a JWT is present, a refresh token exists, and `refreshTokens` is configured
 
 The core controller is storage agnostic. Apps provide `read`, `write`, and `clear`
@@ -55,3 +57,6 @@ The core controller is storage agnostic. Apps provide `read`, `write`, and `clea
 Keep API request header formatting in `api-fetch` through `formatTokenHeader`; session should store token data and expose access tokens, not own request headers
 
 Keep module docs updated whenever session shape, refresh behavior, framework adapters, exports, or optional peer dependencies change
+## Public documentation
+
+Every exported function, class, constant, interface, and type alias must have concise JSDoc before the declaration so editor hover explains purpose, important behavior, and expected usage

@@ -7,11 +7,13 @@ import type {
 } from "./types.js";
 
 // Request body parsing
+/** Represents parsed request body */
 export type ParsedRequestBody = Readonly<{
   body       : RequestInit["body"] | undefined;
   isJsonBody : boolean;
 }>;
 
+/** Parses request body */
 export const parseRequestBody = <
   TBodySchema extends OptionalSchema,
   TResponseSchema extends OptionalSchema,
@@ -68,6 +70,7 @@ const parseRequestJson = <
 };
 
 // Response parsing
+/** Parses response body */
 export const parseResponseBody = <TResponseSchema extends OptionalSchema>(
   body: unknown,
   responseSchema: TResponseSchema,
@@ -91,6 +94,7 @@ export const parseResponseBody = <TResponseSchema extends OptionalSchema>(
   return parsedBody.data as SchemaOutput<TResponseSchema>;
 };
 
+/** Reads response body */
 export const readResponseBody = async (
   response: Response,
   context: ApiRequestContext

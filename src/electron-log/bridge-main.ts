@@ -17,6 +17,7 @@ const logToMain = (
 };
 
 // Main bridge
+/** Registers main bridge */
 export const registerMainBridge = (
   options: MainBridgeOptions
 ): (() => void) => {

@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { Parser } from "./types.js";
 
 // Parser factory
+/** Creates parser */
 export const createParser = <TSchema extends z.ZodTypeAny>(
   schema: TSchema
 ): Parser<TSchema> => {

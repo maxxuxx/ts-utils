@@ -25,3 +25,6 @@ Structured payloads use `serverReceiveTimeMs` and `serverTransmitTimeMs`. Numeri
 `pickBestTimeSyncSample` chooses the lowest round trip sample, then the smallest absolute offset, then the newest sample.
 
 Keep this module free of runtime dependencies and DOM type references.
+## Public documentation
+
+Every exported function, class, constant, interface, and type alias must have concise JSDoc before the declaration so editor hover explains purpose, important behavior, and expected usage

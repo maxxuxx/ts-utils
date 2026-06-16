@@ -5,6 +5,7 @@ import type {
 } from "./types.js";
 
 // HTTP errors
+/** Error raised for api http failures */
 export class ApiHttpError extends Error {
   readonly body: unknown;
   readonly code: ApiErrorCode | undefined;
@@ -36,6 +37,7 @@ export class ApiHttpError extends Error {
   }
 }
 
+/** Returns api message */
 export const getApiMessage = (data: unknown): string | undefined => {
   if (typeof data !== "object" || data === null || !("message" in data)) {
     return undefined;
@@ -46,6 +48,7 @@ export const getApiMessage = (data: unknown): string | undefined => {
   return typeof message === "string" ? message : undefined;
 };
 
+/** Returns api error code */
 export const getApiErrorCode = (data: unknown): ApiErrorCode | undefined => {
   if (typeof data !== "object" || data === null || !("code" in data)) {
     return undefined;
@@ -57,6 +60,7 @@ export const getApiErrorCode = (data: unknown): ApiErrorCode | undefined => {
 };
 
 // Validation errors
+/** Error raised for api validation failures */
 export class ApiValidationError extends Error {
   readonly body: unknown;
   readonly context: ApiRequestContext;
@@ -80,6 +84,7 @@ export class ApiValidationError extends Error {
 }
 
 // Parse errors
+/** Error raised for api parse failures */
 export class ApiParseError extends Error {
   readonly context: ApiRequestContext;
   readonly status: number;
@@ -96,6 +101,7 @@ export class ApiParseError extends Error {
 }
 
 // Timeout errors
+/** Error raised for api timeout failures */
 export class ApiTimeoutError extends Error {
   readonly context: ApiRequestContext;
   readonly timeout: number;
@@ -110,6 +116,7 @@ export class ApiTimeoutError extends Error {
 }
 
 // Auth errors
+/** Error raised for api auth failures */
 export class ApiAuthError extends Error {
   readonly cause: unknown;
 

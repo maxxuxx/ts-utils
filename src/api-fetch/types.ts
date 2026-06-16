@@ -2,6 +2,7 @@ import type { ApiLogging } from "./logging.js";
 import type { z } from "zod";
 
 // HTTP types
+/** Allowed values for api method */
 export const ApiMethod = {
   DELETE: "DELETE",
   GET   : "GET",
@@ -10,27 +11,37 @@ export const ApiMethod = {
   PUT   : "PUT"
 } as const;
 
+/** HTTP method value accepted by API helpers */
 export type ApiMethod = (typeof ApiMethod)[keyof typeof ApiMethod];
 
+/** Value accepted in query string helpers */
 export type QueryValue = string | number | boolean | null | undefined;
 
+/** Query input accepted by URL and API helpers */
 export type QueryParams =
   | URLSearchParams
   | Array<[string, QueryValue]>
   | Record<string, QueryValue | QueryValue[]>;
 
+/** Header input accepted by the Fetch Headers constructor */
 export type ApiHeadersInit = ConstructorParameters<typeof Headers>[0];
 
 // Schema types
+/** Accepts any Zod schema */
 export type AnySchema = z.ZodType;
+
+/** Accepts a Zod schema or no schema */
 export type OptionalSchema = z.ZodType | undefined;
 
+/** Input type inferred from an optional schema */
 export type SchemaInput<TSchema extends OptionalSchema> =
   TSchema extends z.ZodType ? z.input<TSchema> : unknown;
 
+/** Output type inferred from an optional schema */
 export type SchemaOutput<TSchema extends OptionalSchema> =
   TSchema extends z.ZodType ? z.output<TSchema> : unknown;
 
+/** Payload shape for api response */
 export type ApiResponsePayload<TData> =
   TData extends { data?: infer TResponseData }
     ? TData extends { code: unknown } | { message: unknown }
@@ -38,31 +49,39 @@ export type ApiResponsePayload<TData> =
       : TData
     : TData;
 
+/** Data value exposed from an API response payload */
 export type ApiResponseData<TData> = ApiResponsePayload<TData>;
 
 // Shared types
+/** Allows a value or a promise of that value */
 export type MaybePromise<TValue> = TValue | Promise<TValue>;
 
+/** Standard success response returned by the API fetcher */
 export type ApiResponse<TResponse> = Readonly<{
   code     : number;
   message ?: string;
   response : TResponse;
 }>;
 
+/** Application error code copied from an API error body */
 export type ApiErrorCode = string | number;
 
+/** Fallback code and message used when an API error body is incomplete */
 export type ApiErrorFallback = Readonly<{
   code   ?: ApiErrorCode;
   message?: string;
 }>;
 
+/** Options for api http error */
 export type ApiHttpErrorOptions = ApiErrorFallback;
 
+/** Minimal compatible shape for fetch */
 export type FetchLike = (
   input: string | URL | Request,
   init?: RequestInit
 ) => Promise<Response>;
 
+/** Context passed to api request */
 export type ApiRequestContext = Readonly<{
   method: ApiMethod;
   path  : string;
@@ -70,18 +89,22 @@ export type ApiRequestContext = Readonly<{
 }>;
 
 // Hooks
+/** Context passed to api timed request */
 export type ApiTimedRequestContext = ApiRequestContext & Readonly<{
   startedAt: number;
 }>;
 
+/** Context passed to api hook */
 export type ApiHookContext = ApiTimedRequestContext;
 
+/** Context passed to api response hook */
 export type ApiResponseHookContext = ApiTimedRequestContext & Readonly<{
   data      : unknown;
   durationMs: number;
   response  : Response;
 }>;
 
+/** Context passed to api error hook */
 export type ApiErrorHookContext = ApiTimedRequestContext & Readonly<{
   data      ?: unknown;
   durationMs: number;
@@ -89,6 +112,7 @@ export type ApiErrorHookContext = ApiTimedRequestContext & Readonly<{
   response ?: Response;
 }>;
 
+/** Lifecycle hooks called around API requests and responses */
 export type ApiHooks = Readonly<{
   onRequest      ?: (context: ApiHookContext) => MaybePromise<void>;
   onRequestError ?: (context: ApiErrorHookContext) => MaybePromise<void>;
@@ -97,6 +121,7 @@ export type ApiHooks = Readonly<{
 }>;
 
 // Retry
+/** Context passed to api retry */
 export type ApiRetryContext = ApiRequestContext & Readonly<{
   attempt : number;
   error   : unknown;
@@ -104,6 +129,7 @@ export type ApiRetryContext = ApiRequestContext & Readonly<{
   status  ?: number;
 }>;
 
+/** Options for api retry */
 export type ApiRetryOptions = Readonly<{
   delay      ?: number | ((context: ApiRetryContext) => number);
   limit      ?: number;
@@ -112,13 +138,16 @@ export type ApiRetryOptions = Readonly<{
   statusCodes?: readonly number[];
 }>;
 
+/** Retry setting accepted by API requests */
 export type ApiRetry = boolean | number | ApiRetryOptions;
 
 // Auth
+/** Converts an access token into request headers */
 export type ApiTokenHeaderFormatter = (
   accessToken: string
 ) => ApiHeadersInit | null | undefined;
 
+/** Options for api auth */
 export type ApiAuthOptions = Readonly<{
   clear               ?: () => MaybePromise<void>;
   formatTokenHeader   ?: ApiTokenHeaderFormatter;
@@ -128,6 +157,7 @@ export type ApiAuthOptions = Readonly<{
 }>;
 
 // Request options
+/** Options for api request */
 export type ApiRequestOptions<
   TBodySchema extends OptionalSchema = undefined,
   TResponseSchema extends OptionalSchema = undefined,
@@ -148,6 +178,7 @@ export type ApiRequestOptions<
   timeout        ?: number;
 };
 
+/** Options for api read */
 export type ApiReadOptions<
   TResponseSchema extends OptionalSchema = undefined,
   TResult = ApiResponse<ApiResponsePayload<SchemaOutput<TResponseSchema>>>
@@ -156,12 +187,14 @@ export type ApiReadOptions<
   "body" | "bodySchema" | "rawBody"
 >;
 
+/** Options for api write */
 export type ApiWriteOptions<
   TBodySchema extends OptionalSchema = undefined,
   TResponseSchema extends OptionalSchema = undefined,
   TResult = ApiResponse<ApiResponsePayload<SchemaOutput<TResponseSchema>>>
 > = ApiRequestOptions<TBodySchema, TResponseSchema, TResult>;
 
+/** Callable read method signature for GET and DELETE requests */
 export type ApiReadMethod = {
   <TResponseSchema extends z.ZodType, TResult = ApiResponse<ApiResponsePayload<SchemaOutput<TResponseSchema>>>>(
     path: string,
@@ -175,6 +208,7 @@ export type ApiReadMethod = {
   ): Promise<TData>;
 };
 
+/** Callable write method signature for POST, PUT, and PATCH requests */
 export type ApiWriteMethod = {
   <
     TBodySchema extends OptionalSchema = undefined,
@@ -195,6 +229,7 @@ export type ApiWriteMethod = {
   ): Promise<TData>;
 };
 
+/** Callable API request function shared by read and write methods */
 export type ApiRequest = {
   <
     TBodySchema extends OptionalSchema = undefined,
@@ -217,6 +252,7 @@ export type ApiRequest = {
   ): Promise<TData>;
 };
 
+/** Options for api fetcher */
 export type ApiFetcherOptions = Readonly<{
   auth         ?: ApiAuthOptions;
   baseURL      ?: string;
@@ -229,6 +265,7 @@ export type ApiFetcherOptions = Readonly<{
   timeout      ?: number;
 }>;
 
+/** API client returned by createApiFetcher */
 export type ApiFetcher = Readonly<{
   call: <TEndpoint extends AnyApiEndpoint>(
     endpoint: TEndpoint,
@@ -244,17 +281,21 @@ export type ApiFetcher = Readonly<{
 }>;
 
 // Endpoint types
+/** Represents endpoint params */
 export type EndpointParams<TParamsSchema extends OptionalSchema> =
   TParamsSchema extends z.ZodType ? z.output<TParamsSchema> : undefined;
 
+/** Represents endpoint query */
 export type EndpointQuery<TParamsSchema extends OptionalSchema> =
   | QueryParams
   | ((params: EndpointParams<TParamsSchema>) => QueryParams | undefined);
 
+/** Represents endpoint headers */
 export type EndpointHeaders<TParamsSchema extends OptionalSchema> =
   | ApiHeadersInit
   | ((params: EndpointParams<TParamsSchema>) => ApiHeadersInit | undefined);
 
+/** Options for api endpoint */
 export type ApiEndpointOptions<
   TParamsSchema extends OptionalSchema = undefined,
   TBodySchema extends OptionalSchema = undefined,
@@ -273,6 +314,7 @@ export type ApiEndpointOptions<
   timeout       ?: number;
 }>;
 
+/** Represents api endpoint */
 export type ApiEndpoint<
   TParamsSchema extends OptionalSchema = OptionalSchema,
   TBodySchema extends OptionalSchema = OptionalSchema,
@@ -289,8 +331,10 @@ export type ApiEndpoint<
   path   : string;
 }>;
 
+/** Endpoint definition with any supported schema combination */
 export type AnyApiEndpoint = ApiEndpoint<any, any, any, any>;
 
+/** Factory signature for endpoint */
 export type EndpointFactory<TMethod extends ApiMethod> = {
   <
     const TParamsSchema extends OptionalSchema = undefined,
@@ -322,21 +366,25 @@ export type EndpointFactory<TMethod extends ApiMethod> = {
   method: TMethod;
 };
 
+/** Represents endpoint call overrides */
 export type EndpointCallOverrides = Omit<
   ApiRequestOptions<undefined, undefined>,
   "body" | "bodySchema" | "responseSchema" | "select"
 >;
 
+/** Path params input inferred from an endpoint schema */
 export type EndpointParamsInput<TParamsSchema extends OptionalSchema> =
   TParamsSchema extends z.ZodType
     ? { params: z.input<TParamsSchema> }
     : { params?: undefined };
 
+/** Request body input inferred from an endpoint schema */
 export type EndpointBodyInput<TBodySchema extends OptionalSchema> =
   TBodySchema extends z.ZodType
     ? { body: z.input<TBodySchema> }
     : { body?: undefined };
 
+/** Input object accepted when calling an endpoint */
 export type EndpointCallInput<
   TParamsSchema extends OptionalSchema,
   TBodySchema extends OptionalSchema
@@ -344,6 +392,7 @@ export type EndpointCallInput<
   & EndpointBodyInput<TBodySchema>
   & EndpointParamsInput<TParamsSchema>;
 
+/** Argument tuple required to call an endpoint */
 export type EndpointCallArgs<TEndpoint extends AnyApiEndpoint> =
   TEndpoint extends ApiEndpoint<infer TParamsSchema, infer TBodySchema, any, any>
     ? TParamsSchema extends z.ZodType
@@ -353,6 +402,7 @@ export type EndpointCallArgs<TEndpoint extends AnyApiEndpoint> =
         : [input?: EndpointCallInput<TParamsSchema, TBodySchema>]
     : never;
 
+/** Result returned by endpoint */
 export type EndpointResult<TEndpoint extends AnyApiEndpoint> =
   TEndpoint extends ApiEndpoint<any, any, any, infer TResult>
     ? TResult

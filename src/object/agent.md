@@ -40,3 +40,6 @@ Keep functions shallow and predictable; do not add deep merge or path traversal 
 `entries` follows `Object.entries` semantics and only returns enumerable string-keyed entries
 
 Keep module docs updated whenever object behavior, exports, or internal file layout changes
+## Public documentation
+
+Every exported function, class, constant, interface, and type alias must have concise JSDoc before the declaration so editor hover explains purpose, important behavior, and expected usage

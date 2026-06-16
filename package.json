@@ -1,6 +1,6 @@
 {
   "name": "@maxxuxx/ts-utils",
-  "version": "0.7.20",
+  "version": "0.7.21",
   "description": "Shared TypeScript utilities",
   "type": "module",
   "license": "MIT",
@@ -87,6 +87,14 @@
     "./device": {
       "types": "./dist/device/index.d.ts",
       "import": "./dist/device/index.js"
+    },
+    "./device/browser": {
+      "types": "./dist/device/browser.d.ts",
+      "import": "./dist/device/browser.js"
+    },
+    "./device/node": {
+      "types": "./dist/device/node.d.ts",
+      "import": "./dist/device/node.js"
     },
     "./session": {
       "types": "./dist/session/index.d.ts",

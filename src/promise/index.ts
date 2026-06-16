@@ -1,5 +1,7 @@
+/** Function that returns a value or promise for promise helpers */
 export type PromiseTask<TValue> = () => TValue | PromiseLike<TValue>;
 
+/** Options for promise run */
 export type PromiseRunOptions = {
   timeoutMs?: number;
   timeoutMessage?: string;
@@ -7,19 +9,23 @@ export type PromiseRunOptions = {
   delayMs?: number;
 };
 
+/** Options for promise timeout */
 export type PromiseTimeoutOptions = Pick<
   PromiseRunOptions,
   "timeoutMessage" | "timeoutMs"
 >;
 
+/** Represents promise configured task */
 export type PromiseConfiguredTask<TValue> = PromiseRunOptions & {
   task: PromiseTask<TValue>;
 };
 
+/** Configuration shape for promise task */
 export type PromiseTaskConfig<TValue> =
   | PromiseConfiguredTask<TValue>
   | PromiseTask<TValue>;
 
+/** Represents promise task value */
 export type PromiseTaskValue<TTask> =
   TTask extends PromiseTask<infer TValue>
     ? Awaited<TValue>
@@ -27,6 +33,7 @@ export type PromiseTaskValue<TTask> =
       ? Awaited<TValue>
       : never;
 
+/** Result returned by promise */
 export type PromiseResult<TData, TError = unknown> =
   | {
       ok: true;
@@ -37,20 +44,25 @@ export type PromiseResult<TData, TError = unknown> =
       error: TError;
     };
 
+/** Result returned by promise all */
 export type PromiseAllResult<TTasks extends readonly PromiseTaskConfig<unknown>[]> = {
   [TKey in keyof TTasks]: PromiseTaskValue<TTasks[TKey]>
 };
 
+/** Result returned by promise settle */
 export type PromiseSettleResult<TTasks extends readonly PromiseTaskConfig<unknown>[]> = {
   [TKey in keyof TTasks]: PromiseResult<PromiseTaskValue<TTasks[TKey]>>
 };
 
+/** Named promise task map used by object helpers */
 export type PromiseTaskRecord = Readonly<Record<string, PromiseTaskConfig<unknown>>>;
 
+/** Result returned by promise all object */
 export type PromiseAllObjectResult<TTasks extends PromiseTaskRecord> = {
   [TKey in keyof TTasks]: PromiseTaskValue<TTasks[TKey]>
 };
 
+/** Result returned by promise settle object */
 export type PromiseSettleObjectResult<TTasks extends PromiseTaskRecord> = {
   [TKey in keyof TTasks]: PromiseResult<PromiseTaskValue<TTasks[TKey]>>
 };
@@ -62,11 +74,13 @@ type ResolvedPromiseRunOptions = {
   timeoutMs?: number;
 };
 
+/** Constant value for default_promise_options */
 export const DEFAULT_PROMISE_OPTIONS = Object.freeze({
   delayMs: 300,
   retries: 0
 });
 
+/** Error raised for promise timeout failures */
 export class PromiseTimeoutError extends Error {
   readonly timeoutMs: number;
 
@@ -196,6 +210,7 @@ const settleTaskConfig = async <TTask extends PromiseTaskConfig<unknown>>(
   }
 };
 
+/** Waits for the given number of milliseconds */
 export const sleep = async (ms: number): Promise<void> => {
   const delayMs = assertNonNegativeFiniteNumber(ms, "ms");
 
@@ -204,6 +219,7 @@ export const sleep = async (ms: number): Promise<void> => {
   });
 };
 
+/** Runs with timeout */
 export const withTimeout = async <TValue>(
   input: PromiseLike<TValue> | PromiseTask<TValue>,
   options: PromiseTimeoutOptions = {}
@@ -237,6 +253,7 @@ export const withTimeout = async <TValue>(
   }
 };
 
+/** Retries a task until it succeeds or the retry limit is reached */
 export const retry = async <TValue>(
   task: PromiseTask<TValue>,
   options: PromiseRunOptions = {}
@@ -262,6 +279,7 @@ export const retry = async <TValue>(
   throw lastError;
 };
 
+/** Runs one configured promise task with retry and timeout options */
 export const run = async <TValue>(
   task: PromiseTask<TValue>,
   options: PromiseRunOptions = {}
@@ -269,6 +287,7 @@ export const run = async <TValue>(
   retry(task, options)
 );
 
+/** Runs configured promise tasks in parallel and returns ordered values */
 export const all = async <const TTasks extends readonly PromiseTaskConfig<unknown>[]>(
   tasks: TTasks,
   options: PromiseRunOptions = {}
@@ -280,6 +299,7 @@ export const all = async <const TTasks extends readonly PromiseTaskConfig<unknow
   return results as PromiseAllResult<TTasks>;
 };
 
+/** Runs named promise tasks in parallel and returns values by key */
 export const allObject = async <const TTasks extends PromiseTaskRecord>(
   tasks: TTasks,
   options: PromiseRunOptions = {}
@@ -295,6 +315,7 @@ export const allObject = async <const TTasks extends PromiseTaskRecord>(
   return Object.fromEntries(results) as PromiseAllObjectResult<TTasks>;
 };
 
+/** Runs configured promise tasks and returns result objects instead of throwing */
 export const settle = async <const TTasks extends readonly PromiseTaskConfig<unknown>[]>(
   tasks: TTasks,
   options: PromiseRunOptions = {}
@@ -306,6 +327,7 @@ export const settle = async <const TTasks extends readonly PromiseTaskConfig<unk
   return results as PromiseSettleResult<TTasks>;
 };
 
+/** Runs named promise tasks and returns result objects by key */
 export const settleObject = async <const TTasks extends PromiseTaskRecord>(
   tasks: TTasks,
   options: PromiseRunOptions = {}
@@ -321,6 +343,7 @@ export const settleObject = async <const TTasks extends PromiseTaskRecord>(
   return Object.fromEntries(results) as PromiseSettleObjectResult<TTasks>;
 };
 
+/** Grouped helpers for the promise module */
 export const promise = Object.freeze({
   all,
   allObject,

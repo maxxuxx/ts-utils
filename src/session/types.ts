@@ -4,8 +4,10 @@ import type {
 } from "../jwt/index.js";
 
 // Shared result types
+/** Allows a value or a promise of that value */
 export type MaybePromise<TValue> = TValue | Promise<TValue>;
 
+/** Result returned by safe parse */
 export type SafeParseResult<TData> =
   | {
       success: true;
@@ -16,11 +18,13 @@ export type SafeParseResult<TData> =
       error?: unknown;
     };
 
+/** Schema contract for safe */
 export type SafeSchema<TData> = Readonly<{
   safeParse: (value: unknown) => SafeParseResult<TData>;
 }>;
 
 // Session data
+/** Allowed values for token session reason */
 export const TokenSessionReason = {
   EXPIRED      : "expired",
   INVALID      : "invalid",
@@ -28,11 +32,13 @@ export const TokenSessionReason = {
   UNAUTHORIZED : "unauthorized"
 } as const;
 
+/** Access and refresh token values stored in a token session */
 export type TokenSessionTokens = Readonly<{
   accessToken?: string | null;
   refreshToken?: string | null;
 }>;
 
+/** User and token payload stored by a token session */
 export type TokenSessionData<
   TUser,
   TTokens extends TokenSessionTokens
@@ -41,9 +47,11 @@ export type TokenSessionData<
   user?: TUser;
 };
 
+/** Allowed reason value for token session */
 export type TokenSessionReason =
   (typeof TokenSessionReason)[keyof typeof TokenSessionReason];
 
+/** Storage adapter used by a token session controller */
 export type TokenSessionStore<
   TContext,
   TUser,
@@ -57,6 +65,7 @@ export type TokenSessionStore<
   ) => MaybePromise<void>;
 }>;
 
+/** Context passed to token refresh */
 export type TokenRefreshContext<
   TContext,
   TUser,
@@ -71,10 +80,12 @@ export type TokenRefreshContext<
   user: TUser;
 }>;
 
+/** Options for token session refresh dedupe */
 export type TokenSessionRefreshDedupeOptions = Readonly<{
   cacheSuccessMs?: number;
 }>;
 
+/** Options for token session */
 export type TokenSessionOptions<
   TContext,
   TUser,
@@ -94,6 +105,7 @@ export type TokenSessionOptions<
   userSchema?: SafeSchema<TUser>;
 }>;
 
+/** Controller returned by createTokenSession */
 export type TokenSessionController<
   TContext,
   TUser,

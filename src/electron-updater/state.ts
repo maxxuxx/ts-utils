@@ -1,6 +1,7 @@
 import { appUpdateStateSchema, type AppUpdateState } from "./schemas.js";
 import type { AppLike, SetUpdateStateInput } from "./types.js";
 
+/** Creates initial update state */
 export const createInitialUpdateState = (app: AppLike): AppUpdateState => appUpdateStateSchema.parse({
   currentVersion : app.getVersion(),
   enabled        : false,
@@ -8,6 +9,7 @@ export const createInitialUpdateState = (app: AppLike): AppUpdateState => appUpd
   status         : "disabled"
 });
 
+/** Creates update state resolver */
 export const createUpdateStateResolver = (app: AppLike) => (
   _currentState: AppUpdateState,
   input: SetUpdateStateInput
@@ -22,6 +24,7 @@ export const createUpdateStateResolver = (app: AppLike) => (
   status         : input.status
 });
 
+/** Clamps progress percent */
 export const clampProgressPercent = (percent: number): number => {
   if (!Number.isFinite(percent)) {
     return 0;

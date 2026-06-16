@@ -19,11 +19,13 @@ import type {
 import type { JwtPayload } from "../jwt/index.js";
 
 // SvelteKit cookie bridge
+/** Represents svelte kit cookies */
 export type SvelteKitCookies = Readonly<{
   get: (name: string) => string | undefined;
   set: (name: string, value: string, options: any) => void;
 }>;
 
+/** Options for svelte kit token session */
 export type SvelteKitTokenSessionOptions<
   TUser,
   TTokens extends TokenSessionTokens,
@@ -36,6 +38,7 @@ export type SvelteKitTokenSessionOptions<
   sessionOptions: SessionOptions;
 }>;
 
+/** Represents svelte kit token session */
 export type SvelteKitTokenSession<
   TUser,
   TTokens extends TokenSessionTokens
@@ -54,6 +57,7 @@ export type SvelteKitTokenSession<
   updateUser: (user: TUser, cookies?: SvelteKitCookies) => Promise<void>;
 }>;
 
+/** Creates session */
 export const createSession = <
   TUser,
   TTokens extends TokenSessionTokens,

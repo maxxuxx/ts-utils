@@ -1,3 +1,4 @@
+/** Payload shape for server time */
 export type ServerTimePayload = {
   serverTimeMs: number;
   serverReceiveTimeMs: number;
@@ -5,6 +6,7 @@ export type ServerTimePayload = {
   iso: string;
 };
 
+/** Represents server time input */
 export type ServerTimeInput = number | {
   serverTimeMs?: number;
   serverReceiveTimeMs?: number;
@@ -14,6 +16,7 @@ export type ServerTimeInput = number | {
   timestampMs?: number;
 };
 
+/** Represents time sync timestamps */
 export type TimeSyncTimestamps = {
   clientSendTimeMs: number;
   serverReceiveTimeMs: number;
@@ -21,16 +24,19 @@ export type TimeSyncTimestamps = {
   clientReceiveTimeMs: number;
 };
 
+/** Represents time offset */
 export type TimeOffset = TimeSyncTimestamps & {
   offsetMs: number;
   roundTripMs: number;
   serverProcessingMs: number;
 };
 
+/** Represents time sync sample */
 export type TimeSyncSample = TimeOffset & {
   sampledAtMs: number;
 };
 
+/** Represents clock snapshot */
 export type ClockSnapshot = {
   offsetMs: number;
   localTimeMs: number;
@@ -38,6 +44,7 @@ export type ClockSnapshot = {
   serverDate: Date;
 };
 
+/** Minimal compatible shape for fetch response */
 export type FetchResponseLike = {
   ok?: boolean;
   status?: number;
@@ -45,11 +52,13 @@ export type FetchResponseLike = {
   json?: () => Promise<unknown>;
 };
 
+/** Minimal compatible shape for fetch */
 export type FetchLike = (
   endpoint: string,
   init?: unknown
 ) => Promise<FetchResponseLike | ServerTimeInput>;
 
+/** Options for fetch server time */
 export type FetchServerTimeOptions = {
   endpoint: string;
   fetch: FetchLike;
@@ -101,6 +110,7 @@ const parseServerPayload = (payload: unknown): {
   };
 };
 
+/** Calculates time offset */
 export const calculateTimeOffset = ({
   clientSendTimeMs,
   serverReceiveTimeMs,
@@ -127,6 +137,7 @@ export const calculateTimeOffset = ({
   };
 };
 
+/** Creates time sync sample */
 export const createTimeSyncSample = (timestamps: TimeSyncTimestamps): TimeSyncSample => {
   const offset = calculateTimeOffset(timestamps);
 
@@ -136,6 +147,7 @@ export const createTimeSyncSample = (timestamps: TimeSyncTimestamps): TimeSyncSa
   };
 };
 
+/** Picks selected values */
 export const pickBestTimeSyncSample = (
   samples: readonly TimeSyncSample[]
 ): TimeSyncSample | undefined => {
@@ -172,6 +184,7 @@ export const pickBestTimeSyncSample = (
   return best;
 };
 
+/** Creates clock snapshot */
 export const createClockSnapshot = (
   offsetMs: number,
   localTimeMs = Date.now()
@@ -189,6 +202,7 @@ export const createClockSnapshot = (
   };
 };
 
+/** Converts local ms to server ms */
 export const localMsToServerMs = (
   localTimeMs: number,
   offsetMs: number
@@ -196,6 +210,7 @@ export const localMsToServerMs = (
   assertFiniteMs(localTimeMs, "localTimeMs") + assertFiniteMs(offsetMs, "offsetMs")
 );
 
+/** Converts local ms to server date */
 export const localMsToServerDate = (
   localTimeMs: number,
   offsetMs: number
@@ -203,6 +218,7 @@ export const localMsToServerDate = (
   new Date(localMsToServerMs(localTimeMs, offsetMs))
 );
 
+/** Creates server time payload */
 export const createServerTimePayload = (
   nowMs = Date.now()
 ): ServerTimePayload => {
@@ -216,6 +232,7 @@ export const createServerTimePayload = (
   };
 };
 
+/** Fetches server time sample */
 export const fetchServerTimeSample = async ({
   endpoint,
   fetch,

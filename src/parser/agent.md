@@ -47,3 +47,6 @@ Boolean coercion accepts the same common true and false tokens used by `env` and
 Keep module docs updated whenever parser behavior, exports, or internal file layout changes
 
 `zod` is a package dependency because this module imports and re-exports it
+## Public documentation
+
+Every exported function, class, constant, interface, and type alias must have concise JSDoc before the declaration so editor hover explains purpose, important behavior, and expected usage

@@ -64,6 +64,7 @@ const randomByte = (crypto: BrowserCryptoLike | undefined): number => {
   return Math.floor(Math.random() * 256);
 };
 
+/** Creates browser device uuid */
 export const createBrowserDeviceUuid = (
   crypto: BrowserCryptoLike | undefined = getBrowserCrypto()
 ): string => {
@@ -93,6 +94,7 @@ export const createBrowserDeviceUuid = (
   ].join("-");
 };
 
+/** Creates cookie device uuid store */
 export const createCookieDeviceUuidStore = (
   options: CookieDeviceUuidStoreOptions = {}
 ): CookieDeviceUuidStore => {
@@ -162,6 +164,7 @@ export const createCookieDeviceUuidStore = (
   };
 };
 
+/** Returns browser device uuid */
 export const getBrowserDeviceUuid = (
   options: BrowserDeviceUuidOptions = {}
 ): string => {

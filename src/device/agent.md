@@ -7,15 +7,21 @@ temporary cookie-backed UUID helper for browser or renderer contexts.
 
 ## Public imports
 
-Expose device utilities through `src/device/index.ts`.
+Expose runtime-specific device utilities through the browser and node subpaths:
 
-Consumers should import this module through `@maxxuxx/ts-utils/device` when the
-package export is available.
+- `@maxxuxx/ts-utils/device/browser` for browser and renderer cookie UUIDs.
+- `@maxxuxx/ts-utils/device/node` for Node main process machine UUIDs.
+
+Keep `@maxxuxx/ts-utils/device` available as a compatibility and automatic
+environment detection entry.
 
 ## Internal layout
 
-`node.ts` contains platform command selection, command execution, and output
-parsing.
+`node.ts` contains Node-only command execution and should remain the only file
+that imports Node runtime modules.
+
+`node-shared.ts` contains platform command selection and output parsing that can
+be re-exported without pulling Node runtime modules into the root entry.
 
 `browser.ts` contains cookie storage and browser UUID generation using narrow
 `globalThis` typings instead of DOM lib types.
@@ -41,3 +47,10 @@ hardware identifiers.
 
 Environment detection is conservative: a document means browser path, a Node
 process means Node path, and anything else throws.
+
+The root `index.ts` must not statically import `node.ts`; use dynamic import for
+Node execution so browser bundles can prefer the browser-only subpath without
+dragging Node built-ins into the graph.
+## Public documentation
+
+Every exported function, class, constant, interface, and type alias must have concise JSDoc before the declaration so editor hover explains purpose, important behavior, and expected usage

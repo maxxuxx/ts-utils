@@ -53,3 +53,6 @@ Automatic install after download is opt-in through `autoInstallOnDownloaded` bec
 `feedUrl` is optional. When omitted, apps can rely on `electron-builder` generated `app-update.yml`. When provided, the service calls `setFeedURL({ provider: "generic", url })` for public S3 or CloudFront style feeds.
 
 Builder helpers are plain object helpers and do not import `electron-builder`, so they can be used without pulling builder into runtime code.
+## Public documentation
+
+Every exported function, class, constant, interface, and type alias must have concise JSDoc before the declaration so editor hover explains purpose, important behavior, and expected usage

@@ -9,25 +9,31 @@ const METHOD_WIDTH = 6;
 const TIME_WIDTH   = 4;
 const TIME_UNIT    = "ms";
 
+/** Represents api log level */
 export type ApiLogLevel = "debug" | "info" | "warn" | "error" | "log";
 
+/** Represents api logger */
 export type ApiLogger = Readonly<Partial<Record<
   ApiLogLevel,
   (...data: unknown[]) => void
 >>>;
 
+/** Represents api log writer */
 export type ApiLogWriter = (
   message: string,
   event: ApiLogEvent
 ) => void;
 
+/** Represents api logging */
 export type ApiLogging = boolean | ApiLoggingOptions;
 
+/** Represents api log event type */
 export type ApiLogEventType =
   | "response"
   | "response-error"
   | "request-error";
 
+/** Represents api log event */
 export type ApiLogEvent = Readonly<{
   durationMs: number;
   error     ?: unknown;
@@ -40,6 +46,7 @@ export type ApiLogEvent = Readonly<{
   url       : string;
 }>;
 
+/** Options for api logging */
 export type ApiLoggingOptions = Readonly<{
   enabled          ?: boolean;
   errorEmoji       ?: string;
@@ -53,6 +60,7 @@ export type ApiLoggingOptions = Readonly<{
   successLevel     ?: ApiLogLevel;
 }>;
 
+/** Creates api logger hooks */
 export const createApiLoggerHooks = (
   logging: ApiLogging | undefined
 ): ApiHooks => {
@@ -79,6 +87,7 @@ export const createApiLoggerHooks = (
   };
 };
 
+/** Formats api log event */
 export const formatApiLogEvent = (
   event: ApiLogEvent,
   options: Pick<

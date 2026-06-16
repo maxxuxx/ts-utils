@@ -37,3 +37,6 @@ Do not import Zod directly in this module. Schema helpers should accept a struct
 Keep this module focused on JSON parsing and serialization. Do not add UTF, base64, or hex conversion here; use the `encoding` module for byte/string representation conversion
 
 Keep module docs updated whenever JSON behavior, exports, error classes, or schema semantics change
+## Public documentation
+
+Every exported function, class, constant, interface, and type alias must have concise JSDoc before the declaration so editor hover explains purpose, important behavior, and expected usage

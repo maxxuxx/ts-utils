@@ -39,3 +39,6 @@ JWT `exp`, `iat`, and app-specific claims are not required by the decoder. App a
 Keep this module focused on JWT string decoding. Use app-local code for iron-session, cookies, redirects, refresh endpoints, and logout policy
 
 Keep module docs updated whenever JWT behavior, exports, error classes, or runtime assumptions change
+## Public documentation
+
+Every exported function, class, constant, interface, and type alias must have concise JSDoc before the declaration so editor hover explains purpose, important behavior, and expected usage

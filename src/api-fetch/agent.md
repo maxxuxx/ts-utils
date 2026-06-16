@@ -101,3 +101,6 @@ Default log messages never include request bodies, headers, or bearer tokens
 Keep module docs updated whenever endpoint shape, request options, auth behavior, retry behavior, logging behavior, hooks, exports, or error behavior changes
 
 `zod` is a package dependency because this module imports and re-exports it
+## Public documentation
+
+Every exported function, class, constant, interface, and type alias must have concise JSDoc before the declaration so editor hover explains purpose, important behavior, and expected usage

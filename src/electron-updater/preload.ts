@@ -16,6 +16,7 @@ const invokeState = async (
   await ipcRenderer.invoke(channel)
 );
 
+/** Creates updater bridge */
 export const createUpdaterBridge = (
   ipcRenderer: UpdaterIpcRendererLike,
   channelOptions: UpdaterChannelOptions = {}
@@ -46,6 +47,7 @@ export const createUpdaterBridge = (
   });
 };
 
+/** Exposes updater bridge */
 export const exposeUpdaterBridge = (
   options: UpdaterPreloadBridgeOptions
 ): UpdaterBridge => {

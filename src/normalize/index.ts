@@ -1,9 +1,12 @@
+/** Represents plain record */
 export type PlainRecord = Record<string, unknown>;
 
+/** Checks whether a value is not empty string */
 export const isNotEmptyString = (value: unknown): value is string => (
   typeof value === "string" && value.trim().length > 0
 );
 
+/** Checks whether a value is record */
 export const isRecord = (value: unknown): value is PlainRecord => {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return false;
@@ -14,6 +17,7 @@ export const isRecord = (value: unknown): value is PlainRecord => {
   return prototype === Object.prototype || prototype === null;
 };
 
+/** Converts a value to number */
 export const toNumber = (value: unknown, fallback = 0): number => {
   if (typeof value === "number") {
     return Number.isFinite(value) ? value : fallback;
@@ -50,6 +54,7 @@ export const toNumber = (value: unknown, fallback = 0): number => {
   return fallback;
 };
 
+/** Converts a value to text */
 export const toText = (value: unknown, fallback = ""): string => {
   if (typeof value === "string") {
     return value;
@@ -70,6 +75,7 @@ export const toText = (value: unknown, fallback = ""): string => {
   }
 };
 
+/** Converts a value to date */
 export const toDate = (value: unknown, fallback?: Date): Date | undefined => {
   if (value instanceof Date) {
     const time = value.getTime();
@@ -92,6 +98,7 @@ export const toDate = (value: unknown, fallback?: Date): Date | undefined => {
 
 const padDatePart = (value: number): string => String(value).padStart(2, "0");
 
+/** Converts a value to date string */
 export const toDateString = (
   value: unknown,
   format = "yyyy-mm-dd",
@@ -115,6 +122,7 @@ export const toDateString = (
   return format.replace(/yyyy|mm|dd|HH|MM|ss/g, (token) => tokens[token] ?? token);
 };
 
+/** Converts a value to flag boolean */
 export const toFlagBoolean = (
   value: unknown,
   trueValue: unknown = "Y",
@@ -152,6 +160,7 @@ export const toFlagBoolean = (
   return fallback;
 };
 
+/** Grouped helpers for the to module */
 export const to = Object.freeze({
   date:        toDate,
   dateString:  toDateString,
@@ -160,6 +169,7 @@ export const to = Object.freeze({
   text:        toText
 });
 
+/** Grouped helpers for the is module */
 export const is = Object.freeze({
   notEmptyString: isNotEmptyString,
   record:         isRecord

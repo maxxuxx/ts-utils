@@ -6,10 +6,13 @@ import type {
   S3PublishConfig
 } from "./types.js";
 
+/** Minimal compatible shape for env */
 export type EnvLike = Record<string, string | undefined>;
 
+/** Minimal compatible shape for env source */
 export type EnvSourceLike = Readonly<Record<string, unknown>>;
 
+/** Options for aws credential */
 export type AwsCredentialOptions = Readonly<{
   accessKeyEnvName?: string;
   env             ?: EnvLike;
@@ -19,12 +22,14 @@ export type AwsCredentialOptions = Readonly<{
   targetSecretKey ?: string;
 }>;
 
+/** Options for generic publish */
 export type GenericPublishOptions = Readonly<{
   channel          ?: string;
   publishAutoUpdate?: boolean;
   url              ?: string;
 }>;
 
+/** Options for s3 publish */
 export type S3PublishOptions = Readonly<{
   acl              ?: string | null;
   bucket           ?: string;
@@ -34,6 +39,7 @@ export type S3PublishOptions = Readonly<{
   region           ?: string;
 }>;
 
+/** Options for github publish */
 export type GithubPublishOptions = Readonly<{
   channel          ?: string;
   host             ?: string;
@@ -45,6 +51,7 @@ export type GithubPublishOptions = Readonly<{
   repo             ?: string;
 }>;
 
+/** Options for publish config */
 export type PublishConfigOptions = Readonly<{
   generic?: GenericPublishOptions;
   github ?: GithubPublishOptions;
@@ -52,10 +59,12 @@ export type PublishConfigOptions = Readonly<{
   s3     ?: S3PublishOptions;
 }>;
 
+/** Provides the trim trailing slashes helper */
 export const trimTrailingSlashes = (value: string): string => (
   value.trim().replace(/\/+$/u, "")
 );
 
+/** Normalizes publish path */
 export const normalizePublishPath = (value: string): string => (
   value.trim().replace(/^\/+|\/+$/gu, "")
 );
@@ -70,6 +79,7 @@ const toOptionalText = (value: unknown): string | undefined => {
   return text.length > 0 ? text : undefined;
 };
 
+/** Reads env value */
 export const readEnvValue = (
   source: EnvSourceLike,
   key: string,
@@ -86,6 +96,7 @@ const getDefaultEnv = (): EnvLike => {
   return maybeProcess?.env ?? {};
 };
 
+/** Applies aws credentials */
 export const applyAwsCredentials = (options: AwsCredentialOptions = {}): EnvLike => {
   const env = options.env ?? getDefaultEnv();
   const source = options.source ?? env;
@@ -105,6 +116,7 @@ export const applyAwsCredentials = (options: AwsCredentialOptions = {}): EnvLike
   return env;
 };
 
+/** Creates generic publish config */
 export const createGenericPublishConfig = (
   options: GenericPublishOptions
 ): GenericPublishConfig | undefined => {
@@ -122,6 +134,7 @@ export const createGenericPublishConfig = (
   };
 };
 
+/** Creates s3 publish config */
 export const createS3PublishConfig = (
   options: S3PublishOptions
 ): S3PublishConfig | undefined => {
@@ -144,6 +157,7 @@ export const createS3PublishConfig = (
   };
 };
 
+/** Creates github publish config */
 export const createGithubPublishConfig = (
   options: GithubPublishOptions = {}
 ): GithubPublishConfig => ({
@@ -158,6 +172,7 @@ export const createGithubPublishConfig = (
   ...(options.repo ? { repo: options.repo } : {})
 });
 
+/** Creates publish config */
 export const createPublishConfig = (
   options: PublishConfigOptions
 ): PublishConfig[] | undefined => {
@@ -179,6 +194,7 @@ export const createPublishConfig = (
   return publish.length > 0 ? publish : undefined;
 };
 
+/** Patches updater cache dir name */
 export const patchUpdaterCacheDirName = (
   yamlContent: string,
   updaterCacheDirName: string

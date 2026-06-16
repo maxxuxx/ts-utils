@@ -2,6 +2,7 @@ import { appendQuery } from "./query.js";
 import type { QueryParams } from "./types.js";
 
 // URL helpers
+/** Builds api url */
 export const buildApiUrl = (
   path: string,
   baseUrl?: string,

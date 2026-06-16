@@ -40,3 +40,6 @@ Use `getErrorMessage` when display or logging code needs a safe string message
 Use `normalizeError` when downstream code requires an `Error` instance
 
 The result union is discriminated by `ok`
+## Public documentation
+
+Every exported function, class, constant, interface, and type alias must have concise JSDoc before the declaration so editor hover explains purpose, important behavior, and expected usage

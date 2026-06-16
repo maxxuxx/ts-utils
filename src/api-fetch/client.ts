@@ -48,6 +48,7 @@ const DEFAULT_RETRY_STATUS_CODES = [
 ] as const;
 
 // Client factory
+/** Creates api fetcher */
 export const createApiFetcher = (
   options: ApiFetcherOptions = {}
 ): ApiFetcher => {

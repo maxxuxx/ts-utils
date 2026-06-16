@@ -66,6 +66,7 @@ const configureFileTransport = (
 };
 
 // Main logger
+/** Configures main logger */
 export const configureMainLogger = (
   options: MainLoggerOptions = {}
 ): LogInstance => {

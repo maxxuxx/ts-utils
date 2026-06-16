@@ -1,10 +1,18 @@
 import type { LOG_LEVELS, LOG_METHODS } from "./constants.js";
 
+/** Represents log level */
 export type LogLevel       = typeof LOG_LEVELS[number];
+
+/** Log method name accepted by logger bridge helpers */
 export type LogMethod      = typeof LOG_METHODS[number];
+
+/** Represents log level option */
 export type LogLevelOption = LogLevel | false;
+
+/** Represents log target */
 export type LogTarget      = "console" | "main" | "terminal";
 
+/** Payload shape for log */
 export type LogPayload = Readonly<{
   data     : unknown[];
   level    : LogLevel;
@@ -12,6 +20,7 @@ export type LogPayload = Readonly<{
   scope?   : string;
 }>;
 
+/** Represents logger functions */
 export type LoggerFunctions = Readonly<{
   error  : (...data: unknown[]) => void;
   warn   : (...data: unknown[]) => void;
@@ -22,10 +31,12 @@ export type LoggerFunctions = Readonly<{
   log    : (...data: unknown[]) => void;
 }>;
 
+/** Renderer bridge API used to send log payloads */
 export type BridgeApi = LoggerFunctions & Readonly<{
   send: (payload: LogPayload) => void;
 }>;
 
+/** Minimal electron-log transport shape used for configuration */
 export type LogTransport = {
   level        ?: LogLevelOption;
   format       ?: unknown;
@@ -33,6 +44,7 @@ export type LogTransport = {
   [key: string] : unknown;
 };
 
+/** File transport shape used by main logger configuration */
 export type FileTransport = LogTransport & {
   fileName     ?: string;
   maxSize      ?: number;
@@ -42,6 +54,7 @@ export type FileTransport = LogTransport & {
   writeOptions ?: LogWriteOptions;
 };
 
+/** Minimal logger instance used by electron-log helpers */
 export type LogInstance = LoggerFunctions & {
   initialize?: (options?: InitializeOptions) => void;
   transports: {
@@ -52,6 +65,7 @@ export type LogInstance = LoggerFunctions & {
   };
 };
 
+/** Represents log path variables */
 export type LogPathVariables = Readonly<{
   appData           ?: string;
   appName           ?: string;
@@ -65,12 +79,14 @@ export type LogPathVariables = Readonly<{
   userData          ?: string;
 }>;
 
+/** Options for log write */
 export type LogWriteOptions = Readonly<{
   encoding?: string;
   flag    ?: string;
   mode    ?: number;
 }>;
 
+/** Options for initialize */
 export type InitializeOptions = Readonly<{
   getSessions          ?: () => object[];
   includeFutureSessions?: boolean;
@@ -78,6 +94,7 @@ export type InitializeOptions = Readonly<{
   spyRendererConsole   ?: boolean;
 }>;
 
+/** Options for base logger */
 export type BaseLoggerOptions = Readonly<{
   enabled?: boolean;
   isProduction?: boolean;
@@ -85,6 +102,7 @@ export type BaseLoggerOptions = Readonly<{
   productionLevel?: LogLevelOption;
 }>;
 
+/** Options for transport */
 export type TransportOptions = Readonly<{
   enabled  ?: boolean;
   format   ?: unknown;
@@ -92,6 +110,7 @@ export type TransportOptions = Readonly<{
   useStyles?: boolean;
 }>;
 
+/** Options for file */
 export type FileOptions = TransportOptions & Readonly<{
   appName     ?: string;
   dir         ?: string;
@@ -103,6 +122,7 @@ export type FileOptions = TransportOptions & Readonly<{
   writeOptions?: LogWriteOptions;
 }>;
 
+/** Options for main logger */
 export type MainLoggerOptions = BaseLoggerOptions & Readonly<{
   console   ?: TransportOptions;
   file      ?: FileOptions;
@@ -111,6 +131,7 @@ export type MainLoggerOptions = BaseLoggerOptions & Readonly<{
   logger    ?: LogInstance;
 }>;
 
+/** Options for renderer logger */
 export type RendererLoggerOptions = BaseLoggerOptions & Readonly<{
   console?: TransportOptions;
   logger ?: LogInstance;
@@ -118,6 +139,7 @@ export type RendererLoggerOptions = BaseLoggerOptions & Readonly<{
   targets?: LogTarget[];
 }>;
 
+/** Options for bridge logger */
 export type BridgeLoggerOptions = BaseLoggerOptions & Readonly<{
   bridge ?: BridgeApi;
   console?: TransportOptions;
@@ -125,12 +147,14 @@ export type BridgeLoggerOptions = BaseLoggerOptions & Readonly<{
   targets?: LogTarget[];
 }>;
 
+/** Options for main bridge */
 export type MainBridgeOptions = Readonly<{
   channel?: string;
   ipcMain : ElectronIpcMainLike;
   logger  : LoggerFunctions;
 }>;
 
+/** Options for preload bridge */
 export type PreloadBridgeOptions = Readonly<{
   apiKey       ?: string;
   channel      ?: string;
@@ -138,6 +162,7 @@ export type PreloadBridgeOptions = Readonly<{
   ipcRenderer   : ElectronIpcRendererLike;
 }>;
 
+/** Minimal compatible shape for electron ipc main */
 export type ElectronIpcMainLike = {
   on: (
     channel: string,
@@ -149,10 +174,12 @@ export type ElectronIpcMainLike = {
   ) => void;
 };
 
+/** Minimal compatible shape for electron ipc renderer */
 export type ElectronIpcRendererLike = {
   send: (channel: string, payload: unknown) => void;
 };
 
+/** Minimal compatible shape for electron context bridge */
 export type ElectronContextBridgeLike = {
   exposeInMainWorld: (apiKey: string, api: unknown) => void;
 };

@@ -12,6 +12,7 @@ type RefreshPromise = Promise<string | null | undefined>;
 
 const refreshPromises = new Map<string, RefreshPromise>();
 
+/** Options for svelte kit api auth */
 export type SvelteKitApiAuthOptions<TCookies> = Readonly<{
   clear               ?: (cookies: TCookies) => MaybePromise<void>;
   formatTokenHeader   ?: ApiAuthOptions["formatTokenHeader"];
@@ -20,16 +21,19 @@ export type SvelteKitApiAuthOptions<TCookies> = Readonly<{
   shouldRefreshOnError?: ApiAuthOptions["shouldRefreshOnError"];
 }>;
 
+/** Options for svelte kit refresh dedupe */
 export type SvelteKitRefreshDedupeOptions = Readonly<{
   cacheSuccessMs?: number;
 }>;
 
+/** Options for svelte kit api fetcher */
 export type SvelteKitApiFetcherOptions<TCookies> = Omit<ApiFetcherOptions, "auth"> & Readonly<{
   auth          ?: SvelteKitApiAuthOptions<TCookies>;
   cookies        : TCookies;
   dedupeRefresh ?: boolean | SvelteKitRefreshDedupeOptions;
 }>;
 
+/** Creates api fetcher */
 export const createApiFetcher = <TCookies>(
   options: SvelteKitApiFetcherOptions<TCookies>
 ): ApiFetcher => {
@@ -61,6 +65,7 @@ export const createApiFetcher = <TCookies>(
   });
 };
 
+/** Creates svelte kit api fetcher */
 export const createSvelteKitApiFetcher = createApiFetcher;
 
 async function refreshWithDedupe<TCookies>({

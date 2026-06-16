@@ -4,6 +4,7 @@ import type {
 } from "./types.js";
 
 // Header helpers
+/** Merges headers */
 export const mergeHeaders = (
   ...sources: Array<ApiHeadersInit | undefined>
 ): Headers | undefined => {
@@ -28,6 +29,7 @@ const defaultFormatTokenHeader: ApiTokenHeaderFormatter = (accessToken) => ({
   Authorization: `Bearer ${accessToken}`
 });
 
+/** Builds headers */
 export const buildHeaders = (
   headers: ApiHeadersInit | undefined,
   accessToken: string | undefined,

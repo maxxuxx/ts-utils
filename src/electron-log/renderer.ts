@@ -9,6 +9,7 @@ const hasMainTarget = (targets: readonly string[]): boolean => (
 );
 
 // Renderer logger
+/** Configures renderer logger */
 export const configureRendererLogger = (
   options: RendererLoggerOptions = {}
 ): LogInstance => {

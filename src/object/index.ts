@@ -1,16 +1,20 @@
+/** Represents object entry */
 export type ObjectEntry<TObject extends object> = {
   [TKey in Extract<keyof TObject, string>]-?: [TKey, TObject[TKey]]
 }[Extract<keyof TObject, string>];
 
+/** Represents defined object */
 export type DefinedObject<TObject extends object> = Partial<{
   [TKey in keyof TObject]: Exclude<TObject[TKey], undefined>
 }>;
 
+/** Represents compact object */
 export type CompactObject<TObject extends object> = Partial<{
   [TKey in keyof TObject]: NonNullable<TObject[TKey]>
 }>;
 
 // Selection helpers
+/** Picks selected values */
 export const pick = <
   TObject extends object,
   const TKey extends keyof TObject
@@ -29,6 +33,7 @@ export const pick = <
   return result;
 };
 
+/** Omits selected values */
 export const omit = <
   TObject extends object,
   const TKey extends keyof TObject
@@ -46,6 +51,7 @@ export const omit = <
 };
 
 // Cleanup helpers
+/** Removes undefined */
 export const removeUndefined = <TObject extends object>(
   value: TObject
 ): DefinedObject<TObject> => {
@@ -60,6 +66,7 @@ export const removeUndefined = <TObject extends object>(
   return result;
 };
 
+/** Removes null and undefined values from an object */
 export const compact = <TObject extends object>(
   value: TObject
 ): CompactObject<TObject> => {
@@ -74,6 +81,7 @@ export const compact = <TObject extends object>(
   return result;
 };
 
+/** Merges defaults */
 export const mergeDefaults = <
   TObject extends object,
   TDefaults extends object
@@ -86,12 +94,14 @@ export const mergeDefaults = <
 });
 
 // Entry helpers
+/** Returns typed object entries */
 export const entries = <TObject extends object>(
   value: TObject
 ): Array<ObjectEntry<TObject>> => (
   Object.entries(value) as Array<ObjectEntry<TObject>>
 );
 
+/** Builds a typed object from entries */
 export const fromEntries = <TEntry extends readonly [PropertyKey, unknown]>(
   value: Iterable<TEntry>
 ): {
@@ -108,6 +118,7 @@ export const fromEntries = <TEntry extends readonly [PropertyKey, unknown]>(
   };
 };
 
+/** Grouped helpers for the object module */
 export const object = Object.freeze({
   compact,
   entries,

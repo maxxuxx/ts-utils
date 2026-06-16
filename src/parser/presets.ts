@@ -5,6 +5,7 @@ import { booleanLikeToBoolean, emptyStringToUndefined } from "./helpers.js";
 import type { ParserUtils } from "./types.js";
 
 // Parser collection
+/** Grouped helpers for the parser module */
 export const parser: ParserUtils = Object.freeze({
   string : createParser(z.string()),
   number : createParser(z.number()),

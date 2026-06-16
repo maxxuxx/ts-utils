@@ -11,13 +11,16 @@ import {
 } from "./errors.js";
 import type { MaybePromise } from "./types.js";
 
+/** Handler signature for api route */
 export type ApiRouteHandler = () => MaybePromise<Response>;
 
+/** Options for api route error */
 export type ApiRouteErrorOptions = Readonly<{
   authMessage?: string;
   responseMessage: string;
 }>;
 
+/** Runs a route handler and converts known API errors to HTTP responses */
 export const handleApiRoute = async (
   handler: ApiRouteHandler,
   options: ApiRouteErrorOptions
@@ -33,6 +36,7 @@ export const handleApiRoute = async (
   }
 };
 
+/** Converts a value to api route error response */
 export const toApiRouteErrorResponse = (
   error: unknown,
   options: ApiRouteErrorOptions

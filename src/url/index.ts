@@ -1,31 +1,42 @@
+/** Path segment accepted by URL path helpers */
 export type UrlPathPart = string | number | null | undefined;
+
+/** Query value accepted by URL query helpers */
 export type UrlQueryValue = string | number | boolean | null | undefined;
+
+/** Query input accepted by URL builders */
 export type UrlQueryParams =
   | URLSearchParams
   | ReadonlyArray<readonly [string, UrlQueryValue]>
   | Readonly<Record<string, UrlQueryValue | readonly UrlQueryValue[]>>;
 
 // Path helpers
+/** Splits path */
 export const splitPath = (path: string): string[] => (
   path.split("/").filter((part) => part.length > 0)
 );
 
+/** Strips leading slash */
 export const stripLeadingSlash = (path: string): string => (
   path.replace(/^\/+/u, "")
 );
 
+/** Strips trailing slash */
 export const stripTrailingSlash = (path: string): string => (
   path === "/" ? path : path.replace(/\/+$/u, "")
 );
 
+/** Ensures leading slash */
 export const ensureLeadingSlash = (path: string): string => (
   path.startsWith("/") ? path : `/${path}`
 );
 
+/** Runs with trailing slash */
 export const withTrailingSlash = (path: string): string => (
   path.endsWith("/") ? path : `${path}/`
 );
 
+/** Normalizes path */
 export const normalizePath = (path: string): string => {
   const hasLeadingSlash = path.startsWith("/");
   const hasTrailingSlash = path.endsWith("/") && path !== "/";
@@ -38,6 +49,7 @@ export const normalizePath = (path: string): string => {
   return `${hasLeadingSlash ? "/" : ""}${normalized}${hasTrailingSlash ? "/" : ""}`;
 };
 
+/** Joins path */
 export const joinPath = (...parts: UrlPathPart[]): string => {
   const textParts = parts
     .filter((part): part is string | number => part !== null && part !== undefined)
@@ -56,6 +68,7 @@ export const joinPath = (...parts: UrlPathPart[]): string => {
 };
 
 // Query helpers
+/** Converts a value to query entries */
 export const toQueryEntries = (query: UrlQueryParams): Array<[string, UrlQueryValue]> => {
   if (query instanceof URLSearchParams) {
     return Array.from(query.entries());
@@ -74,6 +87,7 @@ export const toQueryEntries = (query: UrlQueryParams): Array<[string, UrlQueryVa
   });
 };
 
+/** Converts a value to search params */
 export const toSearchParams = (query?: UrlQueryParams): URLSearchParams => {
   const searchParams = new URLSearchParams();
 
@@ -92,6 +106,7 @@ export const toSearchParams = (query?: UrlQueryParams): URLSearchParams => {
   return searchParams;
 };
 
+/** Appends query */
 export const appendQuery = (
   path: string,
   query?: UrlQueryParams
@@ -111,14 +126,17 @@ export const appendQuery = (
 };
 
 // URL helpers
+/** Checks whether a value is absolute url */
 export const isAbsoluteUrl = (value: string): boolean => (
   /^[a-z][a-z\d+.-]*:\/\//iu.test(value)
 );
 
+/** Checks whether a value is external url */
 export const isExternalUrl = (value: string): boolean => (
   isAbsoluteUrl(value) || value.startsWith("//")
 );
 
+/** Builds url */
 export const buildUrl = (
   baseUrl: string,
   path = "",
@@ -144,6 +162,7 @@ export const buildUrl = (
   return url.toString();
 };
 
+/** Grouped helpers for the url module */
 export const url = Object.freeze({
   appendQuery,
   build: buildUrl,

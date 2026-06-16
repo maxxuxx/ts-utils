@@ -214,6 +214,43 @@ describe("session module", () => {
     expect(storedSession.tokens?.refreshToken).toBe("next-refresh-token");
   });
 
+  it("rejects refreshed JWT tokens that do not match the configured JWT schema", async () => {
+    const nowSeconds = 1_700_000_000;
+    const currentTokens = {
+      accessToken : createToken({ exp: nowSeconds + 60 }),
+      refreshToken: "invalid-refresh-token"
+    };
+    let storedSession: TestSession = {
+      tokens: currentTokens,
+      user: {
+        id: "user-1"
+      }
+    };
+    const session = createTokenSession<void, TestUser, TestTokens>({
+      clear: () => {
+        storedSession = {};
+      },
+      jwtSchema : Claims,
+      now       : () => nowSeconds * 1000,
+      read: () => storedSession,
+      refreshThresholdSeconds: 300,
+      refreshTokens: async () => ({
+        accessToken : "not-a-jwt",
+        refreshToken: "next-refresh-token"
+      }),
+      tokenSchema: Tokens,
+      userSchema : User,
+      write: (_context, nextSession) => {
+        storedSession = nextSession;
+      }
+    });
+
+    await expect(session.ensure(undefined)).rejects.toMatchObject({
+      reason: "invalid_token"
+    } satisfies Partial<TokenSessionError>);
+    expect(storedSession.tokens).toBe(currentTokens);
+  });
+
   it("dedupes concurrent refresh token rotation and writes next tokens to every request context", async () => {
     const nowSeconds = 1_700_000_000;
     const expiringAccessToken = createToken({

@@ -6,10 +6,12 @@ const levelOrder = new Map<LogLevel, number>(
 );
 
 // Level helpers
+/** Checks whether a value is production runtime */
 export const isProductionRuntime = (): boolean => (
   typeof process !== "undefined" && process.env.NODE_ENV === "production"
 );
 
+/** Resolves log level */
 export const resolveLogLevel = (
   options: BaseLoggerOptions = {}
 ): LogLevelOption => {
@@ -26,6 +28,7 @@ export const resolveLogLevel = (
   return options.level ?? "debug";
 };
 
+/** Checks whether log level */
 export const shouldLogLevel = (
   messageLevel: LogLevel,
   minimumLevel: LogLevelOption

@@ -11,6 +11,7 @@ type SerializedError = Readonly<{
 const logLevels = new Set<string>(LOG_LEVELS);
 
 // Payload helpers
+/** Converts log data into bridge-safe serializable values */
 export const serializeLogData = (data: unknown[]): unknown[] => (
   data.map((value) => {
     if (value instanceof Error) {
@@ -28,6 +29,7 @@ export const serializeLogData = (data: unknown[]): unknown[] => (
   })
 );
 
+/** Creates log payload */
 export const createLogPayload = (
   level: LogLevel,
   data: unknown[]
@@ -37,6 +39,7 @@ export const createLogPayload = (
   level
 });
 
+/** Checks whether a value is log payload */
 export const isLogPayload = (payload: unknown): payload is LogPayload => {
   if (typeof payload !== "object" || payload === null) {
     return false;

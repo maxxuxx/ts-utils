@@ -31,3 +31,6 @@ Keep product copy, localization, auth policy, and app-specific error mapping in 
 Do not import from `api-fetch` here unless the module intentionally grows a separate adapter for `ApiHttpError` style errors
 
 Keep module docs updated whenever helper names, default messages, exports, or response body shapes change
+## Public documentation
+
+Every exported function, class, constant, interface, and type alias must have concise JSDoc before the declaration so editor hover explains purpose, important behavior, and expected usage

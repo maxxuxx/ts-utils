@@ -37,3 +37,6 @@ Use `globalThis.Buffer` only as a runtime fallback for base64 in Node-like envir
 Keep this module focused on string and byte representation conversion. Do not add JSON parse/stringify behavior here; use the `json` module for JSON payloads
 
 Keep module docs updated whenever encoding behavior, exports, namespace aliases, or runtime assumptions change
+## Public documentation
+
+Every exported function, class, constant, interface, and type alias must have concise JSDoc before the declaration so editor hover explains purpose, important behavior, and expected usage

@@ -1,8 +1,10 @@
+/** Provides the empty string to undefined helper */
 // Query value helpers
 export const emptyStringToUndefined = (value: unknown): unknown => (
   value === "" ? undefined : value
 );
 
+/** Provides the boolean like to boolean helper */
 export const booleanLikeToBoolean = (value: unknown): unknown => {
   if (typeof value === "boolean") {
     return value;

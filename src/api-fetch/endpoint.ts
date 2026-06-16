@@ -20,6 +20,7 @@ import type {
   QueryParams
 } from "./types.js";
 
+/** Creates endpoint factory */
 export const createEndpointFactory = <TMethod extends ApiMethod>(
   method: TMethod
 ): EndpointFactory<TMethod> => {
@@ -47,6 +48,7 @@ export const createEndpointFactory = <TMethod extends ApiMethod>(
   }) as EndpointFactory<TMethod>;
 };
 
+/** Grouped endpoint factories for each HTTP method */
 export const endpoint = Object.freeze({
   delete: createEndpointFactory(ApiMethod.DELETE),
   get   : createEndpointFactory(ApiMethod.GET),
@@ -56,6 +58,7 @@ export const endpoint = Object.freeze({
 });
 
 // Endpoint execution
+/** Calls an endpoint definition through an API fetcher */
 export const executeEndpoint = async <TEndpoint extends AnyApiEndpoint>(
   request: ApiRequest,
   apiEndpoint: TEndpoint,

@@ -1,5 +1,7 @@
+/** Binary input accepted by encoding helpers */
 export type EncodingBytes = ArrayBufferLike | ArrayBufferView | readonly number[];
 
+/** Result returned by encoding */
 export type EncodingResult<TData, TError = unknown> =
   | {
       ok: true;
@@ -10,6 +12,7 @@ export type EncodingResult<TData, TError = unknown> =
       error: TError;
     };
 
+/** Options for utf8 decode */
 export type Utf8DecodeOptions = {
   fatal?: boolean;
   ignoreBOM?: boolean;
@@ -27,6 +30,7 @@ type EncodingGlobal = typeof globalThis & {
   Buffer?: BufferConstructorLike;
 };
 
+/** Error raised for encoding failures */
 export class EncodingError extends Error {
   readonly cause: unknown;
 
@@ -70,6 +74,7 @@ const isSharedArrayBuffer = (value: unknown): value is SharedArrayBuffer => (
   typeof SharedArrayBuffer !== "undefined" && value instanceof SharedArrayBuffer
 );
 
+/** Converts a value to uint8 array */
 export const toUint8Array = (bytes: EncodingBytes): Uint8Array => {
   if (bytes instanceof Uint8Array) {
     return bytes;
@@ -146,10 +151,12 @@ const normalizeHex = (value: string): string => (
   value.trim().replace(/^0x/iu, "")
 );
 
+/** Encodes utf8 */
 export const encodeUtf8 = (text: string): Uint8Array => (
   new TextEncoder().encode(text)
 );
 
+/** Decodes utf8 */
 export const decodeUtf8 = (
   bytes: EncodingBytes,
   options: Utf8DecodeOptions = {}
@@ -157,6 +164,7 @@ export const decodeUtf8 = (
   new TextDecoder("utf-8", options).decode(toUint8Array(bytes))
 );
 
+/** Safely decodes utf8 */
 export const safeDecodeUtf8 = (
   bytes: EncodingBytes,
   options: Utf8DecodeOptions = {}
@@ -168,14 +176,17 @@ export const safeDecodeUtf8 = (
   }
 };
 
+/** Returns utf8 byte length */
 export const getUtf8ByteLength = (text: string): number => (
   encodeUtf8(text).byteLength
 );
 
+/** Encodes base64 */
 export const encodeBase64 = (value: string | EncodingBytes): string => (
   bytesToBase64(typeof value === "string" ? encodeUtf8(value) : toUint8Array(value))
 );
 
+/** Decodes base64 */
 export const decodeBase64 = (
   value: string,
   options: Utf8DecodeOptions = {}
@@ -183,14 +194,17 @@ export const decodeBase64 = (
   decodeUtf8(base64ToBytes(value), options)
 );
 
+/** Converts base64 to uint8 array */
 export const base64ToUint8Array = (value: string): Uint8Array => (
   base64ToBytes(value)
 );
 
+/** Converts uint8 array to base64 */
 export const uint8ArrayToBase64 = (bytes: EncodingBytes): string => (
   bytesToBase64(toUint8Array(bytes))
 );
 
+/** Checks whether a value is base64 */
 export const isBase64 = (value: string): boolean => {
   const normalized = value.trim();
 
@@ -201,6 +215,7 @@ export const isBase64 = (value: string): boolean => {
   return /^(?:[A-Za-z\d+/]{4})*(?:[A-Za-z\d+/]{2}==|[A-Za-z\d+/]{3}=)?$/u.test(normalized);
 };
 
+/** Encodes hex */
 export const encodeHex = (value: string | EncodingBytes): string => {
   const bytes = typeof value === "string" ? encodeUtf8(value) : toUint8Array(value);
 
@@ -209,6 +224,7 @@ export const encodeHex = (value: string | EncodingBytes): string => {
     .join("");
 };
 
+/** Converts hex to uint8 array */
 export const hexToUint8Array = (value: string): Uint8Array => {
   const hex = normalizeHex(value);
 
@@ -225,6 +241,7 @@ export const hexToUint8Array = (value: string): Uint8Array => {
   return bytes;
 };
 
+/** Decodes hex */
 export const decodeHex = (
   value: string,
   options: Utf8DecodeOptions = {}
@@ -232,16 +249,19 @@ export const decodeHex = (
   decodeUtf8(hexToUint8Array(value), options)
 );
 
+/** Converts uint8 array to hex */
 export const uint8ArrayToHex = (bytes: EncodingBytes): string => (
   encodeHex(bytes)
 );
 
+/** Checks whether a value is hex */
 export const isHex = (value: string): boolean => {
   const hex = normalizeHex(value);
 
   return hex.length > 0 && hex.length % 2 === 0 && /^[\da-f]*$/iu.test(hex);
 };
 
+/** Grouped helpers for the utf8 module */
 export const utf8 = Object.freeze({
   byteLength: getUtf8ByteLength,
   decode: decodeUtf8,
@@ -250,6 +270,7 @@ export const utf8 = Object.freeze({
   toBytes: encodeUtf8
 });
 
+/** Grouped helpers for the base64 module */
 export const base64 = Object.freeze({
   decode: decodeBase64,
   encode: encodeBase64,
@@ -258,6 +279,7 @@ export const base64 = Object.freeze({
   toBytes: base64ToUint8Array
 });
 
+/** Grouped helpers for the hex module */
 export const hex = Object.freeze({
   decode: decodeHex,
   encode: encodeHex,
@@ -266,6 +288,7 @@ export const hex = Object.freeze({
   toBytes: hexToUint8Array
 });
 
+/** Grouped helpers for the encoding module */
 export const encoding = Object.freeze({
   base64,
   hex,

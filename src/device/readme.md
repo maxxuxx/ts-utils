@@ -7,11 +7,19 @@ Device UUID helpers for Node main processes and browser-like renderers.
 ```ts
 import {
   createCookieDeviceUuidStore,
-  getBrowserDeviceUuid,
-  getDeviceUuid,
+  getBrowserDeviceUuid
+} from "@maxxuxx/ts-utils/device/browser";
+import {
   getNodeDeviceUuid
+} from "@maxxuxx/ts-utils/device/node";
+import {
+  getDeviceUuid
 } from "@maxxuxx/ts-utils/device";
 ```
+
+Prefer the runtime-specific subpaths when the target environment is known. The
+root `@maxxuxx/ts-utils/device` entry is kept for compatibility and automatic
+runtime detection.
 
 `getNodeDeviceUuid` reads a stable machine identifier from the host platform.
 It accepts an injected command executor for tests and custom runtimes.

@@ -9,14 +9,17 @@ import type {
 import type { JwtPayload } from "../jwt/index.js";
 
 // Storage types
+/** Represents react session storage name */
 export type ReactSessionStorageName = "local" | "session";
 
+/** Represents react session storage */
 export type ReactSessionStorage = Readonly<{
   getItem: (key: string) => string | null;
   removeItem: (key: string) => void;
   setItem: (key: string, value: string) => void;
 }>;
 
+/** Options for react token session */
 export type ReactTokenSessionOptions<
   TUser,
   TTokens extends TokenSessionTokens,
@@ -31,6 +34,7 @@ export type ReactTokenSessionOptions<
   storageKey: string;
 }>;
 
+/** Represents react token session */
 export type ReactTokenSession<
   TUser,
   TTokens extends TokenSessionTokens
@@ -59,6 +63,7 @@ export type ReactTokenSession<
 }>;
 
 // Factory
+/** Creates react token session */
 export const createReactTokenSession = <
   TUser,
   TTokens extends TokenSessionTokens,

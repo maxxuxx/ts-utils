@@ -1,11 +1,14 @@
+/** Represents jwt object */
 export type JwtObject = Record<string, unknown>;
 
+/** Represents jwt header */
 export type JwtHeader = JwtObject & {
   alg?: string;
   typ?: string;
   kid?: string;
 };
 
+/** Payload shape for jwt */
 export type JwtPayload = JwtObject & {
   exp?: number;
   iat?: number;
@@ -14,20 +17,25 @@ export type JwtPayload = JwtObject & {
   sub?: string;
 };
 
+/** Represents jwt payload with token */
 export type JwtPayloadWithToken<TPayload extends JwtPayload = JwtPayload> =
   TPayload & {
     token: string;
   };
 
+/** Represents jwt clock input */
 export type JwtClockInput = Date | number;
 
+/** Options for jwt expiration */
 export type JwtExpirationOptions = Readonly<{
   now?: JwtClockInput;
   withinSeconds?: number;
 }>;
 
+/** Represents jwt expiration input */
 export type JwtExpirationInput = JwtExpirationOptions | number;
 
+/** Result returned by jwt */
 export type JwtResult<TData, TError = unknown> =
   | {
       ok: true;
@@ -50,6 +58,7 @@ type JwtGlobal = typeof globalThis & {
   Buffer?: BufferConstructorLike;
 };
 
+/** Error raised for jwt decode failures */
 export class JwtDecodeError extends Error {
   readonly cause: unknown;
 
@@ -79,6 +88,7 @@ const createFailure = <TError>(error: TError): {
 });
 
 // Decode helpers
+/** Decodes jwt */
 export const decodeJwt = <TPayload extends JwtPayload = JwtPayload>(
   token: string
 ): JwtPayloadWithToken<TPayload> | null => {
@@ -87,6 +97,7 @@ export const decodeJwt = <TPayload extends JwtPayload = JwtPayload>(
   return result.ok ? result.data : null;
 };
 
+/** Safely decodes jwt */
 export const safeDecodeJwt = <TPayload extends JwtPayload = JwtPayload>(
   token: string | null | undefined
 ): JwtResult<JwtPayloadWithToken<TPayload>, JwtDecodeError> => {
@@ -102,6 +113,7 @@ export const safeDecodeJwt = <TPayload extends JwtPayload = JwtPayload>(
   }
 };
 
+/** Decodes jwt header */
 export const decodeJwtHeader = <THeader extends JwtHeader = JwtHeader>(
   token: string
 ): THeader | null => {
@@ -110,6 +122,7 @@ export const decodeJwtHeader = <THeader extends JwtHeader = JwtHeader>(
   return result.ok ? result.data : null;
 };
 
+/** Safely decodes jwt header */
 export const safeDecodeJwtHeader = <THeader extends JwtHeader = JwtHeader>(
   token: string | null | undefined
 ): JwtResult<THeader, JwtDecodeError> => {
@@ -121,6 +134,7 @@ export const safeDecodeJwtHeader = <THeader extends JwtHeader = JwtHeader>(
 };
 
 // Expiration helpers
+/** Checks whether a value is jwt expired */
 export const isJwtExpired = (
   token: string | null | undefined,
   options: JwtExpirationInput = 0
@@ -224,6 +238,7 @@ const resolveWithinMs = (options: JwtExpirationOptions): number => {
   return Number.isFinite(seconds) ? Math.max(0, seconds) * 1000 : 0;
 };
 
+/** Grouped helpers for the jwt module */
 export const jwt = Object.freeze({
   decode      : decodeJwt,
   decodeHeader: decodeJwtHeader,

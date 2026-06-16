@@ -42,3 +42,6 @@ Use `isFiniteNumber` when `Infinity` must also be rejected
 `isEmpty` is intentionally broad and checks only common container/value emptiness
 
 Keep module docs updated whenever exports or guard behavior changes
+## Public documentation
+
+Every exported function, class, constant, interface, and type alias must have concise JSDoc before the declaration so editor hover explains purpose, important behavior, and expected usage

@@ -28,6 +28,7 @@ type RefreshPromise = Promise<TokenSessionTokens>;
 
 const refreshPromises = new Map<string, RefreshPromise>();
 
+/** Error raised for token session failures */
 export class TokenSessionError extends Error {
   readonly cause: unknown;
   readonly reason: TokenSessionReason;
@@ -42,6 +43,7 @@ export class TokenSessionError extends Error {
 }
 
 // Factory
+/** Creates token session */
 export const createTokenSession = <
   TContext,
   TUser,
@@ -118,9 +120,18 @@ export const createTokenSession = <
       tokens,
       user
     };
-    const executeRefresh = async (): Promise<TTokens> => parseTokens(
-      await refreshTokens(refreshToken, refreshContext)
-    );
+    const executeRefresh = async (): Promise<TTokens> => {
+      const nextTokens      = parseTokens(await refreshTokens(refreshToken, refreshContext));
+      const nextAccessToken = readAccessToken(nextTokens);
+
+      if (!nextAccessToken) {
+        throw createSessionError("invalid_token");
+      }
+
+      readClaims(nextAccessToken);
+
+      return nextTokens;
+    };
     const nextTokens = options.dedupeRefresh === false
       ? await executeRefresh()
       : await runRefreshOnce(

@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export { z } from "zod";
 
+/** Runtime schema for app update status */
 export const appUpdateStatusSchema = z.enum([
   "idle",
   "disabled",
@@ -15,12 +16,14 @@ export const appUpdateStatusSchema = z.enum([
   "error"
 ]);
 
+/** Runtime schema for app update reason */
 export const appUpdateReasonSchema = z.enum([
   "not-configured",
   "not-packaged",
   "error"
 ]);
 
+/** Runtime schema for app update state */
 export const appUpdateStateSchema = z.object({
   availableVersion: z.string().min(1).optional(),
   currentVersion  : z.string().min(1),
@@ -32,6 +35,11 @@ export const appUpdateStateSchema = z.object({
   status          : appUpdateStatusSchema
 });
 
+/** Allowed status value for app update */
 export type AppUpdateStatus = z.infer<typeof appUpdateStatusSchema>;
+
+/** Allowed reason value for app update */
 export type AppUpdateReason = z.infer<typeof appUpdateReasonSchema>;
+
+/** State shape for app update */
 export type AppUpdateState  = z.infer<typeof appUpdateStateSchema>;

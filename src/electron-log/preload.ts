@@ -16,6 +16,7 @@ const createSender = (
 };
 
 // Preload bridge
+/** Creates bridge api */
 export const createBridgeApi = (
   ipcRenderer: ElectronIpcRendererLike,
   channel = DEFAULT_CHANNEL
@@ -37,6 +38,7 @@ export const createBridgeApi = (
   });
 };
 
+/** Exposes bridge */
 export const exposeBridge = (
   options: PreloadBridgeOptions
 ): BridgeApi => {

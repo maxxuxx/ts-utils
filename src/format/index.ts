@@ -1,10 +1,12 @@
 import { toDate, toNumber } from "../normalize/index.js";
 
+/** Options for number format */
 export type NumberFormatOptions = Intl.NumberFormatOptions & Readonly<{
   fallback?: string;
   locale?: string | string[];
 }>;
 
+/** Options for currency format */
 export type CurrencyFormatOptions = Omit<Intl.NumberFormatOptions, "currency" | "style"> & Readonly<{
   fallback?: string;
   locale?: string | string[];
@@ -12,16 +14,19 @@ export type CurrencyFormatOptions = Omit<Intl.NumberFormatOptions, "currency" | 
   unit?: string;
 }>;
 
+/** Options for phone number format */
 export type PhoneNumberFormatOptions = Readonly<{
   fallback?: string;
 }>;
 
+/** Options for value unit format */
 export type ValueUnitFormatOptions = NumberFormatOptions & Readonly<{
   separator?: string;
 }>;
 
 const DEFAULT_LOCALE = "ko-KR";
 
+/** Formats number */
 export const formatNumber = (
   value: unknown,
   options: NumberFormatOptions = {}
@@ -39,6 +44,7 @@ export const formatNumber = (
   return new Intl.NumberFormat(locale, intlOptions).format(toNumber(value));
 };
 
+/** Formats currency */
 export const formatCurrency = (
   value: unknown,
   options: CurrencyFormatOptions = {}
@@ -61,6 +67,7 @@ export const formatCurrency = (
   })}${separator}${unit}`;
 };
 
+/** Formats date */
 export const formatDate = (
   value: unknown,
   format = "yyyy-mm-dd",
@@ -84,6 +91,7 @@ export const formatDate = (
   return format.replace(/yyyy|mm|dd|HH|MM|ss/g, (token) => tokens[token] ?? token);
 };
 
+/** Formats phone number */
 export const formatPhoneNumber = (
   value: unknown,
   options: PhoneNumberFormatOptions = {}
@@ -118,6 +126,7 @@ export const formatPhoneNumber = (
   return fallback;
 };
 
+/** Formats value unit */
 export const formatValueUnit = (
   value: unknown,
   unit: string,
@@ -162,6 +171,7 @@ const isNumberLike = (value: unknown): boolean => {
   return Number.isFinite(Number(value));
 };
 
+/** Grouped helpers for the format module */
 export const format = Object.freeze({
   currency:    formatCurrency,
   date:        formatDate,

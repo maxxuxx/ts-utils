@@ -40,3 +40,6 @@ Normalizers return predictable fallback values instead of throwing
 `isRecord` is intentionally stricter than JavaScript object semantics and only accepts plain records
 
 Keep module docs updated whenever exports or normalization behavior changes
+## Public documentation
+
+Every exported function, class, constant, interface, and type alias must have concise JSDoc before the declaration so editor hover explains purpose, important behavior, and expected usage

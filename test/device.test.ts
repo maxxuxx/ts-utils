@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -38,6 +40,36 @@ const createCrypto = (nextUuid = uuid): BrowserCryptoLike => ({
 });
 
 describe("device module", () => {
+  it("publishes browser and node device subpath exports", () => {
+    const packageJson = JSON.parse(readFileSync(
+      new URL("../package.json", import.meta.url),
+      "utf8"
+    )) as {
+      exports?: Record<string, {
+        import?: string;
+        types?: string;
+      }>;
+    };
+
+    expect(packageJson.exports?.["./device/browser"]).toEqual({
+      import: "./dist/device/browser.js",
+      types: "./dist/device/browser.d.ts"
+    });
+    expect(packageJson.exports?.["./device/node"]).toEqual({
+      import: "./dist/device/node.js",
+      types: "./dist/device/node.d.ts"
+    });
+  });
+
+  it("keeps the root device entry free from static Node runtime imports", () => {
+    const source = readFileSync(
+      new URL("../src/device/index.ts", import.meta.url),
+      "utf8"
+    );
+
+    expect(source).not.toMatch(/from\s+["']\.\/node\.js["']/u);
+  });
+
   it("parses darwin ioreg UUID output", () => {
     expect(parseNodeDeviceUuidOutput(`
       +-o IOPlatformExpertDevice

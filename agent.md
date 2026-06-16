@@ -134,3 +134,12 @@ For every module folder affected by a task:
 - Record documentation changes as part of the same task, not as a separate follow-up
 - Keep the content scoped to the touched module and avoid duplicating unrelated project-wide documentation
 - If a module folder does not have these files yet, create them when the task meaningfully changes that module
+
+### 13. Public API JSDoc
+
+**Document every exported API for editor hover**
+
+- Add concise JSDoc before every exported function, class, constant, interface, and type alias
+- Explain purpose, important behavior, and expected usage in one short sentence
+- Keep comments useful for consumers and avoid implementation narration
+- Update or remove stale JSDoc when changing exported behavior

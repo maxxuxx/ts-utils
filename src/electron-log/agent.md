@@ -67,3 +67,6 @@ Default development level is `debug`
 Default production level is `info`
 
 Set `productionLevel` to `false` when production logging should be fully disabled
+## Public documentation
+
+Every exported function, class, constant, interface, and type alias must have concise JSDoc before the declaration so editor hover explains purpose, important behavior, and expected usage

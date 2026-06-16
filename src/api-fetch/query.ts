@@ -1,6 +1,7 @@
 import type { QueryParams, QueryValue } from "./types.js";
 
 // Query params
+/** Converts a value to query entries */
 export const toQueryEntries = (query: QueryParams): Array<[string, QueryValue]> => {
   if (query instanceof URLSearchParams) {
     return Array.from(query.entries());
@@ -19,6 +20,7 @@ export const toQueryEntries = (query: QueryParams): Array<[string, QueryValue]> 
   });
 };
 
+/** Appends query */
 export const appendQuery = (searchParams: URLSearchParams, query?: QueryParams): void => {
   if (!query) {
     return;
@@ -33,6 +35,7 @@ export const appendQuery = (searchParams: URLSearchParams, query?: QueryParams):
   }
 };
 
+/** Merges query */
 export const mergeQuery = (
   ...queries: Array<QueryParams | undefined>
 ): QueryParams | undefined => {

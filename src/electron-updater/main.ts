@@ -73,6 +73,7 @@ const resolveAllowPrerelease = (
   return PRERELEASE_VERSION_PATTERN.test(version);
 };
 
+/** Creates updater service */
 export const createUpdaterService = (
   options: UpdaterServiceOptions
 ): UpdaterService => {
@@ -477,6 +478,7 @@ export const createUpdaterService = (
   });
 };
 
+/** Registers updater ipc handlers */
 export const registerUpdaterIpcHandlers = (
   options: UpdaterMainBridgeOptions
 ): (() => void) => {

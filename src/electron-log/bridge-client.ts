@@ -22,6 +22,7 @@ const writeToConsole = (level: LogLevel, data: unknown[]): void => {
 };
 
 // Renderer bridge client
+/** Creates bridge logger */
 export const createBridgeLogger = (
   options: BridgeLoggerOptions = {}
 ): LoggerFunctions => {

@@ -27,3 +27,6 @@ Do not use `z.coerce.boolean()` for env flags because `"false"` would become `tr
 Keep individual getters small and predictable. Missing values return the fallback or `undefined`; required values throw `EnvMissingError`.
 
 Keep this module free of DOM type references.
+## Public documentation
+
+Every exported function, class, constant, interface, and type alias must have concise JSDoc before the declaration so editor hover explains purpose, important behavior, and expected usage
