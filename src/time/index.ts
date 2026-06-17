@@ -1,3 +1,6 @@
+/** Default same-origin header name for exposing server time in milliseconds */
+export const SERVER_TIME_HEADER = "x-server-time-ms" as const;
+
 /** Payload shape for server time */
 export type ServerTimePayload = {
   serverTimeMs: number;
@@ -44,6 +47,39 @@ export type ClockSnapshot = {
   serverDate: Date;
 };
 
+/** Options for server clock */
+export type ServerClockOptions = {
+  maxSamples?: number;
+  now?: () => number;
+};
+
+/** Tracks sampled server time and exposes adjusted server clock values */
+export type ServerClock = Readonly<{
+  clear: () => void;
+  getSample: () => TimeSyncSample | undefined;
+  getServerDate: (localTimeMs?: number) => Date | undefined;
+  getServerTimeMs: (localTimeMs?: number) => number | undefined;
+  getSnapshot: (localTimeMs?: number) => ClockSnapshot | undefined;
+  update: (sample: TimeSyncSample) => TimeSyncSample;
+}>;
+
+/** Readable header shape accepted by server time helpers */
+export type ServerTimeReadableHeaders = Pick<Headers, "get">;
+
+/** Mutable header shape accepted by server time helpers */
+export type ServerTimeHeaders = Pick<Headers, "get" | "set">;
+
+/** Options for resolving server time from headers or a clock */
+export type ResolveServerTimeOptions = {
+  clock?: ServerClock;
+  header?: string;
+  headers?: ServerTimeReadableHeaders;
+  now?: () => number;
+};
+
+/** Options for writing server time headers */
+export type SetServerTimeHeaderOptions = Omit<ResolveServerTimeOptions, "headers">;
+
 /** Minimal compatible shape for fetch response */
 export type FetchResponseLike = {
   ok?: boolean;
@@ -65,6 +101,8 @@ export type FetchServerTimeOptions = {
   init?: unknown;
   now?: () => number;
 };
+
+const DEFAULT_MAX_SAMPLES = 10;
 
 const isFiniteMs = (value: unknown): value is number => (
   typeof value === "number" && Number.isFinite(value)
@@ -109,6 +147,12 @@ const parseServerPayload = (payload: unknown): {
     serverTransmitTimeMs: assertFiniteMs(serverTransmitTimeMs, "serverTransmitTimeMs")
   };
 };
+
+const normalizeMaxSamples = (value: number | undefined): number => (
+  typeof value === "number" && Number.isFinite(value)
+    ? Math.max(1, Math.trunc(value))
+    : DEFAULT_MAX_SAMPLES
+);
 
 /** Calculates time offset */
 export const calculateTimeOffset = ({
@@ -200,6 +244,116 @@ export const createClockSnapshot = (
     serverTimeMs,
     serverDate: new Date(serverTimeMs)
   };
+};
+
+/** Creates a server clock backed by sampled time offsets */
+export const createServerClock = (
+  options: ServerClockOptions = {}
+): ServerClock => {
+  const maxSamples = normalizeMaxSamples(options.maxSamples);
+  const now        = options.now ?? Date.now;
+  const samples: TimeSyncSample[] = [];
+  let selectedSample: TimeSyncSample | undefined;
+
+  const getSnapshot = (
+    localTimeMs = now()
+  ): ClockSnapshot | undefined => (
+    selectedSample
+      ? createClockSnapshot(selectedSample.offsetMs, localTimeMs)
+      : undefined
+  );
+
+  return Object.freeze({
+    clear: () => {
+      samples.length  = 0;
+      selectedSample  = undefined;
+    },
+    getSample: () => selectedSample,
+    getServerDate: (localTimeMs) => getSnapshot(localTimeMs)?.serverDate,
+    getServerTimeMs: (localTimeMs) => getSnapshot(localTimeMs)?.serverTimeMs,
+    getSnapshot,
+    update: (sample) => {
+      samples.push(sample);
+
+      if (samples.length > maxSamples) {
+        samples.splice(0, samples.length - maxSamples);
+      }
+
+      selectedSample = pickBestTimeSyncSample(samples);
+
+      return sample;
+    }
+  });
+};
+
+/** Parses an HTTP Date header into a millisecond timestamp */
+export const parseServerDateHeader = (
+  value: string | null | undefined
+): number | undefined => {
+  if (!value) {
+    return undefined;
+  }
+
+  const timeMs = Date.parse(value);
+
+  return isFiniteMs(timeMs) ? timeMs : undefined;
+};
+
+/** Reads a server time millisecond header */
+export const getServerTimeHeaderMs = (
+  headers: ServerTimeReadableHeaders,
+  header: string = SERVER_TIME_HEADER
+): number | undefined => {
+  const value = headers.get(header);
+
+  if (!value || value.trim() === "") {
+    return undefined;
+  }
+
+  const timeMs = Number(value);
+
+  return isFiniteMs(timeMs) ? timeMs : undefined;
+};
+
+/** Resolves server time from headers, a sampled clock, or local fallback time */
+export const resolveServerTimeMs = ({
+  clock,
+  header = SERVER_TIME_HEADER,
+  headers,
+  now = Date.now
+}: ResolveServerTimeOptions = {}): number => {
+  const headerTimeMs = headers
+    ? getServerTimeHeaderMs(headers, header)
+    : undefined;
+
+  if (headerTimeMs !== undefined) {
+    return headerTimeMs;
+  }
+
+  const clockTimeMs = clock?.getServerTimeMs();
+
+  if (clockTimeMs !== undefined) {
+    return clockTimeMs;
+  }
+
+  return assertFiniteMs(now(), "now");
+};
+
+/** Writes a server time millisecond header and returns the written value */
+export const setServerTimeHeader = (
+  headers: ServerTimeHeaders,
+  options: SetServerTimeHeaderOptions = {}
+): number => {
+  const header = options.header ?? SERVER_TIME_HEADER;
+  const timeMs = resolveServerTimeMs({
+    ...options,
+    header,
+    headers
+  });
+
+  headers.set(header, String(timeMs));
+
+  return timeMs;
 };
 
 /** Converts local ms to server ms */

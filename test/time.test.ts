@@ -1,14 +1,20 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  SERVER_TIME_HEADER,
   calculateTimeOffset,
   createClockSnapshot,
+  createServerClock,
   createServerTimePayload,
   createTimeSyncSample,
   fetchServerTimeSample,
+  getServerTimeHeaderMs,
   localMsToServerDate,
   localMsToServerMs,
+  parseServerDateHeader,
   pickBestTimeSyncSample,
+  resolveServerTimeMs,
+  setServerTimeHeader,
   type FetchLike
 } from "../src/time/index.js";
 
@@ -88,6 +94,90 @@ describe("time", () => {
     });
     expect(localMsToServerMs(20_000, -500)).toBe(19_500);
     expect(localMsToServerDate(20_000, -500)).toEqual(new Date(19_500));
+  });
+
+  it("parses HTTP date headers into millisecond timestamps", () => {
+    expect(parseServerDateHeader("Thu, 01 Jan 1970 00:00:02 GMT")).toBe(2_000);
+    expect(parseServerDateHeader("not a date")).toBeUndefined();
+    expect(parseServerDateHeader(null)).toBeUndefined();
+  });
+
+  it("tracks server clock samples and exposes adjusted server time", () => {
+    const clock = createServerClock({
+      now: () => 2_000
+    });
+
+    expect(clock.getServerTimeMs()).toBeUndefined();
+
+    clock.update(createTimeSyncSample({
+      clientSendTimeMs    : 1_000,
+      serverReceiveTimeMs : 1_500,
+      serverTransmitTimeMs: 1_500,
+      clientReceiveTimeMs : 1_000
+    }));
+
+    expect(clock.getServerTimeMs()).toBe(2_500);
+    expect(clock.getSnapshot()).toMatchObject({
+      localTimeMs : 2_000,
+      offsetMs    : 500,
+      serverTimeMs: 2_500
+    });
+
+    clock.clear();
+
+    expect(clock.getServerTimeMs()).toBeUndefined();
+  });
+
+  it("resolves server time from existing headers before clock and local fallback", () => {
+    const clock = createServerClock({
+      now: () => 2_000
+    });
+
+    clock.update(createTimeSyncSample({
+      clientSendTimeMs    : 1_000,
+      serverReceiveTimeMs : 1_500,
+      serverTransmitTimeMs: 1_500,
+      clientReceiveTimeMs : 1_000
+    }));
+
+    expect(resolveServerTimeMs({
+      clock,
+      headers: new Headers({
+        [SERVER_TIME_HEADER]: "1234"
+      }),
+      now: () => 9_000
+    })).toBe(1_234);
+
+    expect(resolveServerTimeMs({
+      clock,
+      headers: new Headers({
+        [SERVER_TIME_HEADER]: "bad"
+      }),
+      now: () => 9_000
+    })).toBe(2_500);
+
+    expect(resolveServerTimeMs({
+      now: () => 9_000
+    })).toBe(9_000);
+  });
+
+  it("sets server time headers with custom header support", () => {
+    const headers = new Headers();
+
+    expect(setServerTimeHeader(headers, {
+      header: "x-api-time-ms",
+      now   : () => 3_333
+    })).toBe(3_333);
+    expect(headers.get("x-api-time-ms")).toBe("3333");
+    expect(getServerTimeHeaderMs(headers, "x-api-time-ms")).toBe(3_333);
+
+    headers.set("x-api-time-ms", "4444");
+
+    expect(setServerTimeHeader(headers, {
+      header: "x-api-time-ms",
+      now   : () => 9_999
+    })).toBe(4_444);
+    expect(headers.get("x-api-time-ms")).toBe("4444");
   });
 
   it("fetches a sample from a structured response payload", async () => {

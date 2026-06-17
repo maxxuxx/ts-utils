@@ -8,6 +8,7 @@ Fetch-based API client utilities with Zod validation, endpoint definitions, auth
 
 - You want one fetch wrapper to own base URLs, headers, JSON bodies, timeouts, retries, auth headers, and response validation.
 - You define reusable typed endpoints and call them from app code with validated params, query, body, and response data.
+- Server-side API calls should sample upstream `Date` headers into a shared server clock.
 - Server routes need to convert known API client errors into Web `Response` objects.
 
 ## Import
@@ -72,12 +73,45 @@ result.code;
 result.response.name;
 ```
 
+## Server time sampling
+
+```ts
+import { createServerClock } from "@maxxuxx/ts-utils/time";
+
+const api = createApiFetcher({
+  baseURL: "https://api.example.com",
+  serverTime: true
+});
+
+await api.get("/me");
+
+api.serverTime?.getServerTimeMs();
+```
+
+For request-scoped fetchers, pass a shared clock:
+
+```ts
+const apiServerClock = createServerClock();
+
+const api = createApiFetcher({
+  baseURL: "https://api.example.com",
+  serverTime: {
+    clock: apiServerClock
+  }
+});
+
+await api.get("/me");
+
+apiServerClock.getServerTimeMs();
+```
+
 ## Behavior notes
 
 - `bodySchema` validates JSON request bodies before the request is sent. Without it, `body` is still serialized as JSON.
 - Use `rawBody` for `FormData`, `Blob`, `URLSearchParams`, streams, or a pre-serialized body.
 - `responseSchema` validates the parsed response body and throws `ApiValidationError` for invalid responses.
 - The default result shape is `{ code, message?, response }`. Response envelopes with `data` are unwrapped when possible.
+- `serverTime: true` creates an internal clock exposed as `api.serverTime`; `serverTime.clock` records into a caller-owned clock.
 - Client-level hooks run before request-level hooks. Logging is implemented as hooks, so custom hooks can be composed with logging.
 
 ## Edge cases
@@ -85,6 +119,7 @@ result.response.name;
 - Auth refresh is attempted for 401 and 419 by default and is deduped while a refresh is in flight.
 - Retries default to safe read-style behavior. Configure retry options explicitly for writes.
 - HTTP errors prefer server-provided `code` and `message`; fallback values only fill missing fields.
+- Missing or invalid server time headers are ignored.
 - `handleApiRoute` only converts known API errors. Unknown errors are rethrown.
 
 ## Related modules

@@ -18,8 +18,10 @@ import {
   createTimeSyncSample,
   pickBestTimeSyncSample,
   createClockSnapshot,
+  createServerClock,
   createServerTimePayload,
-  fetchServerTimeSample
+  fetchServerTimeSample,
+  setServerTimeHeader
 } from "@maxxuxx/ts-utils/time";
 ```
 
@@ -31,6 +33,8 @@ import {
 | `createTimeSyncSample` | Creates an offset sample and records `sampledAtMs`. |
 | `pickBestTimeSyncSample` | Chooses the lowest round trip sample, then lower absolute offset, then newest sample. |
 | `createClockSnapshot` | Builds a local/server clock snapshot from `offsetMs`. |
+| `createServerClock` | Stores time sync samples and exposes adjusted server time. |
+| `SERVER_TIME_HEADER`, `setServerTimeHeader` | Resolve and write the same-origin server time header. |
 | `localMsToServerMs`, `localMsToServerDate` | Converts local timestamps using an offset. |
 | `createServerTimePayload`, `fetchServerTimeSample` | Server response helper and client fetch helper. |
 
@@ -49,10 +53,22 @@ snapshot.serverTimeMs;
 snapshot.serverDate;
 ```
 
+## Header relay example
+
+```ts
+const apiServerClock = createServerClock();
+
+setServerTimeHeader(response.headers, {
+  clock: apiServerClock
+});
+```
+
 ## Behavior notes
 
 - Offset formula is `((serverReceive - clientSend) + (serverTransmit - clientReceive)) / 2`.
 - `roundTripMs` subtracts server processing time.
+- `createServerClock` returns `undefined` snapshots until at least one sample is recorded.
+- `setServerTimeHeader` resolves time from an existing header, then a clock, then `Date.now()`.
 - `fetchServerTimeSample` accepts a fetch-like function and does not depend on DOM fetch types.
 - Server responses can be a number or an object with `serverTimeMs`, `serverReceiveTimeMs`, and `serverTransmitTimeMs`.
 

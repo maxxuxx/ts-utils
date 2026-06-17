@@ -18,8 +18,10 @@ import {
   createTimeSyncSample,
   pickBestTimeSyncSample,
   createClockSnapshot,
+  createServerClock,
   createServerTimePayload,
-  fetchServerTimeSample
+  fetchServerTimeSample,
+  setServerTimeHeader
 } from "@maxxuxx/ts-utils/time";
 ```
 
@@ -31,6 +33,8 @@ import {
 | `createTimeSyncSample` | offset sample을 만들고 `sampledAtMs`를 기록합니다. |
 | `pickBestTimeSyncSample` | round trip이 가장 낮고, 다음으로 절대 offset이 낮고, 다음으로 최신 sample을 선택합니다. |
 | `createClockSnapshot` | `offsetMs`로 local/server clock snapshot을 만듭니다. |
+| `createServerClock` | time sync sample을 저장하고 보정된 server time을 노출합니다. |
+| `SERVER_TIME_HEADER`, `setServerTimeHeader` | same-origin server time header를 계산하고 기록합니다. |
 | `localMsToServerMs`, `localMsToServerDate` | offset으로 local timestamp를 server 기준으로 변환합니다. |
 | `createServerTimePayload`, `fetchServerTimeSample` | server response helper와 client fetch helper입니다. |
 
@@ -49,10 +53,22 @@ snapshot.serverTimeMs;
 snapshot.serverDate;
 ```
 
+## Header relay 예제
+
+```ts
+const apiServerClock = createServerClock();
+
+setServerTimeHeader(response.headers, {
+  clock: apiServerClock
+});
+```
+
 ## 동작 메모
 
 - offset 공식은 `((serverReceive - clientSend) + (serverTransmit - clientReceive)) / 2`입니다.
 - `roundTripMs`는 server processing time을 제외합니다.
+- `createServerClock`은 sample이 기록되기 전까지 `undefined` snapshot을 반환합니다.
+- `setServerTimeHeader`는 기존 header, clock, `Date.now()` 순서로 server time을 선택합니다.
 - `fetchServerTimeSample`은 fetch-like function을 받으며 DOM fetch type에 의존하지 않습니다.
 - server response는 number 또는 `serverTimeMs`, `serverReceiveTimeMs`, `serverTransmitTimeMs`를 가진 object일 수 있습니다.
 

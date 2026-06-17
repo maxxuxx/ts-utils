@@ -20,6 +20,9 @@ import {
 import {
   createApiFetcher as createSvelteKitApiFetcher
 } from "../src/api-fetch/sveltekit.js";
+import {
+  createServerClock
+} from "../src/time/index.js";
 
 const User = z.object({
   id  : z.number(),
@@ -193,6 +196,128 @@ describe("api-fetch", () => {
       }
     });
     expect(result.response.data.list[0]?.id).toBe(4);
+  });
+
+  it("updates server time clocks from response Date headers without changing results", async () => {
+    const times = [1_000, 1_100];
+    const clock = createServerClock({
+      now: () => 3_000
+    });
+    const fetch = vi.fn<FetchLike>(async () => jsonResponse({
+      ok: true
+    }, 200, {
+      Date: new Date(2_000).toUTCString()
+    }));
+    const api = createApiFetcher({
+      fetch,
+      serverTime: {
+        clock,
+        now: () => {
+          const next = times.shift();
+
+          if (next === undefined) {
+            throw new Error("unexpected clock read");
+          }
+
+          return next;
+        }
+      }
+    });
+
+    const result = await api.get("/clock", {
+      responseSchema: z.object({
+        ok: z.boolean()
+      })
+    });
+
+    expect(result).toEqual({
+      code    : 200,
+      response: { ok: true }
+    });
+    expect(clock.getServerTimeMs()).toBe(3_950);
+  });
+
+  it("creates and exposes an internal server time clock when serverTime is true", async () => {
+    const times = [0, 1_000, 1_100, 3_000];
+    const now = vi.spyOn(Date, "now").mockImplementation(() => {
+      const next = times.shift();
+
+      return next ?? 3_000;
+    });
+    const api = createApiFetcher({
+      fetch: async () => jsonResponse({
+        ok: true
+      }, 200, {
+        Date: new Date(2_000).toUTCString()
+      }),
+      serverTime: true
+    });
+
+    try {
+      await api.get("/clock");
+
+      expect(api.serverTime?.getServerTimeMs()).toBe(3_950);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it("exposes external server time clocks passed to api fetchers", async () => {
+    const clock = createServerClock();
+    const api = createApiFetcher({
+      fetch: async () => jsonResponse({
+        ok: true
+      }),
+      serverTime: {
+        clock
+      }
+    });
+
+    expect(api.serverTime).toBe(clock);
+  });
+
+  it("ignores missing or invalid Date headers while preserving API results", async () => {
+    const clock = createServerClock({
+      now: () => 5_000
+    });
+    const api = createApiFetcher({
+      fetch: async () => jsonResponse({
+        ok: true
+      }, 200, {
+        Date: "not a date"
+      }),
+      serverTime: {
+        clock,
+        now: () => 1_000
+      }
+    });
+
+    await expect(api.get("/clock")).resolves.toEqual({
+      code    : 200,
+      response: { ok: true }
+    });
+    expect(clock.getServerTimeMs()).toBeUndefined();
+  });
+
+  it("updates server time clocks before throwing HTTP errors", async () => {
+    const times = [1_000, 1_100];
+    const clock = createServerClock({
+      now: () => 3_000
+    });
+    const api = createApiFetcher({
+      fetch: async () => jsonResponse({
+        message: "failed"
+      }, 503, {
+        Date: new Date(2_000).toUTCString()
+      }),
+      serverTime: {
+        clock,
+        now: () => times.shift() ?? 0
+      }
+    });
+
+    await expect(api.get("/clock")).rejects.toBeInstanceOf(ApiHttpError);
+    expect(clock.getServerTimeMs()).toBe(3_950);
   });
 
   it("throws typed HTTP errors with parsed response bodies", async () => {
@@ -867,12 +992,17 @@ describe("api-fetch", () => {
   });
 });
 
-const jsonResponse = (body: unknown, status = 200): Response => new Response(
+const jsonResponse = (
+  body: unknown,
+  status = 200,
+  headers?: Record<string, string>
+): Response => new Response(
   JSON.stringify(body),
   {
     status,
     headers: {
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
+      ...headers
     }
   }
 );

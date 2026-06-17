@@ -24,7 +24,11 @@ Structured payloads use `serverReceiveTimeMs` and `serverTransmitTimeMs`. Numeri
 
 `pickBestTimeSyncSample` chooses the lowest round trip sample, then the smallest absolute offset, then the newest sample.
 
-Keep this module free of runtime dependencies and DOM type references.
+`createServerClock` stores bounded samples and exposes adjusted server time from the currently selected sample.
+
+`setServerTimeHeader` writes `x-server-time-ms` by default and resolves time from an existing header, then a clock, then local `Date.now()`.
+
+Keep this module free of runtime dependencies. Core clock math should stay independent from `fetch`; header helpers may accept the platform `Headers` shape.
 ## Public documentation
 
 Every exported function, class, constant, interface, and type alias must have concise JSDoc before the declaration so editor hover explains purpose, important behavior, and expected usage

@@ -1,4 +1,5 @@
 import type { ApiLogging } from "./logging.js";
+import type { ServerClock } from "../time/index.js";
 import type { z } from "zod";
 
 // HTTP types
@@ -141,6 +142,17 @@ export type ApiRetryOptions = Readonly<{
 /** Retry setting accepted by API requests */
 export type ApiRetry = boolean | number | ApiRetryOptions;
 
+// Server time
+/** Options for sampling server time from API response headers */
+export type ApiServerTimeOptions = Readonly<{
+  clock : ServerClock;
+  header?: string;
+  now   ?: () => number;
+}>;
+
+/** Server time sampling setting accepted by API fetchers */
+export type ApiServerTime = boolean | ApiServerTimeOptions;
+
 // Auth
 /** Converts an access token into request headers */
 export type ApiTokenHeaderFormatter = (
@@ -262,6 +274,7 @@ export type ApiFetcherOptions = Readonly<{
   hooks        ?: ApiHooks;
   logging      ?: ApiLogging;
   retry        ?: ApiRetry;
+  serverTime   ?: ApiServerTime;
   timeout      ?: number;
 }>;
 
@@ -278,6 +291,7 @@ export type ApiFetcher = Readonly<{
   post   : ApiWriteMethod;
   put    : ApiWriteMethod;
   request: ApiRequest;
+  serverTime?: ServerClock;
 }>;
 
 // Endpoint types

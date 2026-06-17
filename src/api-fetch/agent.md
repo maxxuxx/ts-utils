@@ -56,6 +56,8 @@ Method shortcuts are the preferred public API because they avoid exposing method
 
 `responseSchema` validates the parsed response body
 
+`serverTime: true` creates an internal clock exposed as `api.serverTime`; `serverTime.clock` samples the API response `Date` header into a shared time clock without changing the returned result shape
+
 By default successful requests return `{ code, message?, response }`, where `code` is the HTTP status code, `message` comes from `body.message` when it is a string, and `response` is the validated response body
 
 If the validated response body has a `data` property plus `code` or `message`, the default `response` value unwraps to `body.data`

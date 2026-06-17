@@ -12,6 +12,11 @@ import { buildHeaders, mergeHeaders } from "./headers.js";
 import { createApiLoggerHooks } from "./logging.js";
 import { buildApiUrl } from "./url.js";
 import { ApiMethod } from "./types.js";
+import {
+  createServerClock,
+  createTimeSyncSample,
+  parseServerDateHeader
+} from "../time/index.js";
 import type {
   AnyApiEndpoint,
   ApiErrorHookContext,
@@ -28,6 +33,7 @@ import type {
   ApiRetry,
   ApiRetryContext,
   ApiRetryOptions,
+  ApiServerTimeOptions,
   ApiTimedRequestContext,
   FetchLike,
   OptionalSchema,
@@ -35,6 +41,7 @@ import type {
 } from "./types.js";
 
 const AUTH_REFRESH_STATUS_CODES = [401, 419] as const;
+const DEFAULT_SERVER_TIME_HEADER = "Date";
 const DEFAULT_RETRY_METHODS = [ApiMethod.GET] as const;
 const DEFAULT_RETRY_STATUS_CODES = [
   408,
@@ -47,19 +54,25 @@ const DEFAULT_RETRY_STATUS_CODES = [
   504
 ] as const;
 
+type ResolvedApiFetcherOptions = Omit<ApiFetcherOptions, "serverTime"> & {
+  serverTime?: ApiServerTimeOptions;
+};
+
 // Client factory
 /** Creates api fetcher */
 export const createApiFetcher = (
   options: ApiFetcherOptions = {}
 ): ApiFetcher => {
   const fetchImpl = options.fetch ?? globalThis.fetch;
+  const serverTime = resolveApiServerTime(options.serverTime);
   const clientHooks = mergeHooks(
     createApiLoggerHooks(options.logging),
     options.hooks
   );
-  const clientOptions = {
+  const clientOptions: ResolvedApiFetcherOptions = {
     ...options,
-    hooks: clientHooks
+    hooks: clientHooks,
+    serverTime
   };
   let refreshPromise: Promise<string | null | undefined> | null = null;
 
@@ -144,7 +157,8 @@ export const createApiFetcher = (
     patch  : createMethod(request, ApiMethod.PATCH),
     post   : createMethod(request, ApiMethod.POST),
     put    : createMethod(request, ApiMethod.PUT),
-    request
+    request,
+    serverTime: serverTime?.clock
   }) as ApiFetcher;
 };
 
@@ -165,7 +179,7 @@ const sendRequest = async <
   method: ApiMethod,
   path: string,
   options: ApiRequestOptions<TBodySchema, TResponseSchema, TResult>,
-  clientOptions: ApiFetcherOptions,
+  clientOptions: ResolvedApiFetcherOptions,
   fetchImpl: FetchLike,
   accessToken: string | undefined,
   authEnabled: boolean
@@ -212,6 +226,8 @@ const sendRequest = async <
     let responseBody: unknown;
 
     try {
+      const clientSendTimeMs = getServerTimeNow(clientOptions.serverTime);
+
       response = await fetchImpl(url, {
         ...fetchOptions,
         body: parsedBody.body,
@@ -219,6 +235,12 @@ const sendRequest = async <
         method,
         signal: signal.signal
       });
+      updateServerTimeClock(
+        clientOptions.serverTime,
+        response,
+        clientSendTimeMs,
+        getServerTimeNow(clientOptions.serverTime)
+      );
       responseBody = await readResponseBody(response, context);
 
       if (!response.ok) {
@@ -422,6 +444,73 @@ const shouldRefreshAuth = (
 
   return error instanceof ApiHttpError
     && AUTH_REFRESH_STATUS_CODES.includes(error.status as 401 | 419);
+};
+
+// Server time helpers
+const resolveApiServerTime = (
+  serverTime: ApiFetcherOptions["serverTime"]
+): ApiServerTimeOptions | undefined => {
+  if (!serverTime) {
+    return undefined;
+  }
+
+  if (serverTime === true) {
+    return {
+      clock: createServerClock()
+    };
+  }
+
+  return serverTime;
+};
+
+const getServerTimeNow = (
+  options: ApiServerTimeOptions | undefined
+): number => (
+  options?.now?.() ?? Date.now()
+);
+
+const updateServerTimeClock = (
+  options: ApiServerTimeOptions | undefined,
+  response: Response,
+  clientSendTimeMs: number,
+  clientReceiveTimeMs: number
+): void => {
+  if (!options) {
+    return;
+  }
+
+  const serverTimeMs = parseApiServerTimeHeader(
+    response.headers.get(options.header ?? DEFAULT_SERVER_TIME_HEADER)
+  );
+
+  if (serverTimeMs === undefined) {
+    return;
+  }
+
+  options.clock.update(createTimeSyncSample({
+    clientSendTimeMs,
+    serverReceiveTimeMs : serverTimeMs,
+    serverTransmitTimeMs: serverTimeMs,
+    clientReceiveTimeMs
+  }));
+};
+
+const parseApiServerTimeHeader = (
+  value: string | null
+): number | undefined => {
+  if (!value || value.trim() === "") {
+    return undefined;
+  }
+
+  const dateTimeMs = parseServerDateHeader(value);
+
+  if (dateTimeMs !== undefined) {
+    return dateTimeMs;
+  }
+
+  const timeMs = Number(value);
+
+  return Number.isFinite(timeMs) ? timeMs : undefined;
 };
 
 // Retry helpers

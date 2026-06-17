@@ -72,6 +72,8 @@ export type {
   ApiRetry,
   ApiRetryContext,
   ApiRetryOptions,
+  ApiServerTime,
+  ApiServerTimeOptions,
   ApiTimedRequestContext,
   ApiTokenHeaderFormatter,
   ApiWriteMethod,
