@@ -1,54 +1,64 @@
 # Format module
 
-Dependency free formatting helpers for numbers, currency labels, Korean phone numbers, dates, and value-unit labels
+[한국어](./readme.kr.md)
 
-## Public API
+Dependency-free display helpers for numbers, currency labels, Korean phone numbers, date tokens, and value-unit labels.
+
+## Use this when
+
+- UI code needs small formatting helpers with fallback strings instead of thrown errors.
+- Korean service screens need default `ko-KR` number and won currency formatting.
+- Phone number and date display should stay consistent across repeated call sites.
+
+## Import
 
 ```ts
 import {
   format,
+  formatNumber,
   formatCurrency,
   formatDate,
-  formatNumber,
   formatPhoneNumber,
   formatValueUnit
 } from "@maxxuxx/ts-utils/format";
 ```
 
-Use named exports for direct imports
+## Core exports
+
+| Export | Role |
+|---|---|
+| `formatNumber` | Formats finite number-like values with `Intl.NumberFormat`. |
+| `formatCurrency` | Formats a number and appends a currency/unit label, `원` by default. |
+| `formatDate` | Formats date-like values with simple tokens. |
+| `formatPhoneNumber` | Formats common Korean phone number shapes. |
+| `formatValueUnit` | Formats a number and appends an arbitrary unit with a separator. |
+| `format` | Namespace containing the same helpers. |
+
+## Basic example
 
 ```ts
-formatNumber(1234);
-formatCurrency(12000);
-formatPhoneNumber("01012345678");
-formatDate(new Date(), "yyyy.mm.dd");
-formatValueUnit(12, "kg");
-```
-
-Use the `format` namespace when call sites read better grouped by action
-
-```ts
-format.number(1234);
+format.number(1234.5);
 format.currency(12000);
 format.phoneNumber("01012345678");
-format.date(new Date(), "yyyy.mm.dd");
-format.valueUnit(12, "kg");
+format.date(new Date(2026, 4, 20), "yyyy.mm.dd");
+format.valueUnit(12.5, "kg");
 ```
 
 ## Behavior notes
 
-`formatNumber` uses the platform `Intl.NumberFormat` API
+- The default locale is `ko-KR`.
+- `formatDate` supports `yyyy`, `mm`, `dd`, `HH`, `MM`, and `ss` tokens.
+- `formatPhoneNumber` handles mobile, Seoul area, common local area, and representative-number patterns.
+- `formatValueUnit` defaults to a single-space separator.
 
-The default locale is `ko-KR`
+## Edge cases
 
-`formatCurrency` formats the number and appends `원` by default
+- Invalid inputs return the provided `fallback`, which defaults to an empty string.
+- Unsafe `bigint` values and invalid dates are treated as invalid number inputs.
+- `formatValueUnit` returns fallback when the unit is blank.
+- Use `normalize` when you need data coercion without display formatting.
 
-`formatPhoneNumber` formats common Korean phone numbers such as mobile, Seoul area, local area, and representative numbers
+## Related modules
 
-`formatDate` uses simple tokens: `yyyy`, `mm`, `dd`, `HH`, `MM`, and `ss`
-
-`formatValueUnit` formats the number first, then appends the unit with a configurable separator
-
-Invalid inputs return a fallback string, which defaults to an empty string
-
-Invalid `Date` values and `bigint` values that cannot be safely converted to a JavaScript number are treated as invalid number inputs
+- `@maxxuxx/ts-utils/normalize` for fallback-first value coercion.
+- `@maxxuxx/ts-utils/parser` when input must be validated before formatting.

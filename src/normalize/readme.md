@@ -1,64 +1,64 @@
 # Normalize module
 
-Dependency free coercion helpers for small input normalization tasks
+[한국어](./readme.kr.md)
 
-## Public API
+Fallback-first coercion helpers for small unknown-input normalization tasks.
+
+## Use this when
+
+- UI or adapter code needs stable primitive values from unknown input.
+- Invalid values should fall back instead of throwing.
+- You need lightweight date, text, number, boolean flag, and record checks without schema validation.
+
+## Import
 
 ```ts
 import {
-  is,
-  isNotEmptyString,
-  isRecord,
   to,
+  is,
+  toNumber,
+  toText,
   toDate,
   toDateString,
-  toFlagBoolean,
-  toNumber,
-  toText
+  toFlagBoolean
 } from "@maxxuxx/ts-utils/normalize";
 ```
 
-Use named exports for direct imports
+## Core exports
+
+| Export | Role |
+|---|---|
+| `toNumber` | Converts number-like values to finite numbers with fallback. |
+| `toText` | Converts defined values to text with fallback for nullish or failing conversion. |
+| `toDate`, `toDateString` | Converts date-like values and formats simple date tokens. |
+| `toFlagBoolean` | Converts custom true values and common flag strings to booleans. |
+| `isNotEmptyString`, `isRecord` | Small guards used by normalization call sites. |
+| `to`, `is` | Namespaces containing the same helpers. |
+
+## Basic example
 
 ```ts
-toNumber("42");
-toText(value);
-toDateString("2026-05-20");
-toFlagBoolean("yes");
-isNotEmptyString(" value ");
-isRecord(payload);
-```
-
-Use the short namespaces when call sites read better in `to` or `is` style
-
-```ts
-to.number("42");
-to.text(value);
-to.date(input);
-to.dateString(input);
-to.flagBoolean(input);
-is.notEmptyString(value);
-is.record(payload);
+const page = to.number(query.page, 1);
+const title = to.text(input.title);
+const active = to.flagBoolean(query.active);
+const day = to.dateString(input.createdAt, "yyyy-mm-dd");
 ```
 
 ## Behavior notes
 
-`toNumber` accepts finite numbers, numeric strings, booleans, safe bigint values, and valid dates
+- `toNumber` accepts finite numbers, numeric strings, booleans, safe bigint values, and valid dates.
+- `toText` returns valid dates as ISO strings.
+- `toDate` clones `Date` instances before returning them.
+- `toFlagBoolean` accepts common strings such as `true`, `false`, `yes`, `no`, `on`, `off`, `1`, and `0`.
 
-Invalid number values return the fallback, which defaults to `0`
+## Edge cases
 
-`toText` preserves strings, converts other defined values with `String`, converts valid dates to ISO strings, and returns the fallback for `null`, `undefined`, invalid dates, or conversion failures
+- The default number fallback is `0`; the default text fallback is an empty string.
+- Invalid dates return the provided fallback or `undefined`.
+- `isRecord` accepts object literals and null-prototype objects, and rejects arrays, dates, functions, and `null`.
+- Use `parser` or `env` when invalid input should be reported instead of quietly normalized.
 
-The default text fallback is an empty string
+## Related modules
 
-`toDate` accepts valid dates, finite numeric timestamps, and parseable date strings
-
-Dates are cloned before returning
-
-`toDateString` formats a valid date with simple tokens: `yyyy`, `mm`, `dd`, `HH`, `MM`, and `ss`
-
-`toFlagBoolean` accepts a custom true value and common flag strings such as `true`, `false`, `yes`, `no`, `on`, `off`, `1`, and `0`
-
-Unknown flag values return the fallback, which defaults to `false`
-
-`isRecord` accepts plain object records and null-prototype objects, but rejects arrays, dates, functions, and `null`
+- `@maxxuxx/ts-utils/format` for display formatting after normalization.
+- `@maxxuxx/ts-utils/parser` for schema-backed validation.

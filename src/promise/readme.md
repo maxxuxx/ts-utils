@@ -1,120 +1,69 @@
 # Promise module
 
-Dependency free helpers for promise timing, retries, and concurrent task execution
+[한국어](./readme.kr.md)
 
-## Public API
+Dependency-free helpers for sleep, timeout, retry, parallel task execution, and result-style settling.
+
+## Use this when
+
+- Async work needs timeout and retry without adding a control-flow library.
+- Multiple tasks should run in parallel as either tuples or named object results.
+- Partial failure should be returned as `{ ok, data }` or `{ ok, error }` instead of rejecting the whole group.
+
+## Import
 
 ```ts
 import {
-  all,
-  allObject,
   promise,
-  retry,
   run,
-  settleObject,
-  withTimeout
+  retry,
+  withTimeout,
+  allObject,
+  settleObject
 } from "@maxxuxx/ts-utils/promise";
 ```
 
-## Defaults
+## Core exports
 
-The default behavior is intentionally conservative
+| Export | Role |
+|---|---|
+| `sleep` | Waits for a non-negative number of milliseconds. |
+| `withTimeout` | Applies a timeout to a task function or existing promise. |
+| `retry`, `run` | Runs a task function with retry and timeout options. |
+| `all`, `allObject` | Runs configured tasks in parallel and rejects on the first failure. |
+| `settle`, `settleObject` | Runs configured tasks in parallel and returns result objects. |
+| `promise` | Namespace containing the same helpers. |
 
-```ts
-{
-  timeoutMs: undefined, // no timeout unless provided
-  retries: 0,
-  delayMs: 300
-}
-```
-
-`retry` and `run` receive a task function, not an already created promise, so the task can be executed again when retrying
-
-```ts
-await promise.run(fetchUser, {
-  timeoutMs: 5000,
-  retries: 2,
-  delayMs: 300
-});
-```
-
-## Multiple API requests
-
-Use `allObject` when named results are easier to read than tuple positions
+## Basic example
 
 ```ts
-const { user, orders, notifications } = await promise.allObject(
-  {
-    user: fetchUser,
-    orders: {
-      task: fetchOrders,
-      retries: 3,
-      delayMs: 500
-    },
-    notifications: {
-      task: fetchNotifications,
-      timeoutMs: 2000,
-      retries: 0
-    }
-  },
-  {
-    timeoutMs: 5000,
-    retries: 2,
-    delayMs: 300
-  }
-);
-```
-
-Common options are applied first. Per-task options override only the fields they define.
-
-Use `all` when tuple ordering is preferred
-
-```ts
-const [user, orders] = await all([
-  fetchUser,
-  {
-    task: fetchOrders,
-    timeoutMs: 3000
-  }
-], {
-  retries: 2,
-  delayMs: 300
-});
-```
-
-## Partial failure
-
-Use `settleObject` when some requests can fail without rejecting the whole operation
-
-```ts
-const result = await settleObject({
+const result = await promise.allObject({
   user: fetchUser,
-  orders: fetchOrders,
-  notifications: fetchNotifications
+  orders: {
+    task: fetchOrders,
+    retries: 2,
+    delayMs: 100
+  }
 }, {
   timeoutMs: 5000
 });
-
-if (result.user.ok) {
-  result.user.data;
-} else {
-  result.user.error;
-}
 ```
 
-## Single helpers
+## Behavior notes
 
-```ts
-await promise.sleep(300);
+- Tasks are functions, not already-started promises, when retrying is needed.
+- Default options are `retries: 0`, `delayMs: 300`, and no timeout.
+- Common options are applied first; per-task options override only fields they define.
+- `withTimeout` can accept an existing promise, but retry helpers require task functions.
 
-const user = await withTimeout(fetchUser, {
-  timeoutMs: 5000
-});
+## Edge cases
 
-const orders = await retry(fetchOrders, {
-  retries: 2,
-  delayMs: 300
-});
-```
+- Timeout applies to each retry attempt.
+- `PromiseTimeoutError` includes the configured timeout in milliseconds.
+- Negative or non-finite timing values and non-integer retries throw `RangeError`.
+- Timed out work is not cancelled unless the task itself observes an abort signal you manage separately.
 
-`PromiseTimeoutError` is thrown when a timeout is reached.
+## Related modules
+
+- `@maxxuxx/ts-utils/api-fetch` for HTTP retry and timeout behavior.
+- `@maxxuxx/ts-utils/try-catch` for small result wrappers around one operation.

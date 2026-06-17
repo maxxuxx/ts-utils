@@ -1,18 +1,38 @@
 # Session module
 
-Token session helpers for framework independent auth state, SvelteKit cookie sessions, and React browser storage
+[한국어](./readme.kr.md)
 
-## Core session
+Token session controllers for framework-independent storage, SvelteKit cookie sessions, and React browser storage.
+
+## Use this when
+
+- Auth state should be independent from the storage layer.
+- Access tokens may be opaque or JWT-backed, and refresh-token usage should be configurable.
+- SvelteKit and React apps need adapters around the same token lifecycle rules.
+
+## Import
 
 ```ts
 import {
-  TokenSessionError,
   createTokenSession,
+  TokenSessionError,
   type TokenSessionTokens
 } from "@maxxuxx/ts-utils/session";
+import { createSession } from "@maxxuxx/ts-utils/session/sveltekit";
+import { createReactTokenSession } from "@maxxuxx/ts-utils/session/react";
 ```
 
-The core controller is storage agnostic. Provide `read`, `write`, and `clear` for the runtime where the session lives
+## Core exports
+
+| Export | Role |
+|---|---|
+| `createTokenSession` | Creates the storage-agnostic token session controller. |
+| `TokenSessionError`, `TokenSessionReason` | Represent unauthorized, invalid, invalid-token, and expired session failures. |
+| `session/sveltekit` | Creates an iron-session-backed SvelteKit cookie session adapter. |
+| `session/react` | Creates a browser storage session with subscription and React hooks. |
+| `TokenSessionTokens`, `TokenSessionData`, controller types | Shared session contracts. |
+
+## Basic example
 
 ```ts
 type User = {
@@ -26,147 +46,39 @@ type Tokens = TokenSessionTokens & {
 
 const session = createTokenSession<void, User, Tokens>({
   read: () => store.get() ?? {},
-  write: (_context, nextSession) => store.set(nextSession),
+  write: (_context, next) => store.set(next),
   clear: () => store.clear(),
   useRefreshToken: false
 });
-```
 
-`useRefreshToken` defaults to `true`. Use `useRefreshToken: false` when an API only issues access tokens and there is no refresh token
-
-```ts
 await session.set(undefined, {
   user: {
     id: "user-1"
   },
   tokens: {
-    accessToken: "opaque-token"
+    accessToken: "opaque-access-token"
   }
 });
 
 const user = await session.ensure(undefined);
-const accessToken = await session.getAccessToken(undefined);
 ```
 
-JWT parsing and expiration checks only run when `jwtSchema` is provided. Opaque access tokens are accepted when no JWT schema is configured
+## Behavior notes
 
-Use `parseTokens` to validate login or refresh response tokens before storing them in a session. It returns `{ tokens }` only when the token schema, access token, configured JWT schema, and required refresh token rule pass
+- `useRefreshToken` defaults to `true`. Set it to `false` for access-token-only APIs.
+- JWT parsing and expiration checks run only when `jwtSchema` is provided.
+- Without `jwtSchema`, opaque access tokens are allowed.
+- `parseTokens` validates login or refresh response tokens before storing them.
 
-## Refresh token sessions
+## Edge cases
 
-Add `refreshTokens` when the session can rotate tokens
+- When refresh tokens are required, missing refresh tokens cause `invalid_token`.
+- Expired JWTs trigger refresh when `refreshTokens` is configured; otherwise they cause `expired`.
+- Concurrent refresh calls with the same refresh token are deduped by default.
+- SvelteKit adapter requires cookies from the call or `getCookies`; missing cookies produce a session error.
 
-```ts
-const session = createTokenSession<void, User, Tokens>({
-  read: () => store.get() ?? {},
-  write: (_context, nextSession) => store.set(nextSession),
-  clear: () => store.clear(),
-  refreshThresholdSeconds: 60,
-  refreshTokens: async (refreshToken) => {
-    const response = await fetch("/auth/refresh", {
-      method: "POST",
-      body: JSON.stringify({
-        refreshToken
-      })
-    });
+## Related modules
 
-    return response.json();
-  }
-});
-```
-
-Concurrent refreshes with the same refresh token are deduped by default and the successful token pair is shared briefly with other in-flight requests. Use `dedupeRefresh: false` to disable this, or `dedupeRefresh: { cacheSuccessMs: 1000 }` to tune the short success cache
-
-Refresh results are validated before storage. The returned token object must pass `tokenSchema`, include an access token, and pass the configured `jwtSchema` when one is provided
-
-Refresh tokens are required by default. Set `useRefreshToken: false` for access-token-only sessions
-
-## SvelteKit
-
-SvelteKit helpers use `iron-session`
-
-```bash
-npm install iron-session
-```
-
-```ts
-import { createSession } from "@maxxuxx/ts-utils/session/sveltekit";
-import { getRequestEvent } from "$app/server";
-
-export const authSession = createSession<User, Tokens>({
-  getCookies: () => getRequestEvent().cookies,
-  sessionOptions: {
-    cookieName: "app_session",
-    password: process.env.SESSION_PASSWORD
-  },
-  useRefreshToken: false
-});
-```
-
-Use the configured session in server routes and hooks
-
-```ts
-const user = await authSession.ensure();
-const accessToken = await authSession.getAccessToken();
-
-await authSession.set({
-  user,
-  tokens: {
-    accessToken
-  }
-});
-```
-
-## React
-
-React helpers store the session in browser storage and expose subscription hooks
-
-```bash
-npm install react
-```
-
-```ts
-import { createReactTokenSession } from "@maxxuxx/ts-utils/session/react";
-
-export const authSession = createReactTokenSession<User, Tokens>({
-  storageKey: "app_session",
-  useRefreshToken: false
-});
-```
-
-```tsx
-function AccountMenu() {
-  const user = authSession.useSessionUser();
-
-  return user ? <span>{user.id}</span> : null;
-}
-```
-
-## API fetch integration
-
-Use `getAccessToken` with `api-fetch`. The default request header is `Authorization: Bearer <accessToken>`
-
-```ts
-import { createApiFetcher } from "@maxxuxx/ts-utils/api-fetch";
-
-const api = createApiFetcher({
-  auth: {
-    getAccessToken: () => authSession.getAccessToken()
-  }
-});
-```
-
-Use `formatTokenHeader` when the API expects a different header
-
-```ts
-const api = createApiFetcher({
-  auth: {
-    getAccessToken: () => authSession.getAccessToken(),
-    formatTokenHeader: (accessToken) => ({
-      "X-Access-Token": accessToken
-    })
-  }
-});
-```
-
-Request-level headers take precedence over generated token headers
+- `@maxxuxx/ts-utils/jwt` for lower-level JWT decoding and expiration checks.
+- `@maxxuxx/ts-utils/api-fetch` for auth header injection and refresh retry.
+- `@maxxuxx/ts-utils/env` for session secret configuration.

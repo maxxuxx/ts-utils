@@ -1,8 +1,8 @@
 # ts-utils
 
-[![npm version](https://img.shields.io/npm/v/@maxxuxx/ts-utils.svg)](https://www.npmjs.com/package/@maxxuxx/ts-utils)
+[한국어](./docs/readme.kr.md)
 
-Shared TypeScript utilities for projects that need small, reusable runtime helpers
+Shared TypeScript utilities for projects that need small reusable runtime helpers
 
 ## Install
 
@@ -16,514 +16,62 @@ GitHub install is also supported
 npm install github:maxxuxx/ts-utils
 ```
 
-## Parser utils
+## Import style
 
-Parser utils are small wrappers around Zod schemas
-They keep the familiar Zod methods and add a simple `is` type guard
+Use subpath imports instead of the package root. The package root is intentionally empty so applications can import only the runtime surface they need
 
 ```ts
 import { parser } from "@maxxuxx/ts-utils/parser";
-
-const number = parser.number.parse(10);
-const result = parser.number.safeParse("10");
-const valid  = parser.number.is(10);
-
-const coerced = parser.coerce.number.parse("10");
-```
-
-Strict parsers validate the original value
-
-```ts
-parser.number.parse(10);       // 10
-parser.number.safeParse("10"); // success: false
-```
-
-Coerce parsers convert common input values before validation
-
-```ts
-parser.coerce.number.parse("10");   // 10
-parser.coerce.integer.parse("10");  // 10
-parser.coerce.boolean.parse("false"); // false
-parser.coerce.date.parse("2026-01-01");
-```
-
-Common project parsers include repeated validation policy
-
-```ts
-const userId = parser.id.parse(params.userId);
-const page   = parser.page.parse(query.page);
-const limit  = parser.limit.parse(query.limit);
-const email  = parser.email.parse(body.email);
-const name   = parser.nonEmptyString.parse(body.name);
-```
-
-Custom schemas can be wrapped with `createParser`
-
-```ts
-import { createParser, z } from "@maxxuxx/ts-utils/parser";
-
-const User = createParser(z.object({
-  id:   z.number(),
-  name: z.string()
-}));
-
-const user = User.parse({
-  id:   1,
-  name: "haru"
-});
-```
-
-## API fetch
-
-API fetch utilities are available through the `api-fetch` subpath
-
-```ts
-import {
-  createApiFetcher,
-  endpoint,
-  handleApiRoute,
-  z
-} from "@maxxuxx/ts-utils/api-fetch";
-```
-
-Create a fetcher with request and response validation
-
-```ts
-const api = createApiFetcher({
-  baseURL: "https://api.example.com"
-});
-
-const User = z.object({
-  id  : z.number(),
-  name: z.string()
-});
-
-const result = await api.post("/users", {
-  body          : { name: "haru" },
-  bodySchema    : z.object({
-    name: z.string().min(1)
-  }),
-  responseSchema: User,
-  errorFallback : {
-    message: "사용자 정보를 저장하지 못했습니다"
-  }
-});
-
-result.code; // HTTP status code
-result.response; // validated response body
-```
-
-Successful calls return `{ code, message?, response }` by default. `code` is the HTTP status code, `message` is copied from `body.message` when present, and `response` is the parsed body. If the validated body has a `data` property plus `code` or `message`, `response` is automatically unwrapped to the inner `body.data` value unless `select` is provided.
-
-For non-2xx responses, `ApiHttpError.status` is the HTTP status code, `ApiHttpError.code` uses `body.code` then `errorFallback.code`, and `ApiHttpError.message` uses `body.message`, then `errorFallback.message`, then the default technical request message.
-
-Reusable endpoints can define method, path params, query strings, request body schema, response schema, and result selection
-
-```ts
-const getUser = endpoint.get("/users/:id", {
-  params: z.object({
-    id: z.coerce.number().int().positive()
-  }),
-  responseSchema: User
-});
-
-const result = await api.call(getUser, {
-  params: { id: "1" }
-});
-
-result.response;
-```
-
-Token refresh is injected so apps can use cookies, browser storage, iron-session, or custom stores
-
-```ts
-const api = createApiFetcher({
-  auth: {
-    getAccessToken: () => tokenStore.get()?.accessToken,
-    refresh: async () => {
-      const token = await refreshAccessToken();
-
-      tokenStore.set(token);
-
-      return token.accessToken;
-    },
-    clear: () => tokenStore.clear()
-  }
-});
-```
-
-Use `formatTokenHeader` when an API expects a token header other than `Authorization: Bearer <accessToken>`
-
-```ts
-const api = createApiFetcher({
-  auth: {
-    getAccessToken: () => tokenStore.get()?.accessToken,
-    formatTokenHeader: (accessToken) => ({
-      "X-Access-Token": accessToken
-    })
-  }
-});
-```
-
-API calls can log method, status code, elapsed time, and endpoint path
-
-```ts
-const api = createApiFetcher({
-  logging: true
-});
-```
-
-Example output
-
-```text
-✅ GET    200    8 ms /users/1
-⚠️ POST   500   42 ms /users
-❌ GET    ERR    3 ms /offline
-```
-
-Route handlers can share error-to-response handling
-
-```ts
-export async function GET() {
-  return handleApiRoute(getUserResponse, {
-    authMessage    : "로그인이 필요합니다",
-    responseMessage: "사용자 응답이 올바르지 않습니다"
-  });
-}
-```
-
-See [src/api-fetch/readme.md](https://github.com/maxxuxx/ts-utils/blob/main/src/api-fetch/readme.md) for module details
-
-## Session
-
-Session helpers are exported as core, SvelteKit, and React subpaths
-
-```ts
+import { createApiFetcher } from "@maxxuxx/ts-utils/api-fetch";
 import { createTokenSession } from "@maxxuxx/ts-utils/session";
 ```
 
-`useRefreshToken` defaults to `true`. Set `useRefreshToken: false` when a service only issues access tokens and there is no refresh token
-
-```ts
-const session = createTokenSession({
-  read: () => store.get() ?? {},
-  write: (_context, nextSession) => store.set(nextSession),
-  clear: () => store.clear(),
-  useRefreshToken: false
-});
-
-const accessToken = await session.getAccessToken(undefined);
-```
-
-SvelteKit sessions use `iron-session` cookies. React sessions use browser storage and `useSyncExternalStore`
-
-```ts
-import { createSession } from "@maxxuxx/ts-utils/session/sveltekit";
-import { createReactTokenSession } from "@maxxuxx/ts-utils/session/react";
-```
-
-See [src/session/readme.md](https://github.com/maxxuxx/ts-utils/blob/main/src/session/readme.md) for module details
-
-## HTTP response
-
-HTTP response helpers are available through the `http-response` subpath
-
-```ts
-import {
-  badRequest,
-  jsonResponse,
-  unauthorized
-} from "@maxxuxx/ts-utils/http-response";
-```
-
-Use them in route handlers that return Web `Response` objects
-
-```ts
-return jsonResponse({
-  ok: true
-});
-```
-
-Status helpers accept caller-provided messages and use English defaults when omitted
-
-```ts
-return unauthorized("로그인이 필요합니다");
-return badRequest();
-```
-
-See [src/http-response/readme.md](https://github.com/maxxuxx/ts-utils/blob/main/src/http-response/readme.md) for module details
-
-## Env
-
-Runtime environment helpers are available through the `env` subpath
-
-```ts
-import { env, envSchema, z } from "@maxxuxx/ts-utils/env";
-
-const Config = z.object({
-  API_URL: envSchema.string(),
-  DEBUG  : envSchema.boolean().default(false),
-  PORT   : envSchema.number().default(3000)
-});
-
-const config = env.parse(Config, import.meta.env);
-const apiUrl = env.require("API_URL");
-```
-
-See [src/env/readme.md](https://github.com/maxxuxx/ts-utils/blob/main/src/env/readme.md) for module details
-
-## Object
-
-Object helpers are available through the `object` subpath
-
-```ts
-import { compact, mergeDefaults, object, omit, pick } from "@maxxuxx/ts-utils/object";
-
-const publicUser = omit(user, ["passwordHash"]);
-const summary = object.pick(user, ["id", "name"]);
-const query = compact({
-  page: 1,
-  keyword: "",
-  categoryId: null,
-  locale: undefined
-});
-const options = mergeDefaults({
-  timeout: 5000
-}, {
-  timeout: 10000,
-  retry: 1
-});
-```
-
-See [src/object/readme.md](https://github.com/maxxuxx/ts-utils/blob/main/src/object/readme.md) for module details
-
-## URL
-
-URL helpers are available through the `url` subpath
-
-```ts
-import { appendQuery, buildUrl, joinPath, url } from "@maxxuxx/ts-utils/url";
-
-const path = joinPath("/api/v1", "/users/", 1);
-const usersPath = appendQuery("/users", {
-  page: 1,
-  keyword: "",
-  categoryId: null
-});
-const href = buildUrl("https://api.example.com/api", "/users", {
-  page: 1
-});
-const nested = url.join("/groups", groupId, "/members");
-```
-
-See [src/url/readme.md](https://github.com/maxxuxx/ts-utils/blob/main/src/url/readme.md) for module details
-
-## Promise
-
-Promise helpers are available through the `promise` subpath
-
-```ts
-import { promise, retry, run } from "@maxxuxx/ts-utils/promise";
-
-const user = await run(fetchUser, {
-  timeoutMs: 5000,
-  retries: 2,
-  delayMs: 300
-});
-
-const { orders, notifications } = await promise.allObject({
-  orders: {
-    task: fetchOrders,
-    retries: 3
-  },
-  notifications: fetchNotifications
-}, {
-  timeoutMs: 5000,
-  retries: 2,
-  delayMs: 300
-});
-
-const retryOnly = await retry(fetchOrders, {
-  retries: 2
-});
-```
-
-See [src/promise/readme.md](https://github.com/maxxuxx/ts-utils/blob/main/src/promise/readme.md) for module details
-
-## JSON
-
-JSON helpers are available through the `json` subpath
-
-```ts
-import { json, parseJson, safeStringifyJson } from "@maxxuxx/ts-utils/json";
-
-const config = parseJson(localStorage.getItem("config"), {
-  fallback: {
-    theme: "light"
-  }
-});
-
-const result = json.safeParseWithSchema(input, UserSchema);
-
-if (result.ok) {
-  result.data;
-}
-
-const text = json.stringify(config);
-const textResult = safeStringifyJson(config);
-```
-
-See [src/json/readme.md](https://github.com/maxxuxx/ts-utils/blob/main/src/json/readme.md) for module details
-
-## Encoding
-
-Encoding helpers are available through the `encoding` subpath
-
-```ts
-import { base64, encoding, hex, utf8 } from "@maxxuxx/ts-utils/encoding";
-
-const bytes = utf8.encode("안녕");
-const text = utf8.decode(bytes);
-const token = base64.encode(text);
-const restored = base64.decode(token);
-const encodedHex = hex.encode(restored);
-
-encoding.base64.toBytes(token);
-```
-
-See [src/encoding/readme.md](https://github.com/maxxuxx/ts-utils/blob/main/src/encoding/readme.md) for module details
-
-## JWT
-
-JWT helpers are available through the `jwt` subpath
-
-```ts
-import { decodeJwt, decodeJwtHeader, isJwtExpired, jwt } from "@maxxuxx/ts-utils/jwt";
-
-const claims = decodeJwt(token);
-const header = decodeJwtHeader(token);
-const expired = isJwtExpired(token);
-const shouldRefresh = isJwtExpired(token, 30);
-
-if (claims) {
-  claims.token;
-  claims.exp;
-}
-
-jwt.decode(token);
-jwt.isExpired(token, {
-  withinSeconds: 30
-});
-```
-
-These helpers only decode JWT segments and compare decoded `exp` values. They do not verify signatures, issuers, or audiences
-
-See [src/jwt/readme.md](https://github.com/maxxuxx/ts-utils/blob/main/src/jwt/readme.md) for module details
-
-## Electron log
-
-Electron logging helpers are exported as process specific subpaths
-
-`electron-log` is included as a package dependency
-
-Electron itself is expected to be provided by Electron apps
-
-```ts
-import { configureMainLogger } from "@maxxuxx/ts-utils/electron-log/main";
-import { exposeBridge } from "@maxxuxx/ts-utils/electron-log/preload";
-import { createBridgeLogger } from "@maxxuxx/ts-utils/electron-log";
-```
-
-Main process logging supports console, file path, file rotation size, format, and production level filtering
-
-```ts
-const logger = configureMainLogger({
-  isProduction: app.isPackaged,
-  productionLevel: "info",
-  file: {
-    path: "/absolute/path/to/app.log",
-    maxSize: 1024 * 1024
-  }
-});
-```
-
-Renderer logging can write to DevTools console, main process terminal/file logging, or both
-
-```ts
-const logger = createBridgeLogger({
-  bridge: window.electronLog,
-  isProduction: import.meta.env.PROD,
-  productionLevel: "info",
-  targets: ["console", "terminal"]
-});
-```
-
-See [src/electron-log/readme.md](https://github.com/maxxuxx/ts-utils/blob/main/src/electron-log/readme.md) for module details
-
-## Electron updater
-
-Electron update helpers are exported as process specific subpaths
-
-`electron` and `electron-updater` are optional peer dependencies and should be installed by the Electron app
-
-```bash
-npm install electron-updater
-npm install -D electron electron-builder
-```
-
-```ts
-import { createUpdaterService } from "@maxxuxx/ts-utils/electron-updater/main";
-import { createUpdaterBridge } from "@maxxuxx/ts-utils/electron-updater/preload";
-import { createPublishConfig } from "@maxxuxx/ts-utils/electron-updater/builder";
-```
-
-Main process update state, renderer IPC bridge helpers, and S3/GitHub/generic publish config helpers are included
-
-See [src/electron-updater/readme.md](https://github.com/maxxuxx/ts-utils/blob/main/src/electron-updater/readme.md) for module details
-
-## Is
-
-Dependency free type guards are available through the `is` subpath
-
-```ts
-import { is, isString, isDefined, isPlainObject } from "@maxxuxx/ts-utils/is";
-
-is.string("hello");
-is.number(10);
-is.nonEmptyArray([1]);
-is.validDate(new Date());
-
-isString("hello");
-isDefined(value);
-isPlainObject(payload);
-```
-
-See [src/is/readme.md](https://github.com/maxxuxx/ts-utils/blob/main/src/is/readme.md) for module details
-
-## Try catch
-
-Dependency free result helpers are available through the `try-catch` subpath
-
-```ts
-import { tryCatch, tryCatchAsync, getErrorMessage } from "@maxxuxx/ts-utils/try-catch";
-
-const parsed = tryCatch(() => JSON.parse(input));
-
-if (parsed.ok) {
-  parsed.data;
-} else {
-  getErrorMessage(parsed.error);
-}
-
-const user = await tryCatchAsync(() => fetchUser(id));
-```
-
-See [src/try-catch/readme.md](https://github.com/maxxuxx/ts-utils/blob/main/src/try-catch/readme.md) for module details
+## Module map
+
+| Entry point | Core role | Details |
+|---|---|---|
+| [`@maxxuxx/ts-utils/parser`](./src/parser/readme.md) | Zod parser presets and wrappers for repeated runtime validation | [parser](./src/parser/readme.md) |
+| [`@maxxuxx/ts-utils/is`](./src/is/readme.md) | Runtime type guards for primitives, objects, collections, and built-ins | [is](./src/is/readme.md) |
+| [`@maxxuxx/ts-utils/try-catch`](./src/try-catch/readme.md) | Result helpers for sync and async error boundaries | [try-catch](./src/try-catch/readme.md) |
+| [`@maxxuxx/ts-utils/format`](./src/format/readme.md) | Formatting helpers for numbers, currency, dates, phone numbers, and units | [format](./src/format/readme.md) |
+| [`@maxxuxx/ts-utils/normalize`](./src/normalize/readme.md) | Small coercion helpers for stable number, text, date, and boolean values | [normalize](./src/normalize/readme.md) |
+| [`@maxxuxx/ts-utils/object`](./src/object/readme.md) | Plain object shaping helpers for request and response payloads | [object](./src/object/readme.md) |
+| [`@maxxuxx/ts-utils/url`](./src/url/readme.md) | Web path, API URL, and query string helpers | [url](./src/url/readme.md) |
+| [`@maxxuxx/ts-utils/promise`](./src/promise/readme.md) | Timeout, retry, parallel, and settle helpers for promise tasks | [promise](./src/promise/readme.md) |
+| [`@maxxuxx/ts-utils/json`](./src/json/readme.md) | JSON parse, stringify, fallback, safe result, and schema boundary helpers | [json](./src/json/readme.md) |
+| [`@maxxuxx/ts-utils/encoding`](./src/encoding/readme.md) | UTF-8, base64, hex, and byte conversion helpers | [encoding](./src/encoding/readme.md) |
+| [`@maxxuxx/ts-utils/jwt`](./src/jwt/readme.md) | JWT header and payload readers with expiration checks | [jwt](./src/jwt/readme.md) |
+| [`@maxxuxx/ts-utils/env`](./src/env/readme.md) | Runtime environment readers and Zod schema helpers | [env](./src/env/readme.md) |
+| [`@maxxuxx/ts-utils/time`](./src/time/readme.md) | Client/server timestamp helpers for estimating server time | [time](./src/time/readme.md) |
+| [`@maxxuxx/ts-utils/device`](./src/device/readme.md) | Runtime-selecting device UUID helper | [device](./src/device/readme.md) |
+| [`@maxxuxx/ts-utils/device/browser`](./src/device/readme.md) | Browser and renderer cookie-backed device UUID helpers | [device/browser](./src/device/readme.md) |
+| [`@maxxuxx/ts-utils/device/node`](./src/device/readme.md) | Node machine ID based device UUID helpers | [device/node](./src/device/readme.md) |
+| [`@maxxuxx/ts-utils/session`](./src/session/readme.md) | Framework-neutral token session controller | [session](./src/session/readme.md) |
+| [`@maxxuxx/ts-utils/session/sveltekit`](./src/session/readme.md) | SvelteKit cookie session factory | [session/sveltekit](./src/session/readme.md) |
+| [`@maxxuxx/ts-utils/session/react`](./src/session/readme.md) | React browser-storage token session helper | [session/react](./src/session/readme.md) |
+| [`@maxxuxx/ts-utils/api-fetch`](./src/api-fetch/readme.md) | Fetch API client with validation, refresh, retry, timeout, hooks, and endpoints | [api-fetch](./src/api-fetch/readme.md) |
+| [`@maxxuxx/ts-utils/api-fetch/sveltekit`](./src/api-fetch/readme.md) | SvelteKit adapter for api-fetch auth refresh | [api-fetch/sveltekit](./src/api-fetch/readme.md) |
+| [`@maxxuxx/ts-utils/http-response`](./src/http-response/readme.md) | Small Web Response helpers for route handlers | [http-response](./src/http-response/readme.md) |
+| [`@maxxuxx/ts-utils/electron-log`](./src/electron-log/readme.md) | Common Electron logging types and renderer bridge client | [electron-log](./src/electron-log/readme.md) |
+| [`@maxxuxx/ts-utils/electron-log/main`](./src/electron-log/readme.md) | Main process logger setup and IPC bridge registration | [electron-log/main](./src/electron-log/readme.md) |
+| [`@maxxuxx/ts-utils/electron-log/preload`](./src/electron-log/readme.md) | Preload logging bridge exposure | [electron-log/preload](./src/electron-log/readme.md) |
+| [`@maxxuxx/ts-utils/electron-log/renderer`](./src/electron-log/readme.md) | Renderer logging target setup | [electron-log/renderer](./src/electron-log/readme.md) |
+| [`@maxxuxx/ts-utils/electron-updater`](./src/electron-updater/readme.md) | Common updater state, schema, channel, and type exports | [electron-updater](./src/electron-updater/readme.md) |
+| [`@maxxuxx/ts-utils/electron-updater/main`](./src/electron-updater/readme.md) | Main process update service and IPC handlers | [electron-updater/main](./src/electron-updater/readme.md) |
+| [`@maxxuxx/ts-utils/electron-updater/preload`](./src/electron-updater/readme.md) | Preload updater bridge creation and exposure | [electron-updater/preload](./src/electron-updater/readme.md) |
+| [`@maxxuxx/ts-utils/electron-updater/builder`](./src/electron-updater/readme.md) | electron-builder publish config and updater cache helpers | [electron-updater/builder](./src/electron-updater/readme.md) |
+
+## Runtime notes
+
+- General utility modules are dependency-light and designed for browser, server, and Electron shared code
+- Zod-backed modules re-export `z` from their own subpath when colocated schemas are useful
+- Electron modules use process-specific subpaths so renderer bundles do not load main process code
+- Device helpers are split into browser and Node subpaths; prefer the runtime-specific path when the target runtime is known
 
 ## Development
 
 ```bash
-npm install
+npm run typecheck
 npm test
 npm run build
 ```

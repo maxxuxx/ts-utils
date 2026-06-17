@@ -1,54 +1,67 @@
 # Object module
 
-Dependency free helpers for shaping plain object payloads, request options, and API response data
+[한국어](./readme.kr.md)
 
-## Public API
+Dependency-free helpers for shallow object selection, cleanup, default merging, typed entries, and typed object construction.
+
+## Use this when
+
+- Request payloads, query objects, or response objects need shallow cleanup.
+- `null` should be preserved in one path and removed in another.
+- Typed `Object.entries` or `Object.fromEntries` wrappers make call sites clearer.
+
+## Import
 
 ```ts
 import {
-  compact,
-  mergeDefaults,
   object,
-  omit,
   pick,
-  removeUndefined
+  omit,
+  compact,
+  removeUndefined,
+  mergeDefaults
 } from "@maxxuxx/ts-utils/object";
 ```
 
-Use named exports for direct imports
+## Core exports
+
+| Export | Role |
+|---|---|
+| `pick`, `omit` | Return shallow object copies with selected keys included or excluded. |
+| `removeUndefined` | Drops only `undefined` values. |
+| `compact` | Drops `null` and `undefined` values. |
+| `mergeDefaults` | Shallow merges defaults with defined values from the caller. |
+| `entries`, `fromEntries` | Typed wrappers around object entry operations. |
+| `object` | Namespace containing the same helpers. |
+
+## Basic example
 
 ```ts
 const publicUser = omit(user, ["passwordHash"]);
+
 const query = compact({
   keyword: "",
   page: 1,
   categoryId: null,
-  locale: undefined
-});
-```
-
-Use the `object` namespace when grouped call sites read better
-
-```ts
-const summary = object.pick(user, ["id", "name"]);
-const body = object.removeUndefined({
-  name: input.name,
-  imageUrl: undefined
+  active: false
 });
 ```
 
 ## Behavior notes
 
-`pick` returns a new object with the selected enumerable own properties
+- All helpers are shallow and return new objects.
+- `compact` preserves falsy business values such as empty string, `0`, and `false`.
+- `removeUndefined` preserves explicit `null` values.
+- `mergeDefaults(value, defaults)` spreads defaults first, then defined values from `value`.
 
-`omit` returns a shallow copied object without the selected keys
+## Edge cases
 
-`compact` removes `null` and `undefined`, while keeping values like `""`, `0`, and `false`
+- `pick` copies enumerable own properties only.
+- `omit` shallow-copies with object spread before deleting keys.
+- `entries` follows `Object.entries`, so symbol keys are not included.
+- `fromEntries` can build string, number, or symbol keyed objects from iterable entries.
 
-`removeUndefined` removes only `undefined`, so explicit `null` values are preserved
+## Related modules
 
-`mergeDefaults(value, defaults)` shallow merges defaults first, then defined values from `value`
-
-`entries` is a typed wrapper around `Object.entries` and returns enumerable string-keyed entries
-
-`fromEntries` builds an object from string, number, or symbol keyed entries
+- `@maxxuxx/ts-utils/url` for turning cleaned query objects into search params.
+- `@maxxuxx/ts-utils/json` for JSON compatibility checks after object shaping.

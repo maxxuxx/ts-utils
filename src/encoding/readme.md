@@ -1,66 +1,64 @@
 # Encoding module
 
-Dependency free helpers for UTF-8 bytes, base64, and hex conversion
+[한국어](./readme.kr.md)
 
-## Public API
+Dependency-free UTF-8, base64, hex, and byte conversion helpers for browser and Node runtimes.
+
+## Use this when
+
+- You need to convert text to bytes and back without bringing a larger encoding package.
+- You need base64 or hex helpers that accept both strings and byte-like inputs.
+- You want result-style UTF-8 decode failures for invalid byte sequences.
+
+## Import
 
 ```ts
 import {
-  base64,
-  decodeUtf8,
   encoding,
-  encodeBase64,
-  encodeUtf8,
+  utf8,
+  base64,
   hex,
-  utf8
+  toUint8Array
 } from "@maxxuxx/ts-utils/encoding";
 ```
 
-## UTF-8
+## Core exports
+
+| Export | Role |
+|---|---|
+| `utf8`, `encodeUtf8`, `decodeUtf8`, `safeDecodeUtf8` | Text and UTF-8 byte helpers. |
+| `base64`, `encodeBase64`, `decodeBase64`, `base64ToUint8Array`, `uint8ArrayToBase64` | Base64 text and byte helpers. |
+| `hex`, `encodeHex`, `decodeHex`, `hexToUint8Array`, `uint8ArrayToHex` | Hex text and byte helpers. |
+| `toUint8Array` | Normalizes `ArrayBuffer`, typed arrays, `DataView`, and byte arrays. |
+| `EncodingError` | Error wrapper used by safe UTF-8 decoding. |
+
+## Basic example
 
 ```ts
-const bytes = utf8.encode("안녕");
-const text = utf8.decode(bytes);
-const size = utf8.byteLength("안녕");
-```
+const token = encoding.base64.encode("payload");
+const bytes = encoding.base64.toBytes(token);
+const text = encoding.utf8.decode(bytes);
 
-Use fatal decoding when invalid UTF-8 should throw instead of replacing invalid bytes.
-
-```ts
-const result = utf8.safeDecode(bytes, {
+const result = utf8.safeDecode([0xff], {
   fatal: true
 });
 ```
 
-## Base64
+## Behavior notes
 
-```ts
-const encoded = base64.encode("안녕");
-const decoded = base64.decode(encoded);
+- String inputs are encoded as UTF-8 before base64 or hex conversion.
+- Use `toBytes` helpers when the caller needs raw bytes instead of decoded text.
+- Node uses `Buffer` when available; browser-like runtimes use `btoa` and `atob` for base64.
+- `decodeUtf8` accepts standard `TextDecoder` options such as `fatal` and `ignoreBOM`.
 
-const bytes = base64.toBytes(encoded);
-const restored = base64.fromBytes(bytes);
-```
+## Edge cases
 
-`base64.encode` accepts either a string or bytes. Strings are encoded as UTF-8 before base64 conversion.
+- `toUint8Array` rejects numeric arrays containing values outside 0 through 255.
+- `base64.toBytes` rejects non-base64 strings.
+- `hex.toBytes` requires an even number of hexadecimal characters and accepts an optional `0x` prefix.
+- `safeDecodeUtf8` returns `{ ok: false, error: EncodingError }` instead of throwing.
 
-## Hex
+## Related modules
 
-```ts
-const encoded = hex.encode("안녕");
-const decoded = hex.decode(encoded);
-
-const bytes = hex.toBytes(encoded);
-const restored = hex.fromBytes(bytes);
-```
-
-`hex.decode` converts hex bytes back to UTF-8 text. Use `hex.toBytes` when the caller needs raw bytes instead.
-
-## Namespace helper
-
-```ts
-const token = encoding.base64.encode("payload");
-const text = encoding.utf8.decode(encoding.base64.toBytes(token));
-```
-
-JSON helpers are intentionally separate. Compose `encoding` with `json` when encoded JSON payloads are needed.
+- `@maxxuxx/ts-utils/json` when encoded payloads contain JSON text.
+- `@maxxuxx/ts-utils/jwt` for base64url JWT segment decoding.

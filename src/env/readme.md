@@ -1,67 +1,70 @@
 # Env module
 
-Utilities for reading and validating runtime environment values from Node, Vite, Electron, or injected sources.
+[한국어](./readme.kr.md)
 
-## Public API
+Runtime environment readers and Zod preprocess schemas for Node, Vite, Electron, tests, or injected sources.
+
+## Use this when
+
+- You need small helpers for optional and required environment values.
+- You want number, boolean, and JSON env coercion before Zod validation.
+- Code may run outside Node and should accept an injected env source.
+
+## Import
 
 ```ts
 import {
   env,
   envSchema,
   getEnv,
-  getEnvBoolean,
-  getEnvNumber,
-  parseEnv,
   requireEnv,
+  parseEnv,
   z
 } from "@maxxuxx/ts-utils/env";
 ```
 
-## Parse a typed config
+## Core exports
 
-Use `parseEnv` with an explicit source when code can run outside Node or when tests need stable inputs.
+| Export | Role |
+|---|---|
+| `getEnv`, `requireEnv` | Read optional or required string-like environment values. |
+| `getEnvNumber`, `getEnvBoolean` | Read coerced number and boolean values. |
+| `parseEnv`, `safeParseEnv` | Validate a normalized env source with a Zod schema. |
+| `envSchema` | Zod preprocess helpers for string, number, boolean, and JSON values. |
+| `env` | Namespace containing the same helpers. |
+| `EnvMissingError` | Thrown by `requireEnv` for missing or blank values. |
+
+## Basic example
 
 ```ts
 const Config = z.object({
   API_URL: envSchema.string(),
-  DEBUG  : envSchema.boolean().default(false),
-  PORT   : envSchema.number().default(3000)
+  DEBUG: envSchema.boolean().default(false),
+  PORT: envSchema.number().default(3000)
 });
 
-const config = parseEnv(Config, {
-  API_URL: "https://api.example.com",
-  DEBUG  : "false",
-  PORT   : "4000"
+const config = env.parse(Config, {
+  API_URL: " https://api.example.com ",
+  DEBUG: "false",
+  PORT: "4000"
 });
 ```
 
-The grouped `env` namespace provides the same parser.
+## Behavior notes
 
-```ts
-const config = env.parse(Config, import.meta.env);
-```
+- Without an explicit source, helpers read `globalThis.process?.env` and fall back to an empty object.
+- `envSchema.string()` trims and rejects blank values by default.
+- `envSchema.boolean()` accepts values such as `1`, `true`, `yes`, and `on`, and false-like equivalents.
+- `normalizeEnvSource` removes only `undefined` values; `null` is preserved for schema validation.
 
-When no source is passed, helpers read `globalThis.process?.env` and fall back to an empty object.
+## Edge cases
 
-## Read individual values
+- `requireEnv` rejects blank strings unless `allowEmpty` is true.
+- Invalid numbers and booleans return the provided fallback from getter helpers.
+- `envSchema.json(schema)` leaves invalid JSON text unchanged so the provided schema can report validation failure.
+- Objects and arrays are not converted by string getters unless schema helpers handle them.
 
-```ts
-const apiUrl = requireEnv("API_URL");
-const mode = getEnv("NODE_ENV", { fallback: "development" });
-const port = getEnvNumber("PORT", { fallback: 3000 });
-const debug = getEnvBoolean("DEBUG", { fallback: false });
-```
+## Related modules
 
-`getEnvBoolean` accepts `1`, `true`, `t`, `yes`, `y`, and `on` as true values. It accepts `0`, `false`, `f`, `no`, `n`, and `off` as false values.
-
-`requireEnv` throws `EnvMissingError` when a value is missing or blank.
-
-## Schema helpers
-
-`envSchema.string()` trims strings and rejects blank values by default.
-
-`envSchema.number()` converts finite numeric strings to numbers.
-
-`envSchema.boolean()` converts common environment flag strings to booleans.
-
-`envSchema.json(schema)` parses JSON strings before validating with the provided schema.
+- `@maxxuxx/ts-utils/parser` for request and form parsing presets.
+- `@maxxuxx/ts-utils/json` for explicit JSON parsing outside env schemas.

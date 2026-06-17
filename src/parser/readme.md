@@ -1,66 +1,68 @@
 # Parser module
 
-Zod based parser utilities for repeated runtime validation patterns
+[한국어](./readme.kr.md)
 
-## Public API
+Zod-based parser presets and a small wrapper for repeated runtime validation patterns.
+
+## Use this when
+
+- Route params, query values, form values, or env-like strings need repeated validation.
+- Call sites should use `parse`, `safeParse`, `is`, `optional`, `nullable`, and `array` consistently.
+- You want common strict and coercing parsers without redefining schemas.
+
+## Import
 
 ```ts
-import { createParser, parser, z } from "@maxxuxx/ts-utils/parser";
+import {
+  createParser,
+  parser,
+  z
+} from "@maxxuxx/ts-utils/parser";
 ```
 
-`parser` contains reusable presets
+## Core exports
+
+| Export | Role |
+|---|---|
+| `parser` | Preset parser namespace for strict and coercing values. |
+| `createParser` | Wraps a Zod schema with parse, safeParse, is, optional, nullable, and array helpers. |
+| `z` | Zod re-export for nearby schema definitions. |
+| Strict presets | `string`, `number`, `integer`, `boolean`, `date`, `email`, `nonEmptyString`, `uuid`. |
+| Coercing presets | `id`, `page`, `limit`, and `coerce.*` parsers for string-heavy boundaries. |
+
+## Basic example
 
 ```ts
-parser.number.parse(10);
-parser.coerce.number.parse("10");
-parser.coerce.boolean.parse("false");
-parser.id.parse(params.id);
-parser.page.parse(query.page);
-parser.limit.parse(query.limit);
-parser.email.parse(body.email);
-parser.nonEmptyString.parse(body.name);
-```
+const page = parser.page.parse(query.page);
+const limit = parser.limit.parse(query.limit);
+const email = parser.email.parse(body.email);
 
-`createParser` wraps custom Zod schemas with the same parser interface
-
-```ts
 const User = createParser(z.object({
-  id:   z.number(),
+  id: z.number(),
   name: z.string()
 }));
 
-const user = User.parse({
-  id:   1,
-  name: "haru"
-});
+if (User.is(payload)) {
+  payload.name;
+}
 ```
 
-## Behavior
+## Behavior notes
 
-Strict presets validate input without conversion
+- Strict presets validate without conversion.
+- `parser.page` defaults to `1`; `parser.limit` defaults to `20` and caps at `100`.
+- `parser.id` coerces to a positive integer.
+- `parser.coerce.boolean` only accepts explicit boolean-like values from the helper conversion.
 
-```ts
-parser.number.parse(10);
-parser.number.safeParse("10");
-```
+## Edge cases
 
-Coerce presets convert common route, query, env, and form values before validation
+- Empty strings become `undefined` for the coercing number, integer, page, and limit flows that use that preprocess.
+- `createParser(...).optional()` and similar methods return new parser wrappers.
+- Use `env` when the input source is environment variables and JSON env parsing is needed.
+- Use direct Zod schemas for complex cross-field validation.
 
-```ts
-parser.coerce.number.parse("10");
-parser.coerce.integer.parse("10");
-parser.coerce.date.parse("2026-01-01");
-```
+## Related modules
 
-Boolean coercion is explicit
-
-```ts
-parser.coerce.boolean.parse("true");
-parser.coerce.boolean.parse("false");
-parser.coerce.boolean.parse("1");
-parser.coerce.boolean.parse("0");
-parser.coerce.boolean.parse("y");
-parser.coerce.boolean.parse("n");
-```
-
-`page` defaults to `1`, `limit` defaults to `20`, and `limit` is capped at `100`
+- `@maxxuxx/ts-utils/env` for environment config parsing.
+- `@maxxuxx/ts-utils/api-fetch` for request and response schema validation.
+- `@maxxuxx/ts-utils/json` for JSON string boundaries.

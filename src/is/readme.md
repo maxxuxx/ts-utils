@@ -1,48 +1,67 @@
 # Is module
 
-Dependency free type guards for common TypeScript runtime checks
+[한국어](./readme.kr.md)
 
-## Public API
+Dependency-free runtime type guards for common JavaScript and TypeScript value checks.
 
-```ts
-import { is, isString, isDefined, isPlainObject } from "@maxxuxx/ts-utils/is";
-```
+## Use this when
 
-Use named guards when tree-shaking or direct imports are preferred
+- Unknown input needs simple type narrowing before business logic.
+- Collections, built-in instances, and plain objects should be checked without a schema dependency.
+- Call sites read better with either named guards or a grouped `is` namespace.
 
-```ts
-isString("hello");
-isDefined(value);
-isPlainObject(payload);
-```
-
-Use the `is` namespace when call sites read better with grouped predicates
+## Import
 
 ```ts
-is.string("hello");
-is.number(10);
-is.nonEmptyArray(items);
-is.validDate(value);
+import {
+  is,
+  isDefined,
+  isPlainObject,
+  isNonEmptyArray
+} from "@maxxuxx/ts-utils/is";
 ```
 
-## Guard groups
+## Core exports
 
-Primitive guards include `isString`, `isNonEmptyString`, `isNumber`, `isFiniteNumber`, `isInteger`, `isSafeInteger`, `isBoolean`, `isBigInt`, `isSymbol`, `isUndefined`, `isNull`, `isNil`, `isDefined`, and `isPrimitive`
+| Export | Role |
+|---|---|
+| Primitive guards | `isString`, `isNonEmptyString`, `isNumber`, `isFiniteNumber`, `isBoolean`, `isNil`, `isDefined`, and more. |
+| Object guards | `isObject`, `isPlainObject`, `isRecord`, `hasOwn`, `isFunction`, `isPromiseLike`. |
+| Collection guards | `isArray`, `isNonEmptyArray`, `isMap`, `isSet`, `isWeakMap`, `isWeakSet`. |
+| Instance guards | `isDate`, `isValidDate`, `isRegExp`, `isError`, `isURL`. |
+| Common guards | `isEmpty`, `isTruthy`, `isFalsy`. |
+| `is` | Namespace aliases for the same guards. |
 
-Object guards include `isObject`, `isPlainObject`, `isRecord`, `hasOwn`, `isFunction`, and `isPromiseLike`
+## Basic example
 
-Collection guards include `isArray`, `isNonEmptyArray`, `isMap`, `isSet`, `isWeakMap`, and `isWeakSet`
+```ts
+const values: Array<string | null | undefined> = ["a", null, "b"];
+const defined = values.filter(isDefined);
 
-Built-in instance guards include `isDate`, `isValidDate`, `isRegExp`, `isError`, and `isURL`
+if (isPlainObject(payload) && is.hasOwn(payload, "id")) {
+  payload.id;
+}
 
-Common value guards include `isEmpty`, `isTruthy`, and `isFalsy`
+if (isNonEmptyArray(items)) {
+  items[0];
+}
+```
 
 ## Behavior notes
 
-`isNumber` excludes `NaN`
+- `isNumber` excludes `NaN`; use `isFiniteNumber` when `Infinity` must also be rejected.
+- `isObject` accepts arrays and class instances because JavaScript treats them as objects.
+- `isPlainObject` accepts object literals and null-prototype objects only.
+- `isRecord` is currently the same plain-object check typed as `Record<string, unknown>`.
 
-`isObject` accepts arrays and class instances because JavaScript treats them as objects
+## Edge cases
 
-`isPlainObject` only accepts object literals or objects with a null prototype
+- `isEmpty` treats `null`, `undefined`, empty strings, arrays, maps, sets, and plain objects as empty.
+- `isTruthy` and `isFalsy` follow JavaScript truthiness.
+- These helpers do not validate nested object shapes. Use `parser` or Zod schemas for that.
+- `isURL` checks `value instanceof URL`, not whether a string is a valid URL.
 
-`isEmpty` treats `null`, `undefined`, empty strings, empty arrays, empty maps, empty sets, and empty plain objects as empty
+## Related modules
+
+- `@maxxuxx/ts-utils/parser` for schema-backed validation.
+- `@maxxuxx/ts-utils/normalize` for fallback-based value coercion.

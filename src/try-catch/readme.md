@@ -1,51 +1,64 @@
 # Try catch module
 
-Dependency free result helpers for synchronous and promise based code
+[한국어](./readme.kr.md)
 
-## Public API
+Dependency-free result helpers for synchronous and asynchronous error boundaries.
+
+## Use this when
+
+- A small operation should return `{ ok, data }` or `{ ok, error }` instead of throwing.
+- Unknown thrown values need safe message extraction.
+- Code expects an `Error` instance but JavaScript may throw anything.
+
+## Import
 
 ```ts
 import {
-  getErrorMessage,
-  normalizeError,
   tryCatch,
   tryCatchAsync,
+  getErrorMessage,
+  normalizeError,
   type Result
 } from "@maxxuxx/ts-utils/try-catch";
 ```
 
-## Sync usage
+## Core exports
 
-```ts
-const result = tryCatch(() => JSON.parse(input));
+| Export | Role |
+|---|---|
+| `tryCatch` | Runs synchronous code and captures thrown values. |
+| `tryCatchAsync` | Runs promise-returning code and captures rejected or synchronously thrown values. |
+| `getErrorMessage` | Extracts a readable message from unknown error values. |
+| `normalizeError` | Converts unknown thrown values into `Error` instances. |
+| `Result`, `ResultSuccess`, `ResultFailure` | Shared result contracts. |
 
-if (result.ok) {
-  result.data;
-} else {
-  result.error;
-}
-```
-
-## Async usage
+## Basic example
 
 ```ts
 const result = await tryCatchAsync(() => fetchUser(id));
 
 if (!result.ok) {
   console.error(getErrorMessage(result.error));
+  return;
 }
+
+result.data;
 ```
 
-## Result shape
+## Behavior notes
 
-```ts
-type Result<TData, TError = unknown> =
-  | { ok: true; data: TData }
-  | { ok: false; error: TError };
-```
+- Caught values are preserved as-is in the `error` field.
+- `tryCatchAsync` also catches synchronous throws before a promise is returned.
+- `getErrorMessage` checks `Error`, strings, objects with string `message`, JSON serialization, then `String(value)`.
+- `normalizeError` returns existing `Error` instances unchanged.
 
-Failures keep the original caught value by default
+## Edge cases
 
-Use `getErrorMessage(error)` to safely read a message from unknown values
+- Use an explicit error generic when the thrown shape is known.
+- This module does not retry, timeout, or run tasks concurrently.
+- Use `promise` for async orchestration and `json` for JSON-specific parse/stringify failures.
 
-Use `normalizeError(error)` to convert unknown values into an `Error`
+## Related modules
+
+- `@maxxuxx/ts-utils/promise` for retry, timeout, and concurrent tasks.
+- `@maxxuxx/ts-utils/json` for JSON-safe result helpers.

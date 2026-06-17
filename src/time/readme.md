@@ -1,42 +1,69 @@
 # Time module
 
-Utilities for estimating server time from client and server timestamps.
+[한국어](./readme.kr.md)
 
-## Public API
+Client/server timestamp helpers for estimating server time offset and building adjusted clock snapshots.
+
+## Use this when
+
+- A client needs an approximate server clock without constantly asking the server.
+- You can measure client send/receive timestamps and server receive/transmit timestamps.
+- Several samples should be compared and the lowest-latency sample should be selected.
+
+## Import
 
 ```ts
 import {
   calculateTimeOffset,
+  createTimeSyncSample,
+  pickBestTimeSyncSample,
   createClockSnapshot,
   createServerTimePayload,
-  fetchServerTimeSample,
-  pickBestTimeSyncSample
+  fetchServerTimeSample
 } from "@maxxuxx/ts-utils/time";
 ```
 
-## NTP style offset
+## Core exports
 
-Use `calculateTimeOffset` or `createTimeSyncSample` with four timestamps:
+| Export | Role |
+|---|---|
+| `calculateTimeOffset` | Calculates NTP-style offset, round trip, and server processing time. |
+| `createTimeSyncSample` | Creates an offset sample and records `sampledAtMs`. |
+| `pickBestTimeSyncSample` | Chooses the lowest round trip sample, then lower absolute offset, then newest sample. |
+| `createClockSnapshot` | Builds a local/server clock snapshot from `offsetMs`. |
+| `localMsToServerMs`, `localMsToServerDate` | Converts local timestamps using an offset. |
+| `createServerTimePayload`, `fetchServerTimeSample` | Server response helper and client fetch helper. |
 
-- `clientSendTimeMs`
-- `serverReceiveTimeMs`
-- `serverTransmitTimeMs`
-- `clientReceiveTimeMs`
-
-The offset is calculated as:
+## Basic example
 
 ```ts
-((serverReceiveTimeMs - clientSendTimeMs) + (serverTransmitTimeMs - clientReceiveTimeMs)) / 2
+const sample = await fetchServerTimeSample({
+  endpoint: "/time",
+  fetch,
+  now: Date.now
+});
+
+const snapshot = createClockSnapshot(sample.offsetMs);
+
+snapshot.serverTimeMs;
+snapshot.serverDate;
 ```
 
-`roundTripMs` excludes server processing time.
+## Behavior notes
 
-## Fetch helper
+- Offset formula is `((serverReceive - clientSend) + (serverTransmit - clientReceive)) / 2`.
+- `roundTripMs` subtracts server processing time.
+- `fetchServerTimeSample` accepts a fetch-like function and does not depend on DOM fetch types.
+- Server responses can be a number or an object with `serverTimeMs`, `serverReceiveTimeMs`, and `serverTransmitTimeMs`.
 
-`fetchServerTimeSample` accepts an injected fetch-like function and endpoint. The endpoint can return a JSON number, a direct number, or an object with `serverTimeMs`, `serverReceiveTimeMs`, and `serverTransmitTimeMs`.
+## Edge cases
 
-The module defines its own minimal fetch and response types so it does not depend on DOM types.
+- All timestamp inputs must be finite numbers.
+- Failed fetch-like responses with `ok: false` throw an error containing status and status text.
+- `pickBestTimeSyncSample([])` returns `undefined`.
+- `createClockSnapshot` returns a snapshot object, not a live clock function.
 
-## Server helper
+## Related modules
 
-`createServerTimePayload()` returns the current server time as a structured payload suitable for the client helper.
+- `@maxxuxx/ts-utils/api-fetch` when the time endpoint should use the shared API client.
+- `@maxxuxx/ts-utils/format` for displaying corrected dates.

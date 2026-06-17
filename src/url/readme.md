@@ -1,54 +1,64 @@
 # URL module
 
-Dependency free helpers for web paths, API URLs, and query strings
+[한국어](./readme.kr.md)
 
-## Public API
+Dependency-free helpers for web paths, API URLs, query strings, and URL shape checks.
+
+## Use this when
+
+- API paths need to be joined without duplicate slashes.
+- Query objects should skip `null` and `undefined` while preserving meaningful falsy values.
+- Base URLs and relative paths should be combined consistently.
+
+## Import
 
 ```ts
 import {
+  url,
+  joinPath,
   appendQuery,
   buildUrl,
-  joinPath,
-  toSearchParams,
-  url
+  toSearchParams
 } from "@maxxuxx/ts-utils/url";
 ```
 
-Use named exports for direct imports
+## Core exports
+
+| Export | Role |
+|---|---|
+| Path helpers | `splitPath`, `stripLeadingSlash`, `stripTrailingSlash`, `ensureLeadingSlash`, `withTrailingSlash`, `normalizePath`, `joinPath`. |
+| Query helpers | `toQueryEntries`, `toSearchParams`, `appendQuery`. |
+| URL helpers | `buildUrl`, `isAbsoluteUrl`, `isExternalUrl`. |
+| `url` | Namespace aliases for the same helpers. |
+
+## Basic example
 
 ```ts
-joinPath("/api/v1", "/users/", 1);
-appendQuery("/users", {
-  keyword: "",
+const path = joinPath("/api", "/users/", userId);
+
+const href = buildUrl("https://api.example.com/api", path, {
   page: 1,
-  categoryId: null
+  keyword: "",
+  active: false,
+  unused: undefined
 });
-buildUrl("https://api.example.com/api", "/users", {
-  page: 1
-});
-```
-
-Use the `url` namespace when grouped call sites read better
-
-```ts
-const path = url.join("/api", "/users", userId);
-const href = url.build("https://api.example.com/api", path);
 ```
 
 ## Behavior notes
 
-`joinPath` joins URL path segments with `/`, removes duplicate separators, preserves a leading slash from the first segment, and drops `null` or `undefined` parts
+- `joinPath` drops `null`, `undefined`, and empty string parts.
+- `toSearchParams` skips `null` and `undefined` but preserves `""`, `0`, and `false`.
+- `appendQuery` inserts query strings before hash fragments.
+- `buildUrl` appends relative paths to the existing base path instead of replacing it.
 
-`normalizePath` collapses repeated path separators while preserving leading and trailing slash intent
+## Edge cases
 
-`appendQuery` appends query params to a path or URL and keeps hash fragments at the end
+- `isAbsoluteUrl` checks URL strings with a scheme such as `https://`.
+- `isExternalUrl` also treats protocol-relative values such as `//example.com` as external.
+- Array query values are appended as repeated query keys.
+- This module is for web and API URLs. Use Node's `node:path` module for filesystem paths.
 
-`toSearchParams` skips `null` and `undefined`, while preserving values like `""`, `0`, and `false`
+## Related modules
 
-`buildUrl(baseUrl, path, query)` joins relative paths onto the base path instead of replacing the base path
-
-`isAbsoluteUrl` checks URL strings with a scheme such as `https://`
-
-`isExternalUrl` also treats protocol-relative values such as `//example.com` as external
-
-This module is for web/API paths and URLs. Use Node's built-in `node:path` module for filesystem paths
+- `@maxxuxx/ts-utils/object` for cleaning query objects before URL building.
+- `@maxxuxx/ts-utils/api-fetch` for API-specific URL building.

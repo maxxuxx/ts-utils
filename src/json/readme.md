@@ -1,78 +1,68 @@
 # JSON module
 
-Dependency free helpers for JSON parse, stringify, JSON value checks, and schema validation at string boundaries
+[한국어](./readme.kr.md)
 
-## Public API
+Dependency-free JSON parse, stringify, result helpers, fallback helpers, schema validation, and JSON-compatible value checks.
+
+## Use this when
+
+- JSON boundaries should be explicit and safe around storage, query params, or message payloads.
+- Invalid parse or stringify should return a result or fallback instead of crashing a caller.
+- Parsed values need to pass a schema-like object with a `parse` method.
+
+## Import
 
 ```ts
 import {
   json,
   parseJson,
   safeParseJson,
-  safeStringifyJson,
-  stringifyJson
+  stringifyJson,
+  isJsonValue
 } from "@maxxuxx/ts-utils/json";
 ```
 
-## Safe parse
+## Core exports
+
+| Export | Role |
+|---|---|
+| `safeParseJson`, `parseJson` | Parse JSON as result or throwing/fallback helper. |
+| `safeStringifyJson`, `stringifyJson` | Stringify values as result or throwing/fallback helper. |
+| `safeParseJsonWithSchema`, `parseJsonWithSchema` | Parse JSON and validate the result with a schema. |
+| `isJsonValue` | Checks whether a value is JSON-compatible. |
+| `JsonParseError`, `JsonStringifyError` | Error wrappers for parse and stringify failures. |
+| `json` | Namespace containing the same helpers. |
+
+## Basic example
 
 ```ts
-const result = safeParseJson(input);
-
-if (result.ok) {
-  result.data;
-} else {
-  result.error;
-}
-```
-
-`safeParseJson` accepts only strings. `null` and `undefined` are treated as invalid input so callers can safely pass values such as `localStorage.getItem(...)` with a fallback.
-
-## Fallback parse
-
-```ts
-const config = parseJson(localStorage.getItem("config"), {
+const config = json.parse(localStorage.getItem("config"), {
   fallback: {
     theme: "light"
   }
 });
-```
 
-Without a fallback, `parseJson` throws `JsonParseError` on invalid input.
-
-## Stringify
-
-```ts
-const text = stringifyJson(payload);
-const pretty = json.stringify(payload, {
+const text = json.stringify(config, {
   space: 2
 });
 ```
 
-`safeStringifyJson` returns `{ ok, data }` or `{ ok, error }`. It treats top-level values that stringify to `undefined`, circular objects, and `BigInt` failures as stringify failures.
+## Behavior notes
 
-## Schema validation
+- `safeParseJson` accepts only strings. `null` and `undefined` are invalid input.
+- `parseJson` throws without an explicit `fallback`.
+- `safeStringifyJson` treats top-level `undefined` as failure because `JSON.stringify` returns `undefined`.
+- Schema helpers accept any object with a `parse(value)` function.
 
-Any schema-like object with a `parse(value)` method can validate the parsed value.
+## Edge cases
 
-```ts
-const result = json.safeParseWithSchema(input, UserSchema);
+- Circular objects and `BigInt` stringify failures become `JsonStringifyError`.
+- `isJsonValue` rejects `NaN`, `Infinity`, `undefined`, functions, symbols, `BigInt`, dates, maps, sets, class instances, and circular structures.
+- Schema validation errors are returned as-is from safe schema helpers.
+- Use `encoding` when JSON text must be base64 or hex encoded.
 
-if (result.ok) {
-  result.data;
-}
-```
+## Related modules
 
-This keeps JSON parsing separate from runtime validation while still making the common string-to-schema boundary short.
-
-## JSON value check
-
-```ts
-json.isValue({
-  id: 1,
-  name: "haru",
-  active: true
-});
-```
-
-`isJsonValue` accepts strings, finite numbers, booleans, `null`, arrays, and plain objects that only contain JSON values. It rejects `undefined`, functions, symbols, `BigInt`, `NaN`, `Infinity`, class instances, dates, maps, sets, and circular structures.
+- `@maxxuxx/ts-utils/parser` for Zod schema creation.
+- `@maxxuxx/ts-utils/encoding` for encoded JSON payloads.
+- `@maxxuxx/ts-utils/env` for JSON env preprocess schemas.

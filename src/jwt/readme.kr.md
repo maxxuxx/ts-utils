@@ -1,0 +1,64 @@
+# JWT 모듈
+
+[English](./readme.md)
+
+JWT header/payload segment를 decode하고 expiration metadata를 확인하는 dependency-free helper입니다.
+
+## 언제 사용하나
+
+- signature 검증 없이 client/server code에서 JWT claims를 읽어야 할 때 사용합니다.
+- auth code에서 safe decode result와 malformed-token path를 일관되게 다루고 싶을 때 사용합니다.
+- `exp`, `now`, future refresh window를 반영한 만료 체크가 필요할 때 사용합니다.
+
+## Import
+
+```ts
+import {
+  jwt,
+  decodeJwt,
+  safeDecodeJwt,
+  decodeJwtHeader,
+  isJwtExpired
+} from "@maxxuxx/ts-utils/jwt";
+```
+
+## 주요 export
+
+| Export | 역할 |
+|---|---|
+| `decodeJwt`, `safeDecodeJwt` | payload claims를 decode하고 원본 token을 붙입니다. |
+| `decodeJwtHeader`, `safeDecodeJwtHeader` | JWT header segment를 decode합니다. |
+| `isJwtExpired` | 선택적 `now`, `withinSeconds`와 함께 `exp` claim을 확인합니다. |
+| `JwtDecodeError` | safe decode helper가 사용하는 error wrapper입니다. |
+| `jwt` | decode, header decode, safe decode, expiration helper namespace입니다. |
+
+## 기본 예제
+
+```ts
+const claims = jwt.decode(token);
+
+if (claims && !jwt.isExpired(token, {
+  withinSeconds: 60
+})) {
+  claims.sub;
+}
+```
+
+## 동작 메모
+
+- 이 모듈은 claim decode만 수행합니다. signature, algorithm, issuer, audience, key는 검증하지 않습니다.
+- `decodeJwt`는 malformed token 또는 object가 아닌 payload에서 `null`을 반환합니다.
+- `safeDecodeJwt`는 `{ ok, data }` 또는 `{ ok, error: JwtDecodeError }`를 반환합니다.
+- `isJwtExpired`는 malformed token과 missing/non-numeric `exp`를 expired로 봅니다.
+
+## 주의할 점
+
+- `exp`는 JWT NumericDate seconds로 해석하고 millisecond 기준으로 비교합니다.
+- `withinSeconds`는 곧 만료될 token을 refresh 대상으로 보기 위해 expired처럼 처리합니다.
+- `now`는 number 또는 `Date`를 받을 수 있고 invalid 값은 `Date.now()`로 fallback됩니다.
+- JWT 만료가 token refresh와 storage를 움직여야 한다면 `session`을 사용합니다.
+
+## 관련 모듈
+
+- `@maxxuxx/ts-utils/session`은 token lifecycle과 refresh에 사용합니다.
+- `@maxxuxx/ts-utils/encoding`은 lower-level byte/base64 helper입니다.

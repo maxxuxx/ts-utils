@@ -1,34 +1,44 @@
 # Electron log module
 
-Electron logging helpers built on top of `electron-log`
+[한국어](./readme.kr.md)
 
-Use process specific imports so renderer bundles do not load main process code
+Electron logging helpers built on `electron-log`, with main, preload, renderer, and bridge-client entry points.
 
-## Main process
+## Use this when
 
-`electron-log` is included as a package dependency
+- An Electron main process needs consistent console, file, and IPC transport configuration.
+- A preload script needs to expose a narrow logging bridge through `contextBridge`.
+- A renderer needs to log to DevTools, the main process, or both without importing main-process code.
 
-Electron itself is expected to be provided by Electron apps
+## Import
 
 ```ts
-import { app, ipcMain } from "electron";
-import {
-  configureMainLogger,
-  registerMainBridge
-} from "@maxxuxx/ts-utils/electron-log/main";
+import { configureMainLogger, registerMainBridge } from "@maxxuxx/ts-utils/electron-log/main";
+import { exposeBridge } from "@maxxuxx/ts-utils/electron-log/preload";
+import { configureRendererLogger } from "@maxxuxx/ts-utils/electron-log/renderer";
+import { createBridgeLogger } from "@maxxuxx/ts-utils/electron-log";
+```
 
+## Core exports
+
+| Export | Role |
+|---|---|
+| `electron-log/main` | Configures main process transports and registers the IPC bridge. |
+| `electron-log/preload` | Creates or exposes a safe renderer logging bridge. |
+| `electron-log/renderer` | Configures renderer-side `electron-log` transports. |
+| `createBridgeLogger` | Creates a renderer logger that writes through an exposed bridge API. |
+| `resolveLogLevel`, `shouldLogLevel` | Resolve production-aware log levels and filter messages. |
+
+## Basic example
+
+```ts
 const logger = configureMainLogger({
   isProduction: app.isPackaged,
   level: "debug",
   productionLevel: "info",
-  console: {
-    enabled: true
-  },
   file: {
-    path: "/absolute/path/to/app.log",
-    level: "info",
-    maxSize: 1024 * 1024,
-    format: "[{y}-{m}-{d} {h}:{i}:{s}.{ms}] [{level}] {text}"
+    fileName: "main.log",
+    maxSize: 1024 * 1024
   }
 });
 
@@ -36,24 +46,6 @@ registerMainBridge({
   ipcMain,
   logger
 });
-```
-
-The main bridge validates renderer payload shape before writing to the logger so malformed IPC messages are ignored
-
-Set `productionLevel` to `false` to disable logging in production
-
-```ts
-configureMainLogger({
-  isProduction: app.isPackaged,
-  productionLevel: false
-});
-```
-
-## Preload bridge
-
-```ts
-import { contextBridge, ipcRenderer } from "electron";
-import { exposeBridge } from "@maxxuxx/ts-utils/electron-log/preload";
 
 exposeBridge({
   contextBridge,
@@ -61,53 +53,21 @@ exposeBridge({
 });
 ```
 
-This exposes `window.electronLog` by default
+## Behavior notes
 
-## Web renderer
+- `electron-log` is a package dependency. `electron` is an optional peer and must be provided by the application.
+- Use process-specific subpaths so renderer bundles do not load main-process modules.
+- The default preload API key is `electronLog`.
+- Bridge payloads are validated in the main process before being written to the logger.
 
-Use the bridge client when the renderer should log to DevTools console, main process terminal, or both
+## Edge cases
 
-```ts
-import { createBridgeLogger } from "@maxxuxx/ts-utils/electron-log";
-import type { BridgeApi } from "@maxxuxx/ts-utils/electron-log";
+- Set `productionLevel: false` to disable logging in production.
+- The main entry lazy-loads `electron-log/main` so importing the module is test-friendly.
+- Invalid bridge payloads are ignored instead of throwing through IPC.
+- Use an injected logger in tests to avoid touching the real Electron log transport.
 
-declare global {
-  interface Window {
-    electronLog: BridgeApi;
-  }
-}
+## Related modules
 
-const logger = createBridgeLogger({
-  bridge: window.electronLog,
-  isProduction: import.meta.env.PROD,
-  productionLevel: "info",
-  targets: ["console", "terminal"]
-});
-
-logger.info("renderer ready");
-logger.debug("hidden in production when productionLevel is info");
-```
-
-Use the renderer adapter when the renderer imports `electron-log/renderer` directly
-
-The main process should call `configureMainLogger({ initialize: true })` before renderer IPC transport is used
-
-```ts
-import { configureRendererLogger } from "@maxxuxx/ts-utils/electron-log/renderer";
-
-const logger = configureRendererLogger({
-  isProduction: import.meta.env.PROD,
-  productionLevel: "info",
-  targets: ["console", "main"]
-});
-
-logger.info("renderer ready");
-```
-
-The `main` and `terminal` targets both send renderer logs to the main process
-
-## Levels
-
-Supported levels are `error`, `warn`, `info`, `verbose`, `debug`, and `silly`
-
-Setting the minimum level to `info` logs `error`, `warn`, and `info`, while dropping `verbose`, `debug`, and `silly`
+- `@maxxuxx/ts-utils/electron-updater` for update service logging.
+- `@maxxuxx/ts-utils/device` when logging device identifier lookup in Electron apps.

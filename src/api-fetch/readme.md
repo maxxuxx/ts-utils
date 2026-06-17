@@ -1,408 +1,94 @@
 # API fetch module
 
-Fetch based API utilities with Zod validation, method shortcuts, endpoint definitions, token refresh, timeout, retry, and hooks
+[한국어](./readme.kr.md)
 
-## Public API
+Fetch-based API client utilities with Zod validation, endpoint definitions, auth refresh, retry, timeout, hooks, logging, and route-handler error conversion.
+
+## Use this when
+
+- You want one fetch wrapper to own base URLs, headers, JSON bodies, timeouts, retries, auth headers, and response validation.
+- You define reusable typed endpoints and call them from app code with validated params, query, body, and response data.
+- Server routes need to convert known API client errors into Web `Response` objects.
+
+## Import
 
 ```ts
 import {
   createApiFetcher,
   endpoint,
   handleApiRoute,
-  getApiErrorCode,
-  getApiMessage,
   responseEnvelopeSchema,
   type ApiResponse,
   z
 } from "@maxxuxx/ts-utils/api-fetch";
 ```
 
-## Basic request
+## Core exports
 
-Create a fetcher with shared defaults
+| Export | Role |
+|---|---|
+| `createApiFetcher` | Creates a configured fetch client with method shortcuts and `request`. |
+| `endpoint` | Factory namespace for typed endpoint definitions by HTTP method. |
+| `handleApiRoute`, `toApiRouteErrorResponse` | Convert known API errors into route responses. |
+| `ApiHttpError`, `ApiValidationError`, `ApiParseError`, `ApiTimeoutError`, `ApiAuthError` | Typed error classes raised by the client and helpers. |
+| `createApiLoggerHooks`, `formatApiLogEvent` | Generate hook-based API logging. |
+| `api-fetch/sveltekit` | Cookie-bound SvelteKit adapter for auth callbacks and refresh dedupe. |
+
+## Basic example
 
 ```ts
 const api = createApiFetcher({
-  baseURL      : "https://api.example.com",
+  baseURL: "https://api.example.com",
   errorFallback: {
-    message: "요청을 처리하지 못했습니다"
-  }
+    code: "REQUEST_FAILED",
+    message: "Request failed"
+  },
+  retry: {
+    retries: 2,
+    delayMs: 300
+  },
+  timeout: 5000
 });
-```
 
-Use method shortcuts for common calls
-
-```ts
 const User = z.object({
-  id  : z.number(),
+  id: z.number(),
   name: z.string()
 });
 
-const result = await api.get("/users/1", {
-  responseSchema: User
-});
-
-result.code; // HTTP status code
-result.response; // validated response body
-```
-
-Send JSON with request and response validation
-
-```ts
-const CreateUser = z.object({
-  name: z.string().min(1)
-});
-
-const result = await api.post("/users", {
-  body          : { name: "haru" },
-  bodySchema    : CreateUser,
-  responseSchema: User
-});
-
-result.response;
-```
-
-`bodySchema` is optional. If provided, the fetcher validates `body` before the request is sent. Without `bodySchema`, `body` is still serialized as JSON.
-
-Use `rawBody` for non-JSON request bodies such as `FormData`, `Blob`, or a prebuilt string.
-
-Set request level `errorFallback` when a specific caller should receive fallback values for HTTP errors whose body has no `code` or `message`
-
-```ts
-const response = await api.get("/users/me", {
-  responseSchema: User,
-  errorFallback: {
-    message: "내 정보를 불러오지 못했습니다"
-  }
-});
-```
-
-For non-2xx responses, `ApiHttpError.status` is the HTTP status code. `ApiHttpError.code` is `body.code` when it is a string or number, then `errorFallback.code`. `ApiHttpError.message` is `body.message` when it is a string, then `errorFallback.message`, then the default technical request message.
-
-Successful calls return `ApiResponse<TResponse>` by default
-
-```ts
-type ApiResponse<TResponse> = {
-  code     : number;
-  message ?: string;
-  response : TResponse;
-};
-```
-
-`code` is the HTTP response status code and `message` is copied from `body.message` when it is a string.
-
-`response` is the parsed and validated response body by default. If the validated body looks like an API envelope with a `data` property plus `code` or `message`, `response` is unwrapped to the inner `body.data` value.
-
-```ts
-const { code, message, response } = await api.post("/auth/login", {
-  responseSchema: z.object({
-    code   : z.number(),
-    message: z.string(),
-    data   : User
-  })
-});
-
-response.id;
-```
-
-Add query params with `query`
-
-```ts
-const result = await api.get("/users", {
-  query: {
-    page : 1,
-    limit: 20
-  },
-  responseSchema: z.array(User)
-});
-
-result.response;
-```
-
-Use `select` to return a custom value instead of the default `ApiResponse`. When `select` is provided, the automatic envelope unwrap does not run.
-
-```ts
-const user = await api.get("/users/1", {
-  responseSchema: responseEnvelopeSchema(User),
-  select: (response) => response.data
-});
-```
-
-## Endpoints
-
-Use `endpoint.get`, `endpoint.post`, `endpoint.put`, `endpoint.patch`, and `endpoint.delete` when a route should be reused
-
-```ts
 const getUser = endpoint.get("/users/:id", {
   params: z.object({
-    id: z.coerce.number().int().positive()
+    id: z.number()
   }),
   responseSchema: User
 });
 
 const result = await api.call(getUser, {
-  params: { id: "1" }
-});
-
-result.response;
-```
-
-Endpoint paths support `:param` replacement and encode param values
-
-```ts
-const createUser = endpoint.post("/users", {
-  bodySchema    : CreateUser,
-  responseSchema: User
-});
-
-const result = await api.call(createUser, {
-  body: { name: "haru" }
-});
-
-result.response;
-```
-
-Endpoints can define shared query, headers, auth, retry, timeout, and select behavior
-
-```ts
-const searchUsers = endpoint.get("/users", {
-  params: z.object({
-    page: z.coerce.number().default(1)
-  }),
-  query: (params) => ({
-    page: params.page
-  }),
-  responseSchema: responseEnvelopeSchema(z.array(User)),
-  select: (response) => response.data ?? []
-});
-```
-
-Endpoints can also define a shared fallback error message
-
-```ts
-const getMe = endpoint.get("/users/me", {
-  responseSchema: User,
-  errorFallback: {
-    message: "내 정보를 불러오지 못했습니다"
+  params: {
+    id: 1
   }
 });
+
+result.code;
+result.response.name;
 ```
 
-## Auth refresh
+## Behavior notes
 
-Auth is optional and focused on bearer token flows
+- `bodySchema` validates JSON request bodies before the request is sent. Without it, `body` is still serialized as JSON.
+- Use `rawBody` for `FormData`, `Blob`, `URLSearchParams`, streams, or a pre-serialized body.
+- `responseSchema` validates the parsed response body and throws `ApiValidationError` for invalid responses.
+- The default result shape is `{ code, message?, response }`. Response envelopes with `data` are unwrapped when possible.
+- Client-level hooks run before request-level hooks. Logging is implemented as hooks, so custom hooks can be composed with logging.
 
-```ts
-const api = createApiFetcher({
-  baseURL: "https://api.example.com",
-  auth: {
-    getAccessToken: () => tokenStore.get()?.accessToken,
-    refresh: async () => {
-      const token = await refreshAccessToken();
+## Edge cases
 
-      tokenStore.set(token);
+- Auth refresh is attempted for 401 and 419 by default and is deduped while a refresh is in flight.
+- Retries default to safe read-style behavior. Configure retry options explicitly for writes.
+- HTTP errors prefer server-provided `code` and `message`; fallback values only fill missing fields.
+- `handleApiRoute` only converts known API errors. Unknown errors are rethrown.
 
-      return token.accessToken;
-    },
-    clear: () => tokenStore.clear()
-  }
-});
-```
+## Related modules
 
-When auth is configured, requests add `Authorization: Bearer <token>`
-
-Use `formatTokenHeader` when an API expects a different token header
-
-```ts
-const api = createApiFetcher({
-  auth: {
-    getAccessToken: () => tokenStore.get()?.accessToken,
-    formatTokenHeader: (accessToken) => ({
-      "X-Access-Token": accessToken
-    })
-  }
-});
-```
-
-Request-level headers take precedence over generated token headers
-
-If a response is `401` or `419`, the fetcher refreshes once and retries the original request
-
-Concurrent refresh attempts are deduped per fetcher instance
-
-Disable auth per request when needed
-
-```ts
-await api.post("/auth/login", {
-  auth: false,
-  body: credentials,
-  responseSchema: LoginResponse
-});
-```
-
-## Retry and timeout
-
-`retry` can be a number or an options object
-
-```ts
-const data = await api.get("/unstable", {
-  retry: {
-    limit: 2,
-    delay: 300,
-    statusCodes: [408, 429, 500, 502, 503, 504]
-  },
-  responseSchema: Data
-});
-```
-
-By default, retries only apply to `GET` requests
-
-Use `timeout` in milliseconds to abort slow requests
-
-```ts
-await api.get("/slow", {
-  timeout: 10_000
-});
-```
-
-## Logging
-
-Enable built-in request logging with `logging`
-
-```ts
-const api = createApiFetcher({
-  baseURL: "https://api.example.com",
-  logging: true
-});
-```
-
-Logs use this order
-
-```text
-emoji method code time endpoint
-```
-
-Example output
-
-```text
-✅ GET    200    8 ms /users/1
-⚠️ POST   500   42 ms /users
-❌ GET    ERR    3 ms /offline
-```
-
-The method column is left aligned to the longest HTTP method width
-
-The elapsed time number is right aligned to a 4 character field before `ms`
-
-The logged path excludes `baseURL` and omits query params by default
-
-Pass a custom logger or include query params when needed
-
-```ts
-const api = createApiFetcher({
-  logging: {
-    includeQuery: true,
-    logger: (message) => {
-      console.info(message);
-    }
-  }
-});
-```
-
-In an Electron renderer, pass the logger created by `@maxxuxx/ts-utils/electron-log`
-
-```ts
-import { createApiFetcher } from "@maxxuxx/ts-utils/api-fetch";
-import { createBridgeLogger } from "@maxxuxx/ts-utils/electron-log";
-
-const logger = createBridgeLogger({
-  bridge: window.electronLog,
-  isProduction: import.meta.env.PROD,
-  targets: ["console", "terminal"]
-});
-
-const api = createApiFetcher({
-  logging: {
-    enabled: import.meta.env.DEV,
-    logger
-  }
-});
-```
-
-Request bodies, headers, and bearer tokens are never included in the default log message
-
-## Hooks
-
-Hooks are optional observability callbacks
-
-They do not change the value returned by `get`, `post`, `request`, or `call`
-
-Use `logging` when all you need is API call logging
-
-```ts
-const api = createApiFetcher({
-  hooks: {
-    onResponseError: ({ method, path, error, durationMs }) => {
-      report({
-        durationMs,
-        error,
-        method,
-        path
-      });
-    }
-  }
-});
-```
-
-`durationMs` is only available inside response and error hook contexts
-
-Response body parse errors and response schema validation errors are reported through `onResponseError` because an HTTP response was already received
-
-## Route handlers
-
-Use `handleApiRoute` when a Web `Response` route should convert known API fetch errors into HTTP responses
-
-```ts
-export async function GET() {
-  return handleApiRoute(getUserResponse, {
-    authMessage    : "로그인이 필요합니다",
-    responseMessage: "사용자 응답이 올바르지 않습니다"
-  });
-}
-
-async function getUserResponse() {
-  const { response } = await api.get("/users/me", {
-    responseSchema: User
-  });
-
-  return Response.json({ user: response });
-}
-```
-
-`ApiAuthError` becomes `401`
-
-`ApiHttpError` keeps the upstream HTTP status and message
-
-`ApiParseError` and response-target `ApiValidationError` become `502`
-
-Unknown errors are rethrown so the host framework can handle them
-
-## Errors
-
-`ApiHttpError` is thrown for non-2xx responses and includes `status`, optional `code`, `statusText`, parsed `body`, `response`, and request context
-
-`getApiMessage(body)` reads a string `message` property from unknown API bodies
-
-`getApiErrorCode(body)` reads a string or number `code` property from unknown API bodies
-
-`ApiValidationError` is thrown when request body or response schema validation fails
-
-`ApiParseError` is thrown when a JSON response cannot be parsed
-
-`ApiTimeoutError` is thrown when a request exceeds `timeout`
-
-## Utilities
-
-`responseEnvelopeSchema(dataSchema)` validates a body shaped like `{ code, message, isOk, data }`
-
-`buildApiUrl(path, baseURL, query)` builds absolute or relative URLs with query params
+- `@maxxuxx/ts-utils/session` for token storage and refresh policy.
+- `@maxxuxx/ts-utils/http-response` for simple response helpers.
+- `@maxxuxx/ts-utils/parser` or direct `z` schemas for request and response validation.
