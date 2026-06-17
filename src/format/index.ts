@@ -1,4 +1,4 @@
-import { toDate, toNumber } from "../normalize/index.js";
+import { toDateString, toNumber } from "../normalize/index.js";
 
 /** Options for number format */
 export type NumberFormatOptions = Intl.NumberFormatOptions & Readonly<{
@@ -24,6 +24,7 @@ export type ValueUnitFormatOptions = NumberFormatOptions & Readonly<{
   separator?: string;
 }>;
 
+// 기본 로케일/통화 단위는 한국(ko-KR, "원")에 맞춰져 있으며 options로 모두 변경 가능
 const DEFAULT_LOCALE = "ko-KR";
 
 /** Formats number */
@@ -44,7 +45,7 @@ export const formatNumber = (
   return new Intl.NumberFormat(locale, intlOptions).format(toNumber(value));
 };
 
-/** Formats currency */
+/** Formats currency with a Korean default locale and unit; override locale/unit via options */
 export const formatCurrency = (
   value: unknown,
   options: CurrencyFormatOptions = {}
@@ -72,26 +73,9 @@ export const formatDate = (
   value: unknown,
   format = "yyyy-mm-dd",
   fallback = ""
-): string => {
-  const date = toDate(value);
+): string => toDateString(value, format, fallback);
 
-  if (date === undefined) {
-    return fallback;
-  }
-
-  const tokens: Record<string, string> = {
-    HH  : padDatePart(date.getHours()),
-    MM  : padDatePart(date.getMinutes()),
-    dd  : padDatePart(date.getDate()),
-    mm  : padDatePart(date.getMonth() + 1),
-    ss  : padDatePart(date.getSeconds()),
-    yyyy: String(date.getFullYear())
-  };
-
-  return format.replace(/yyyy|mm|dd|HH|MM|ss/g, (token) => tokens[token] ?? token);
-};
-
-/** Formats phone number */
+/** Formats a Korean phone number (02/0Xn/010/15XX-19XX); returns fallback for other formats */
 export const formatPhoneNumber = (
   value: unknown,
   options: PhoneNumberFormatOptions = {}
@@ -144,8 +128,6 @@ export const formatValueUnit = (
 
   return `${formatNumber(value, numberOptions)}${separator}${unit}`;
 };
-
-const padDatePart = (value: number): string => String(value).padStart(2, "0");
 
 const isNumberLike = (value: unknown): boolean => {
   if (typeof value === "number") {

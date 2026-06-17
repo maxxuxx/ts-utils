@@ -12,7 +12,7 @@ export const parser: ParserUtils = Object.freeze({
   integer: createParser(z.number().int()),
   boolean: createParser(z.boolean()),
   date   : createParser(z.date()),
-  email  : createParser(z.string().trim().toLowerCase().email()),
+  email  : createParser(z.string().trim().toLowerCase().pipe(z.email())),
   id     : createParser(z.coerce.number().int().positive()),
   limit  : createParser(z.preprocess(
     emptyStringToUndefined,
@@ -23,7 +23,7 @@ export const parser: ParserUtils = Object.freeze({
     emptyStringToUndefined,
     z.coerce.number().int().min(1).default(1)
   )),
-  uuid:           createParser(z.string().uuid()),
+  uuid:           createParser(z.uuid()),
   coerce: Object.freeze({
     string : createParser(z.coerce.string()),
     number : createParser(z.preprocess(emptyStringToUndefined, z.coerce.number())),

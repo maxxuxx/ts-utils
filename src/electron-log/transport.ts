@@ -10,7 +10,8 @@ export const resolveTransportLevel = (
   baseLevel: LogLevelOption,
   options?: TransportOptions
 ): LogLevelOption => {
-  if (options?.enabled === false) {
+  // 전역 비활성화(baseLevel === false)는 transport 옵션으로 덮어쓸 수 없음
+  if (options?.enabled === false || baseLevel === false) {
     return false;
   }
 

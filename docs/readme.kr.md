@@ -1,5 +1,7 @@
 # ts-utils
 
+[![npm version](https://img.shields.io/npm/v/@maxxuxx/ts-utils.svg)](https://www.npmjs.com/package/@maxxuxx/ts-utils)
+
 [English](../README.md)
 
 작고 재사용 가능한 런타임 helper가 필요한 TypeScript 프로젝트를 위한 공용 유틸리티 모음

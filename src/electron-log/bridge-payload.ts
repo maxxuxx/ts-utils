@@ -29,6 +29,33 @@ export const serializeLogData = (data: unknown[]): unknown[] => (
   })
 );
 
+const isSerializedError = (value: unknown): value is SerializedError => (
+  typeof value === "object"
+  && value !== null
+  && (value as { __type?: unknown }).__type === "Error"
+  && typeof (value as SerializedError).message === "string"
+  && typeof (value as SerializedError).name === "string"
+);
+
+/** Restores bridge-serialized values back into native objects such as Error */
+export const deserializeLogData = (data: unknown[]): unknown[] => (
+  data.map((value) => {
+    if (isSerializedError(value)) {
+      const error = new Error(value.message);
+
+      error.name = value.name;
+
+      if (value.stack !== undefined) {
+        error.stack = value.stack;
+      }
+
+      return error;
+    }
+
+    return value;
+  })
+);
+
 /** Creates log payload */
 export const createLogPayload = (
   level: LogLevel,

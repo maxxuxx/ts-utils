@@ -30,7 +30,8 @@ import {
 | `createApiFetcher` | 설정된 fetch client와 method shortcut을 생성합니다. |
 | `endpoint` | HTTP method별 typed endpoint factory namespace입니다. |
 | `handleApiRoute`, `toApiRouteErrorResponse` | 알려진 API error를 route response로 변환합니다. |
-| `ApiHttpError`, `ApiValidationError`, `ApiParseError`, `ApiTimeoutError`, `ApiAuthError` | client와 helper가 발생시키는 typed error입니다. |
+| `ApiHttpError`, `ApiValidationError`, `ApiParseError`, `ApiTimeoutError` | client가 직접 발생시키는 typed error입니다. |
+| `ApiAuthError` | 직접 작성한 auth 코드에서 throw하는 marker error입니다. `toApiRouteErrorResponse`가 401로 변환하며, client는 직접 throw하지 않습니다. |
 | `createApiLoggerHooks`, `formatApiLogEvent` | hook 기반 API logging을 생성합니다. |
 | `api-fetch/sveltekit` | cookie에 묶인 SvelteKit auth callback과 refresh dedupe adapter입니다. |
 

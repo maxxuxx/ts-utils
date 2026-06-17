@@ -31,7 +31,8 @@ import {
 | `createApiFetcher` | Creates a configured fetch client with method shortcuts and `request`. |
 | `endpoint` | Factory namespace for typed endpoint definitions by HTTP method. |
 | `handleApiRoute`, `toApiRouteErrorResponse` | Convert known API errors into route responses. |
-| `ApiHttpError`, `ApiValidationError`, `ApiParseError`, `ApiTimeoutError`, `ApiAuthError` | Typed error classes raised by the client and helpers. |
+| `ApiHttpError`, `ApiValidationError`, `ApiParseError`, `ApiTimeoutError` | Typed error classes raised by the client itself. |
+| `ApiAuthError` | Marker error you throw from your own auth code; `toApiRouteErrorResponse` maps it to a 401. The client never throws it. |
 | `createApiLoggerHooks`, `formatApiLogEvent` | Generate hook-based API logging. |
 | `api-fetch/sveltekit` | Cookie-bound SvelteKit adapter for auth callbacks and refresh dedupe. |
 

@@ -61,7 +61,9 @@ registerUpdaterIpcHandlers({
 
 - `requireFeedUrl`을 켜면 feed URL이 없을 때 service가 disabled 됩니다.
 - `check`는 auto-download를 잠시 꺼서 availability만 확인합니다.
+- `check` 진행(`checking` 상태) 중에도 이전에 발견한 `availableVersion`을 유지합니다.
 - `start`는 available update를 다운로드하거나 auto-download enabled 상태로 확인합니다.
+- `createGithubPublishConfig`(및 `createPublishConfig`의 `github` 항목)는 `owner`와 `repo`가 모두 있어야 생성되고, 없으면 제외됩니다.
 - preload bridge state payload는 renderer listener에 전달되기 전에 Zod로 parse됩니다.
 
 ## 관련 모듈

@@ -21,6 +21,19 @@ const writeToConsole = (level: LogLevel, data: unknown[]): void => {
   writer(...data);
 };
 
+let warnedMissingBridge = false;
+
+const warnMissingBridge = (): void => {
+  if (warnedMissingBridge) {
+    return;
+  }
+
+  warnedMissingBridge = true;
+  console.warn(
+    "[ts-utils/electron-log] \"main\" target is enabled but no bridge was provided; main-process logs are dropped"
+  );
+};
+
 // Renderer bridge client
 /** Creates bridge logger */
 export const createBridgeLogger = (
@@ -39,7 +52,11 @@ export const createBridgeLogger = (
     }
 
     if (hasTarget(targets, "main") && options.main?.enabled !== false) {
-      options.bridge?.[level](...data);
+      if (options.bridge) {
+        options.bridge[level](...data);
+      } else {
+        warnMissingBridge();
+      }
     }
   };
 

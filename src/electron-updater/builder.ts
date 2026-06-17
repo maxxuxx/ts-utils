@@ -157,20 +157,29 @@ export const createS3PublishConfig = (
   };
 };
 
-/** Creates github publish config */
+/** Creates github publish config, returning undefined without required owner and repo */
 export const createGithubPublishConfig = (
   options: GithubPublishOptions = {}
-): GithubPublishConfig => ({
-  ...(options.channel ? { channel: options.channel } : {}),
-  ...(options.host ? { host: options.host } : {}),
-  ...(options.owner ? { owner: options.owner } : {}),
-  ...(options.private === undefined ? {} : { private: options.private }),
-  ...(options.protocol ? { protocol: options.protocol } : {}),
-  provider: "github",
-  ...(options.publishAutoUpdate === undefined ? {} : { publishAutoUpdate: options.publishAutoUpdate }),
-  ...(options.releaseType ? { releaseType: options.releaseType } : {}),
-  ...(options.repo ? { repo: options.repo } : {})
-});
+): GithubPublishConfig | undefined => {
+  const owner = toOptionalText(options.owner);
+  const repo  = toOptionalText(options.repo);
+
+  if (!owner || !repo) {
+    return undefined;
+  }
+
+  return {
+    ...(options.channel ? { channel: options.channel } : {}),
+    ...(options.host ? { host: options.host } : {}),
+    owner,
+    ...(options.private === undefined ? {} : { private: options.private }),
+    ...(options.protocol ? { protocol: options.protocol } : {}),
+    provider: "github",
+    ...(options.publishAutoUpdate === undefined ? {} : { publishAutoUpdate: options.publishAutoUpdate }),
+    ...(options.releaseType ? { releaseType: options.releaseType } : {}),
+    repo
+  };
+};
 
 /** Creates publish config */
 export const createPublishConfig = (

@@ -58,12 +58,15 @@ exposeBridge({
 - renderer bundle이 main-process module을 끌어오지 않도록 process-specific subpath를 사용합니다.
 - 기본 preload API key는 `electronLog`입니다.
 - main bridge는 payload shape을 검증한 뒤 logger에 기록합니다.
+- bridge로 전달된 `Error` 값은 main에서 실제 `Error` 인스턴스로 복원되어 stack trace가 IPC를 건너도 보존됩니다.
 
 ## 주의할 점
 
 - `productionLevel: false`로 production logging을 끌 수 있습니다.
+- 전역 off(`enabled: false` 또는 `productionLevel: false`)는 transport별 `level`로 다시 켤 수 없으며 transport는 꺼진 상태를 유지합니다.
 - main entry는 `electron-log/main`을 lazy-load하므로 import 자체는 테스트하기 쉽습니다.
 - 잘못된 bridge payload는 IPC에서 throw하지 않고 무시됩니다.
+- `createBridgeLogger`는 `main` target이 켜졌는데 `bridge`가 없으면 로그가 버려지므로 1회 경고합니다.
 - 테스트에서는 실제 Electron transport 대신 logger를 주입하는 것이 좋습니다.
 
 ## 관련 모듈

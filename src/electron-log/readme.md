@@ -59,12 +59,15 @@ exposeBridge({
 - Use process-specific subpaths so renderer bundles do not load main-process modules.
 - The default preload API key is `electronLog`.
 - Bridge payloads are validated in the main process before being written to the logger.
+- `Error` values sent over the bridge are restored to real `Error` instances in the main process so stack traces survive IPC.
 
 ## Edge cases
 
 - Set `productionLevel: false` to disable logging in production.
+- A global off (`enabled: false` or `productionLevel: false`) cannot be re-enabled by a per-transport `level`; transports stay off.
 - The main entry lazy-loads `electron-log/main` so importing the module is test-friendly.
 - Invalid bridge payloads are ignored instead of throwing through IPC.
+- `createBridgeLogger` warns once if a `main` target is enabled without a `bridge`, since those logs would be dropped.
 - Use an injected logger in tests to avoid touching the real Electron log transport.
 
 ## Related modules

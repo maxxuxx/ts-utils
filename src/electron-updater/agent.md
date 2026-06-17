@@ -53,6 +53,10 @@ Automatic install after download is opt-in through `autoInstallOnDownloaded` bec
 `feedUrl` is optional. When omitted, apps can rely on `electron-builder` generated `app-update.yml`. When provided, the service calls `setFeedURL({ provider: "generic", url })` for public S3 or CloudFront style feeds.
 
 Builder helpers are plain object helpers and do not import `electron-builder`, so they can be used without pulling builder into runtime code.
+
+State transitions pass forward `availableVersion` explicitly (including the `checking` transition) so a discovered version is not lost while re-checking; the resolver stays input-driven so `not-available` and `disabled` can still clear it.
+
+`createGithubPublishConfig` returns `undefined` unless both `owner` and `repo` are present, mirroring the generic/S3 helpers that require their identifying field, so an empty `github: {}` does not produce an invalid provider entry.
 ## Public documentation
 
 Every exported function, class, constant, interface, and type alias must have concise JSDoc before the declaration so editor hover explains purpose, important behavior, and expected usage

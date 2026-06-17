@@ -61,7 +61,9 @@ registerUpdaterIpcHandlers({
 
 - `requireFeedUrl` disables the service when no feed URL is configured.
 - `check` temporarily disables auto-download so it only checks availability.
+- `check` keeps a previously discovered `availableVersion` while the status is `checking`.
 - `start` downloads an available update or checks with auto-download enabled.
+- `createGithubPublishConfig` (and `createPublishConfig`'s `github` entry) is skipped unless both `owner` and `repo` are provided.
 - Preload bridge state payloads are parsed with Zod before reaching renderer listeners.
 
 ## Related modules

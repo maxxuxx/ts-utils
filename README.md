@@ -1,5 +1,7 @@
 # ts-utils
 
+[![npm version](https://img.shields.io/npm/v/@maxxuxx/ts-utils.svg)](https://www.npmjs.com/package/@maxxuxx/ts-utils)
+
 [한국어](./docs/readme.kr.md)
 
 Shared TypeScript utilities for projects that need small reusable runtime helpers

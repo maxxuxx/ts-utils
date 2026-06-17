@@ -1,5 +1,5 @@
 import { DEFAULT_CHANNEL } from "./constants.js";
-import { isLogPayload } from "./bridge-payload.js";
+import { deserializeLogData, isLogPayload } from "./bridge-payload.js";
 import type { LoggerFunctions, MainBridgeOptions } from "./types.js";
 
 const logToMain = (
@@ -13,7 +13,7 @@ const logToMain = (
     return;
   }
 
-  logger[payload.level](...payload.data);
+  logger[payload.level](...deserializeLogData(payload.data));
 };
 
 // Main bridge

@@ -2,7 +2,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 
 import { resolveLogLevel } from "./levels.js";
-import { configureTransport, resolveTransportLevel } from "./transport.js";
+import { configureTransport } from "./transport.js";
 import type {
   FileOptions,
   FileTransport,
@@ -75,11 +75,7 @@ export const configureMainLogger = (
 
   configureTransport(logger.transports.console, baseLevel, options.console);
   configureFileTransport(logger.transports.file, baseLevel, options.file);
-  configureTransport(
-    logger.transports.ipc,
-    resolveTransportLevel(baseLevel, options.ipc),
-    options.ipc
-  );
+  configureTransport(logger.transports.ipc, baseLevel, options.ipc);
 
   if (options.initialize) {
     const initializeOptions = options.initialize === true ? undefined : options.initialize;

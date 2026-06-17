@@ -273,9 +273,10 @@ export const createUpdaterService = (
       options.logger?.info?.("Checking for update");
 
       setState({
-        enabled        : true,
-        progressPercent: null,
-        status         : "checking"
+        availableVersion: state.availableVersion,
+        enabled         : true,
+        progressPercent : null,
+        status          : "checking"
       });
     }) as AutoUpdaterListener);
 

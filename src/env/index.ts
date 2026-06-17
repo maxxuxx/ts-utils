@@ -255,15 +255,13 @@ export const envSchema = Object.freeze({
 
 /** Grouped helpers for the env module */
 export const env = Object.freeze({
-  boolean           : getEnvBoolean,
-  get               : getEnv,
-  getBoolean        : getEnvBoolean,
-  getDefaultSource  : getDefaultEnvSource,
-  getNumber         : getEnvNumber,
-  normalizeSource   : normalizeEnvSource,
-  number            : getEnvNumber,
-  parse             : parseEnv,
-  require           : requireEnv,
-  safeParse         : safeParseEnv,
-  schema            : envSchema
+  boolean         : getEnvBoolean,
+  get             : getEnv,
+  getDefaultSource: getDefaultEnvSource,
+  normalizeSource : normalizeEnvSource,
+  number          : getEnvNumber,
+  parse           : parseEnv,
+  require         : requireEnv,
+  safeParse       : safeParseEnv,
+  schema          : envSchema
 });
