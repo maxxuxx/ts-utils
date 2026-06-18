@@ -121,6 +121,7 @@ apiServerClock.getServerTimeMs();
 - Retries default to safe read-style behavior. Configure retry options explicitly for writes.
 - HTTP errors prefer server-provided `code` and `message`; fallback values only fill missing fields.
 - `handleApiRoute` preserves `ApiHttpError.code` in JSON responses when present. `codeMessages` override response messages before `statusMessages`, then the API message is used.
+- `handleApiRoute` accepts no options. If no mapped, route-level, or API message exists, it returns `API request failed`.
 - Missing or invalid server time headers are ignored.
 - `handleApiRoute` only converts known API errors. Unknown errors are rethrown.
 

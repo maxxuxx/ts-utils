@@ -8,7 +8,8 @@ import {
   ApiAuthError,
   ApiHttpError,
   ApiParseError,
-  ApiValidationError
+  ApiValidationError,
+  getApiMessage
 } from "./errors.js";
 import type {
   ApiErrorCode,
@@ -25,14 +26,16 @@ export type ApiRouteErrorMessage = string | ((error: ApiHttpError) => string | u
 export type ApiRouteErrorOptions = Readonly<{
   authMessage   ?: string;
   codeMessages  ?: Partial<Record<ApiErrorCode, ApiRouteErrorMessage>>;
-  responseMessage: string;
+  responseMessage?: string;
   statusMessages?: Partial<Record<number, ApiRouteErrorMessage>>;
 }>;
+
+const DEFAULT_API_ROUTE_ERROR_MESSAGE = "API request failed";
 
 /** Runs a route handler and converts known API errors to HTTP responses */
 export const handleApiRoute = async (
   handler: ApiRouteHandler,
-  options: ApiRouteErrorOptions
+  options: ApiRouteErrorOptions = {}
 ): Promise<Response> => {
   try {
     return await handler();
@@ -48,7 +51,7 @@ export const handleApiRoute = async (
 /** Converts a value to api route error response */
 export const toApiRouteErrorResponse = (
   error: unknown,
-  options: ApiRouteErrorOptions
+  options: ApiRouteErrorOptions = {}
 ): Response | null => {
   if (error instanceof ApiAuthError) {
     return unauthorized(options.authMessage ?? error.message);
@@ -73,7 +76,7 @@ export const toApiRouteErrorResponse = (
     error instanceof ApiParseError
     || (error instanceof ApiValidationError && error.target === "response")
   ) {
-    return badGateway(options.responseMessage);
+    return badGateway(options.responseMessage ?? DEFAULT_API_ROUTE_ERROR_MESSAGE);
   }
 
   return null;
@@ -85,8 +88,9 @@ const getApiRouteHttpErrorMessage = (
 ): string => (
   resolveApiRouteErrorMessage(error, error.code === undefined ? undefined : options.codeMessages?.[error.code])
   ?? resolveApiRouteErrorMessage(error, options.statusMessages?.[error.status])
-  ?? error.message
+  ?? getApiMessage(error.body)
   ?? options.responseMessage
+  ?? DEFAULT_API_ROUTE_ERROR_MESSAGE
 );
 
 const resolveApiRouteErrorMessage = (

@@ -991,6 +991,42 @@ describe("api-fetch", () => {
     });
   });
 
+  it("uses a default API route error message when no route or API message is available", async () => {
+    const response = await handleApiRoute(() => {
+      throw new ApiHttpError(jsonResponse({
+        ok: false
+      }, 503), {
+        ok: false
+      }, {
+        method: "GET",
+        path  : "/missing-message",
+        url   : "https://api.example.com/missing-message"
+      });
+    });
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({
+      message: "API request failed"
+    });
+  });
+
+  it("uses the default API route error message for malformed API responses without route options", async () => {
+    const response = await handleApiRoute(() => {
+      throw new ApiParseError(new Response("{bad", {
+        status: 200
+      }), "{bad", {
+        method: "GET",
+        path  : "/broken-json",
+        url   : "https://api.example.com/broken-json"
+      });
+    });
+
+    expect(response.status).toBe(502);
+    await expect(response.json()).resolves.toEqual({
+      message: "API request failed"
+    });
+  });
+
   it("handles response parsing and validation route errors as bad gateway", async () => {
     const context = {
       method: "GET",

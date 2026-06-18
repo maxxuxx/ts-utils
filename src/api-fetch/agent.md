@@ -96,6 +96,8 @@ Use `handleApiRoute` in Web `Response` route handlers when repeated try/catch bl
 
 `handleApiRoute` should preserve `ApiHttpError.code` in JSON responses when present and resolve messages from `codeMessages`, then `statusMessages`, then the API error message
 
+`handleApiRoute` options should stay optional, and the default route error message should remain `API request failed`
+
 The default log format is `emoji METHOD code duration endpoint`
 
 The duration number is right aligned to a 4 character field before `ms`

@@ -111,6 +111,7 @@ apiServerClock.getServerTimeMs();
 - retry는 읽기 요청에 맞춘 보수적 기본값을 사용하므로 write 요청은 명시 설정이 필요합니다.
 - HTTP error는 server의 `code`, `message`를 우선 사용하고 fallback은 비어 있는 값만 채웁니다.
 - `handleApiRoute`는 `ApiHttpError.code`가 있으면 JSON 응답에 보존합니다. message는 `codeMessages`, `statusMessages`, API message 순서로 정합니다.
+- `handleApiRoute`는 options 없이 사용할 수 있습니다. 매핑 message, route message, API message가 모두 없으면 `API request failed`를 반환합니다.
 - server time header가 없거나 올바르지 않으면 무시합니다.
 - `handleApiRoute`는 알려진 API error만 변환하고 알 수 없는 error는 다시 throw합니다.
 
