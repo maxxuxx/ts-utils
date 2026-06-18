@@ -94,6 +94,8 @@ Use `createApiLoggerHooks` to enable built-in API call logs through the existing
 
 Use `handleApiRoute` in Web `Response` route handlers when repeated try/catch blocks only convert `ApiAuthError`, `ApiHttpError`, `ApiParseError`, and response-target `ApiValidationError` into HTTP responses
 
+`handleApiRoute` should preserve `ApiHttpError.code` in JSON responses when present and resolve messages from `codeMessages`, then `statusMessages`, then the API error message
+
 The default log format is `emoji METHOD code duration endpoint`
 
 The duration number is right aligned to a 4 character field before `ms`

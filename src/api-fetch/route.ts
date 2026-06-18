@@ -1,5 +1,6 @@
 import {
   badGateway,
+  jsonResponse,
   messageResponse,
   unauthorized
 } from "../http-response/index.js";
@@ -9,15 +10,23 @@ import {
   ApiParseError,
   ApiValidationError
 } from "./errors.js";
-import type { MaybePromise } from "./types.js";
+import type {
+  ApiErrorCode,
+  MaybePromise
+} from "./types.js";
 
 /** Handler signature for api route */
 export type ApiRouteHandler = () => MaybePromise<Response>;
 
+/** Message override for api route error responses */
+export type ApiRouteErrorMessage = string | ((error: ApiHttpError) => string | undefined);
+
 /** Options for api route error */
 export type ApiRouteErrorOptions = Readonly<{
-  authMessage?: string;
+  authMessage   ?: string;
+  codeMessages  ?: Partial<Record<ApiErrorCode, ApiRouteErrorMessage>>;
   responseMessage: string;
+  statusMessages?: Partial<Record<number, ApiRouteErrorMessage>>;
 }>;
 
 /** Runs a route handler and converts known API errors to HTTP responses */
@@ -46,7 +55,18 @@ export const toApiRouteErrorResponse = (
   }
 
   if (error instanceof ApiHttpError) {
-    return messageResponse(error.message, error.status);
+    const message = getApiRouteHttpErrorMessage(error, options);
+
+    if (error.code !== undefined) {
+      return jsonResponse({
+        code: error.code,
+        message
+      }, {
+        status: error.status
+      });
+    }
+
+    return messageResponse(message, error.status);
   }
 
   if (
@@ -57,4 +77,25 @@ export const toApiRouteErrorResponse = (
   }
 
   return null;
+};
+
+const getApiRouteHttpErrorMessage = (
+  error: ApiHttpError,
+  options: ApiRouteErrorOptions
+): string => (
+  resolveApiRouteErrorMessage(error, error.code === undefined ? undefined : options.codeMessages?.[error.code])
+  ?? resolveApiRouteErrorMessage(error, options.statusMessages?.[error.status])
+  ?? error.message
+  ?? options.responseMessage
+);
+
+const resolveApiRouteErrorMessage = (
+  error: ApiHttpError,
+  message: ApiRouteErrorMessage | undefined
+): string | undefined => {
+  if (typeof message === "function") {
+    return message(error);
+  }
+
+  return message;
 };

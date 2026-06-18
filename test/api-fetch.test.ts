@@ -931,6 +931,66 @@ describe("api-fetch", () => {
     });
   });
 
+  it("preserves API error codes in API route error responses", async () => {
+    const response = await handleApiRoute(() => {
+      throw new ApiHttpError(jsonResponse({
+        code   : "VALIDATION_ERROR",
+        message: "Request validation failed"
+      }, 422), {
+        code   : "VALIDATION_ERROR",
+        message: "Request validation failed"
+      }, {
+        method: "POST",
+        path  : "/duo/posts",
+        url   : "https://api.example.com/duo/posts"
+      }, {
+        code   : "VALIDATION_ERROR",
+        message: "Request validation failed"
+      });
+    }, {
+      responseMessage: "요청을 처리하지 못했습니다"
+    });
+
+    expect(response.status).toBe(422);
+    await expect(response.json()).resolves.toEqual({
+      code   : "VALIDATION_ERROR",
+      message: "Request validation failed"
+    });
+  });
+
+  it("resolves API route messages from code and status mappings before API messages", async () => {
+    const response = await handleApiRoute(() => {
+      throw new ApiHttpError(jsonResponse({
+        code   : "VALIDATION_ERROR",
+        message: "Request validation failed"
+      }, 422), {
+        code   : "VALIDATION_ERROR",
+        message: "Request validation failed"
+      }, {
+        method: "POST",
+        path  : "/duo/posts",
+        url   : "https://api.example.com/duo/posts"
+      }, {
+        code   : "VALIDATION_ERROR",
+        message: "Request validation failed"
+      });
+    }, {
+      codeMessages: {
+        VALIDATION_ERROR: "배틀태그를 확인해주세요"
+      },
+      responseMessage: "요청을 처리하지 못했습니다",
+      statusMessages : {
+        422: "입력 내용을 확인해주세요"
+      }
+    });
+
+    expect(response.status).toBe(422);
+    await expect(response.json()).resolves.toEqual({
+      code   : "VALIDATION_ERROR",
+      message: "배틀태그를 확인해주세요"
+    });
+  });
+
   it("handles response parsing and validation route errors as bad gateway", async () => {
     const context = {
       method: "GET",

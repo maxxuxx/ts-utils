@@ -110,6 +110,7 @@ apiServerClock.getServerTimeMs();
 - 기본 auth refresh 대상은 401과 419이며, refresh 중복 호출은 dedupe됩니다.
 - retry는 읽기 요청에 맞춘 보수적 기본값을 사용하므로 write 요청은 명시 설정이 필요합니다.
 - HTTP error는 server의 `code`, `message`를 우선 사용하고 fallback은 비어 있는 값만 채웁니다.
+- `handleApiRoute`는 `ApiHttpError.code`가 있으면 JSON 응답에 보존합니다. message는 `codeMessages`, `statusMessages`, API message 순서로 정합니다.
 - server time header가 없거나 올바르지 않으면 무시합니다.
 - `handleApiRoute`는 알려진 API error만 변환하고 알 수 없는 error는 다시 throw합니다.
 

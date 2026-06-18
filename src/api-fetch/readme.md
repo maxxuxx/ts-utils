@@ -120,6 +120,7 @@ apiServerClock.getServerTimeMs();
 - Auth refresh is attempted for 401 and 419 by default and is deduped while a refresh is in flight.
 - Retries default to safe read-style behavior. Configure retry options explicitly for writes.
 - HTTP errors prefer server-provided `code` and `message`; fallback values only fill missing fields.
+- `handleApiRoute` preserves `ApiHttpError.code` in JSON responses when present. `codeMessages` override response messages before `statusMessages`, then the API message is used.
 - Missing or invalid server time headers are ignored.
 - `handleApiRoute` only converts known API errors. Unknown errors are rethrown.
 
