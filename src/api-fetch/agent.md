@@ -26,11 +26,15 @@ Primary request vocabulary should stay small and direct
 
 `types.ts` contains public types, method constants, fetcher contracts, endpoint contracts, auth contracts, retry contracts, and hook contracts
 
-`client.ts` contains `createApiFetcher`, method shortcuts, request execution, auth refresh retry, timeout, retry, logging hook composition, and hook orchestration
+`client.ts` contains `createApiFetcher`, method shortcuts, request execution, auth refresh retry, timeout, logging hook composition, and hook orchestration
 
 `endpoint.ts` contains `endpoint.get/post/put/patch/delete`, path param replacement, endpoint param parsing, and endpoint execution helpers
 
-`body.ts` contains JSON request body validation, response body parsing, and response schema validation
+`body.ts` contains JSON request body validation, replayable raw body creation, bounded response reading, response body parsing, and response schema validation
+
+`origin.ts` contains trusted origin normalization and matching
+
+`retry.ts` contains retry defaults, `Retry-After` parsing, exponential delay, and bounded jitter calculations
 
 `headers.ts`, `query.ts`, and `url.ts` contain small request building helpers
 
@@ -74,15 +78,29 @@ Auth only requires `getAccessToken`, optional `refresh`, optional `clear`, and o
 
 The default token header is `Authorization: Bearer <accessToken>`
 
+Auth headers are attached only to relative requests, the resolved `baseURL` origin, and explicit `allowedOrigins`
+
+Public error contexts remove query strings and fragments from `context.url`
+
 Use `formatTokenHeader` when a project sends the access token through a different header shape, such as `X-Access-Token`
 
 Refresh retry happens once after `401` or `419` by default
+
+Refresh throw, empty refresh results, and a second auth response clear the session on a best-effort basis and throw `ApiAuthError`
 
 Concurrent refresh calls are deduped per fetcher instance through a shared refresh promise
 
 General retry is separate from auth refresh and defaults to `GET` only
 
+General retry uses one request-wide budget, respects `Retry-After` by default, and supports fixed or exponential delay with bounded jitter
+
+Use `rawBodyFactory` for a fresh one-based body per network attempt; one-shot `ReadableStream` values passed through `rawBody` are not retried
+
+`maxResponseBytes` rejects declared or streamed oversized responses with `ApiResponseSizeError`
+
 Timeout uses `AbortController` and throws `ApiTimeoutError`
+
+Caller cancellation throws `ApiAbortError`, including cancellation during retry delay
 
 Hooks are available globally and per request for observability
 
@@ -94,7 +112,7 @@ Use `createApiLoggerHooks` to enable built-in API call logs through the existing
 
 Use `handleApiRoute` in Web `Response` route handlers when repeated try/catch blocks only convert `ApiAuthError`, `ApiHttpError`, `ApiParseError`, and response-target `ApiValidationError` into HTTP responses
 
-`handleApiRoute` should preserve `ApiHttpError.code` in JSON responses when present and resolve messages from `codeMessages`, then `statusMessages`, then the API error message
+`handleApiRoute` should preserve `ApiHttpError.code` in JSON responses when present and resolve messages from `codeMessages`, then `statusMessages`, then the configured or generic fallback without exposing raw upstream messages
 
 `handleApiRoute` options should stay optional, and the default route error message should remain `API request failed`
 

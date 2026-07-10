@@ -1,7 +1,15 @@
-import { parseRequestBody, parseResponseBody, readResponseBody } from "./body.js";
 import {
+  parseRequestBody,
+  parseResponseBody,
+  readResponseBody,
+  validateMaxResponseBytes
+} from "./body.js";
+import {
+  ApiAbortError,
+  ApiAuthError,
   ApiHttpError,
   ApiParseError,
+  ApiResponseSizeError,
   ApiTimeoutError,
   ApiValidationError,
   getApiErrorCode,
@@ -10,8 +18,11 @@ import {
 import { executeEndpoint } from "./endpoint.js";
 import { buildHeaders, mergeHeaders } from "./headers.js";
 import { createApiLoggerHooks } from "./logging.js";
-import { buildApiUrl } from "./url.js";
+import { isTrustedRequestOrigin } from "./origin.js";
+import { getRetryDelay, resolveRetryOptions } from "./retry.js";
+import { buildApiUrl, redactApiUrl } from "./url.js";
 import { ApiMethod } from "./types.js";
+import { sleep } from "../promise/index.js";
 import {
   createServerClock,
   createTimeSyncSample,
@@ -19,6 +30,7 @@ import {
 } from "../time/index.js";
 import type {
   AnyApiEndpoint,
+  ApiAuthOptions,
   ApiErrorHookContext,
   ApiErrorFallback,
   ApiFetcher,
@@ -30,32 +42,25 @@ import type {
   ApiRequestOptions,
   ApiResponseHookContext,
   ApiResponsePayload,
-  ApiRetry,
   ApiRetryContext,
-  ApiRetryOptions,
   ApiServerTimeOptions,
   ApiTimedRequestContext,
   FetchLike,
   OptionalSchema,
   SchemaOutput
 } from "./types.js";
+import type { ResolvedRetryOptions } from "./retry.js";
 
 const AUTH_REFRESH_STATUS_CODES = [401, 419] as const;
 const DEFAULT_SERVER_TIME_HEADER = "Date";
-const DEFAULT_RETRY_METHODS = [ApiMethod.GET] as const;
-const DEFAULT_RETRY_STATUS_CODES = [
-  408,
-  409,
-  425,
-  429,
-  500,
-  502,
-  503,
-  504
-] as const;
 
 type ResolvedApiFetcherOptions = Omit<ApiFetcherOptions, "serverTime"> & {
   serverTime?: ApiServerTimeOptions;
+};
+
+type RequestExecutionState = {
+  networkAttempt: number;
+  retriesUsed   : number;
 };
 
 // Client factory
@@ -85,10 +90,6 @@ export const createApiFetcher = (
 
     if (!refreshPromise) {
       refreshPromise = Promise.resolve(options.auth.refresh(error))
-        .catch(async (refreshError) => {
-          await options.auth?.clear?.();
-          throw refreshError;
-        })
         .finally(() => {
           refreshPromise = null;
         });
@@ -106,10 +107,32 @@ export const createApiFetcher = (
     path: string,
     requestOptions: ApiRequestOptions<TBodySchema, TResponseSchema, TResult> = {}
   ): Promise<TResult> => {
-    const authEnabled = requestOptions.auth !== false && options.auth !== undefined;
+    const baseURL     = requestOptions.baseURL ?? options.baseURL;
+    const resolvedURL = buildApiUrl(path, baseURL);
+    const authContext = {
+      method,
+      path,
+      url: redactApiUrl(resolvedURL)
+    };
+    const authEnabled = requestOptions.auth !== false
+      && options.auth !== undefined
+      && isTrustedRequestOrigin(resolvedURL, baseURL, options.allowedOrigins);
+    const executionState: RequestExecutionState = {
+      networkAttempt: 0,
+      retriesUsed   : 0
+    };
 
     if (!authEnabled) {
-      return sendRequest(method, path, requestOptions, clientOptions, fetchImpl, undefined, false);
+      return sendRequest(
+        method,
+        path,
+        requestOptions,
+        clientOptions,
+        fetchImpl,
+        undefined,
+        false,
+        executionState
+      );
     }
 
     const accessToken = await options.auth?.getAccessToken();
@@ -122,28 +145,44 @@ export const createApiFetcher = (
         clientOptions,
         fetchImpl,
         accessToken ?? undefined,
-        true
+        true,
+        executionState
       );
     } catch (error) {
-      if (!shouldRefreshAuth(error, options)) {
+      if (!isRequestBodyReplayable(requestOptions) || !shouldRefreshAuth(error, options)) {
         throw error;
       }
 
-      const nextAccessToken = await refreshOnce(error);
+      let nextAccessToken: string | null | undefined;
+
+      try {
+        nextAccessToken = await refreshOnce(error);
+      } catch (refreshError) {
+        return throwAuthError(options.auth, refreshError, authContext);
+      }
 
       if (!nextAccessToken) {
-        throw error;
+        return throwAuthError(options.auth, error, authContext);
       }
 
-      return sendRequest(
-        method,
-        path,
-        requestOptions,
-        clientOptions,
-        fetchImpl,
-        nextAccessToken,
-        true
-      );
+      try {
+        return await sendRequest(
+          method,
+          path,
+          requestOptions,
+          clientOptions,
+          fetchImpl,
+          nextAccessToken,
+          true,
+          executionState
+        );
+      } catch (retryError) {
+        if (!shouldRefreshAuth(retryError, options)) {
+          throw retryError;
+        }
+
+        return throwAuthError(options.auth, retryError, authContext);
+      }
     }
   };
 
@@ -182,7 +221,8 @@ const sendRequest = async <
   clientOptions: ResolvedApiFetcherOptions,
   fetchImpl: FetchLike,
   accessToken: string | undefined,
-  authEnabled: boolean
+  authEnabled: boolean,
+  executionState: RequestExecutionState
 ): Promise<TResult> => {
   const {
     auth: _auth,
@@ -192,8 +232,10 @@ const sendRequest = async <
     errorFallback,
     headers,
     hooks,
+    maxResponseBytes,
     query,
     rawBody: _rawBody,
+    rawBodyFactory: _rawBodyFactory,
     responseSchema,
     retry,
     select,
@@ -206,21 +248,37 @@ const sendRequest = async <
     method,
     path,
     startedAt,
-    url
+    url: redactApiUrl(url)
   };
-  const parsedBody = parseRequestBody(options, context);
+  const retryOptions  = resolveRetryOptions(retry ?? clientOptions.retry);
+  const timeoutMs     = timeout ?? clientOptions.timeout;
+  const responseLimit = validateMaxResponseBytes(
+    maxResponseBytes ?? clientOptions.maxResponseBytes
+  );
+  const bodyReplayable = isRequestBodyReplayable(options);
+  let parsedBody       = await parseRequestBody(
+    options,
+    context,
+    executionState.networkAttempt += 1
+  );
   const headersInit = buildHeaders(
     mergeHeaders(clientOptions.headers, headers),
     accessToken,
     parsedBody.isJsonBody,
     clientOptions.auth?.formatTokenHeader
   );
-  const retryOptions = resolveRetryOptions(retry ?? clientOptions.retry);
-  const timeoutMs    = timeout ?? clientOptions.timeout;
 
   await callRequestHooks(clientOptions.hooks?.onRequest, hooks?.onRequest, context);
 
   for (let attempt = 0; ; attempt += 1) {
+    if (attempt > 0) {
+      parsedBody = await parseRequestBody(
+        options,
+        context,
+        executionState.networkAttempt += 1
+      );
+    }
+
     const signal = createRequestSignal(fetchOptions.signal, timeoutMs);
     let response: Response | undefined;
     let responseBody: unknown;
@@ -241,7 +299,7 @@ const sendRequest = async <
         clientSendTimeMs,
         getServerTimeNow(clientOptions.serverTime)
       );
-      responseBody = await readResponseBody(response, context);
+      responseBody = await readResponseBody(response, context, responseLimit);
 
       if (!response.ok) {
         const resolvedErrorFallback = resolveErrorFallback(
@@ -271,21 +329,24 @@ const sendRequest = async <
         );
 
         if (await shouldRetryRequest({
-          attempt,
+          attempt: executionState.retriesUsed,
           authEnabled,
+          bodyReplayable,
           context,
           error,
           method,
           response,
           retryOptions
         })) {
+          executionState.retriesUsed += 1;
+          signal.cleanup();
           await waitForRetry(retryOptions, {
             ...context,
-            attempt: attempt + 1,
+            attempt: executionState.retriesUsed,
             error,
             response,
             status: response.status
-          });
+          }, fetchOptions.signal);
           continue;
         }
 
@@ -312,7 +373,9 @@ const sendRequest = async <
     } catch (error) {
       const nextError = signal.isTimedOut()
         ? new ApiTimeoutError(timeoutMs ?? 0, context)
-        : error;
+        : fetchOptions.signal?.aborted
+          ? new ApiAbortError(fetchOptions.signal.reason, context)
+          : error;
 
       if (nextError instanceof ApiHttpError) {
         throw nextError;
@@ -345,18 +408,21 @@ const sendRequest = async <
       );
 
       if (await shouldRetryRequest({
-        attempt,
+        attempt: executionState.retriesUsed,
         authEnabled,
+        bodyReplayable,
         context,
         error: nextError,
         method,
         retryOptions
       })) {
+        executionState.retriesUsed += 1;
+        signal.cleanup();
         await waitForRetry(retryOptions, {
           ...context,
-          attempt: attempt + 1,
+          attempt: executionState.retriesUsed,
           error: nextError
-        });
+        }, fetchOptions.signal);
         continue;
       }
 
@@ -424,8 +490,9 @@ const resolveErrorFallback = (
 
 const isResponseProcessingError = (
   error: unknown
-): error is ApiParseError | ApiValidationError => (
+): error is ApiParseError | ApiResponseSizeError | ApiValidationError => (
   error instanceof ApiParseError
+  || error instanceof ApiResponseSizeError
   || (error instanceof ApiValidationError && error.target === "response")
 );
 
@@ -444,6 +511,20 @@ const shouldRefreshAuth = (
 
   return error instanceof ApiHttpError
     && AUTH_REFRESH_STATUS_CODES.includes(error.status as 401 | 419);
+};
+
+const throwAuthError = async (
+  auth: ApiAuthOptions | undefined,
+  cause: unknown,
+  context: ApiRequestContext
+): Promise<never> => {
+  try {
+    await auth?.clear?.();
+  } catch {
+    // Session clearing is best effort and must not replace the primary failure
+  }
+
+  throw new ApiAuthError("API authentication failed", cause, context);
 };
 
 // Server time helpers
@@ -513,74 +594,29 @@ const parseApiServerTimeHeader = (
   return Number.isFinite(timeMs) ? timeMs : undefined;
 };
 
-// Retry helpers
-type ResolvedRetryOptions = Readonly<{
-  delay      : NonNullable<ApiRetryOptions["delay"]>;
-  limit      : number;
-  methods    : readonly ApiMethod[];
-  shouldRetry: ApiRetryOptions["shouldRetry"];
-  statusCodes: readonly number[];
-}>;
-
-const resolveRetryOptions = (
-  retry: ApiRetry | undefined
-): ResolvedRetryOptions => {
-  if (retry === undefined || retry === false) {
-    return {
-      delay      : 0,
-      limit      : 0,
-      methods    : DEFAULT_RETRY_METHODS,
-      shouldRetry: undefined,
-      statusCodes: DEFAULT_RETRY_STATUS_CODES
-    };
-  }
-
-  if (retry === true) {
-    return {
-      delay      : 0,
-      limit      : 1,
-      methods    : DEFAULT_RETRY_METHODS,
-      shouldRetry: undefined,
-      statusCodes: DEFAULT_RETRY_STATUS_CODES
-    };
-  }
-
-  if (typeof retry === "number") {
-    return {
-      delay      : 0,
-      limit      : retry,
-      methods    : DEFAULT_RETRY_METHODS,
-      shouldRetry: undefined,
-      statusCodes: DEFAULT_RETRY_STATUS_CODES
-    };
-  }
-
-  return {
-    delay      : retry.delay ?? 0,
-    limit      : retry.limit ?? 0,
-    methods    : retry.methods ?? DEFAULT_RETRY_METHODS,
-    shouldRetry: retry.shouldRetry,
-    statusCodes: retry.statusCodes ?? DEFAULT_RETRY_STATUS_CODES
-  };
-};
-
 const shouldRetryRequest = async ({
   attempt,
   authEnabled,
+  bodyReplayable,
   context,
   error,
   method,
   response,
   retryOptions
 }: Readonly<{
-  attempt     : number;
-  authEnabled : boolean;
-  context     : ApiRequestContext;
-  error       : unknown;
-  method      : ApiMethod;
-  response   ?: Response;
-  retryOptions: ResolvedRetryOptions;
+  attempt       : number;
+  authEnabled   : boolean;
+  bodyReplayable: boolean;
+  context       : ApiRequestContext;
+  error         : unknown;
+  method        : ApiMethod;
+  response     ?: Response;
+  retryOptions  : ResolvedRetryOptions;
 }>): Promise<boolean> => {
+  if (!bodyReplayable || error instanceof ApiAbortError) {
+    return false;
+  }
+
   const retryContext = {
     ...context,
     attempt: attempt + 1,
@@ -613,21 +649,30 @@ const shouldRetryRequest = async ({
   return retryOptions.statusCodes.includes(error.status);
 };
 
+const isRequestBodyReplayable = (
+  options: Pick<ApiRequestOptions, "rawBody" | "rawBodyFactory">
+): boolean => (
+  options.rawBodyFactory !== undefined
+  || typeof ReadableStream === "undefined"
+  || !(options.rawBody instanceof ReadableStream)
+);
+
 const waitForRetry = async (
   options: ResolvedRetryOptions,
-  context: ApiRetryContext
+  context: ApiRetryContext,
+  signal: AbortSignal | null | undefined
 ): Promise<void> => {
-  const delay = typeof options.delay === "function"
-    ? options.delay(context)
-    : options.delay;
+  const delay = getRetryDelay(options, context, Date.now(), Math.random());
 
   if (delay <= 0) {
+    if (signal?.aborted) {
+      await sleep(0, { signal });
+    }
+
     return;
   }
 
-  await new Promise((resolve) => {
-    setTimeout(resolve, delay);
-  });
+  await sleep(delay, { signal: signal ?? undefined });
 };
 
 // Signal helpers
@@ -649,11 +694,16 @@ const createRequestSignal = (
 
   const controller = new AbortController();
   let timedOut     = false;
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
   const abortFromSource = (): void => {
+    if (timeoutId !== undefined) {
+      clearTimeout(timeoutId);
+    }
+
     controller.abort(sourceSignal?.reason);
   };
-  const timeoutId = setTimeout(() => {
+  timeoutId = setTimeout(() => {
     timedOut = true;
     controller.abort();
   }, timeout);
@@ -668,7 +718,10 @@ const createRequestSignal = (
 
   return {
     cleanup: () => {
-      clearTimeout(timeoutId);
+      if (timeoutId !== undefined) {
+        clearTimeout(timeoutId);
+      }
+
       sourceSignal?.removeEventListener("abort", abortFromSource);
     },
     isTimedOut: () => timedOut,

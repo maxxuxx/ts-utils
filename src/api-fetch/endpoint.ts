@@ -65,7 +65,10 @@ export const executeEndpoint = async <TEndpoint extends AnyApiEndpoint>(
   input: EndpointCallInput<any, any> = {}
 ): Promise<EndpointResult<TEndpoint>> => {
   const {
+    body,
     params: rawParams,
+    rawBody,
+    rawBodyFactory,
     ...callOptions
   } = input;
   const context = {
@@ -88,14 +91,16 @@ export const executeEndpoint = async <TEndpoint extends AnyApiEndpoint>(
       resolveEndpointHeaders(apiEndpoint.options.headers, params),
       callOptions.headers
     ),
-    body      : callOptions.body,
-    bodySchema: apiEndpoint.options.bodySchema,
-    hooks     : callOptions.hooks,
+    ...(rawBody === undefined && rawBodyFactory === undefined ? { body } : {}),
+    bodySchema      : apiEndpoint.options.bodySchema,
+    hooks           : callOptions.hooks,
+    maxResponseBytes: callOptions.maxResponseBytes ?? apiEndpoint.options.maxResponseBytes,
     query     : mergeQuery(
       resolveEndpointQuery(apiEndpoint.options.query, params),
       callOptions.query
     ),
-    rawBody       : callOptions.rawBody,
+    rawBody,
+    rawBodyFactory,
     responseSchema: apiEndpoint.options.responseSchema,
     retry         : callOptions.retry ?? apiEndpoint.options.retry,
     select        : apiEndpoint.options.select,

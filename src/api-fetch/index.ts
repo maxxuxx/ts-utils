@@ -5,9 +5,11 @@ export {
   executeEndpoint
 } from "./endpoint.js";
 export {
+  ApiAbortError,
   ApiAuthError,
   ApiHttpError,
   ApiParseError,
+  ApiResponseSizeError,
   ApiTimeoutError,
   ApiValidationError,
   getApiErrorCode,
@@ -93,6 +95,8 @@ export type {
   OptionalSchema,
   QueryParams,
   QueryValue,
+  RawBodyFactory,
+  RetryStrategy,
   SchemaInput,
   SchemaOutput
 } from "./types.js";

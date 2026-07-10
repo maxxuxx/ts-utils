@@ -132,15 +132,21 @@ export type ApiRetryContext = ApiRequestContext & Readonly<{
 
 /** Options for api retry */
 export type ApiRetryOptions = Readonly<{
-  delay      ?: number | ((context: ApiRetryContext) => number);
-  limit      ?: number;
-  methods    ?: readonly ApiMethod[];
-  shouldRetry?: (context: ApiRetryContext) => MaybePromise<boolean | undefined>;
-  statusCodes?: readonly number[];
+  delay            ?: number | ((context: ApiRetryContext) => number);
+  jitter           ?: number;
+  limit            ?: number;
+  methods          ?: readonly ApiMethod[];
+  respectRetryAfter?: boolean;
+  shouldRetry      ?: (context: ApiRetryContext) => MaybePromise<boolean | undefined>;
+  statusCodes      ?: readonly number[];
+  strategy         ?: RetryStrategy;
 }>;
 
 /** Retry setting accepted by API requests */
 export type ApiRetry = boolean | number | ApiRetryOptions;
+
+/** Delay strategy applied between API retry attempts */
+export type RetryStrategy = "fixed" | "exponential";
 
 // Server time
 /** Options for sampling server time from API response headers */
@@ -168,6 +174,11 @@ export type ApiAuthOptions = Readonly<{
   shouldRefreshOnError?: (error: unknown) => boolean;
 }>;
 
+/** Creates a fresh raw request body for each network attempt */
+export type RawBodyFactory = (
+  attempt: number
+) => MaybePromise<RequestInit["body"] | undefined>;
+
 // Request options
 /** Options for api request */
 export type ApiRequestOptions<
@@ -181,13 +192,15 @@ export type ApiRequestOptions<
   bodySchema   ?: TBodySchema;
   errorFallback?: ApiErrorFallback;
   headers      ?: ApiHeadersInit;
-  hooks        ?: ApiHooks;
-  query        ?: QueryParams;
-  rawBody      ?: RequestInit["body"];
-  responseSchema?: TResponseSchema;
-  retry          ?: ApiRetry;
-  select         ?: (data: SchemaOutput<TResponseSchema>, response: Response) => TResult;
-  timeout        ?: number;
+  hooks            ?: ApiHooks;
+  maxResponseBytes?: number;
+  query            ?: QueryParams;
+  rawBody          ?: RequestInit["body"];
+  rawBodyFactory   ?: RawBodyFactory;
+  responseSchema   ?: TResponseSchema;
+  retry            ?: ApiRetry;
+  select           ?: (data: SchemaOutput<TResponseSchema>, response: Response) => TResult;
+  timeout          ?: number;
 };
 
 /** Options for api read */
@@ -196,7 +209,7 @@ export type ApiReadOptions<
   TResult = ApiResponse<ApiResponsePayload<SchemaOutput<TResponseSchema>>>
 > = Omit<
   ApiRequestOptions<undefined, TResponseSchema, TResult>,
-  "body" | "bodySchema" | "rawBody"
+  "body" | "bodySchema" | "rawBody" | "rawBodyFactory"
 >;
 
 /** Options for api write */
@@ -266,16 +279,18 @@ export type ApiRequest = {
 
 /** Options for api fetcher */
 export type ApiFetcherOptions = Readonly<{
-  auth         ?: ApiAuthOptions;
-  baseURL      ?: string;
-  errorFallback?: ApiErrorFallback;
-  fetch        ?: FetchLike;
-  headers      ?: ApiHeadersInit;
-  hooks        ?: ApiHooks;
-  logging      ?: ApiLogging;
-  retry        ?: ApiRetry;
-  serverTime   ?: ApiServerTime;
-  timeout      ?: number;
+  allowedOrigins   ?: readonly string[];
+  auth            ?: ApiAuthOptions;
+  baseURL         ?: string;
+  errorFallback   ?: ApiErrorFallback;
+  fetch           ?: FetchLike;
+  headers         ?: ApiHeadersInit;
+  hooks           ?: ApiHooks;
+  logging         ?: ApiLogging;
+  maxResponseBytes?: number;
+  retry           ?: ApiRetry;
+  serverTime      ?: ApiServerTime;
+  timeout         ?: number;
 }>;
 
 /** API client returned by createApiFetcher */
@@ -317,15 +332,16 @@ export type ApiEndpointOptions<
   TResult = ApiResponse<ApiResponsePayload<SchemaOutput<TResponseSchema>>>
 > = Readonly<{
   auth         ?: boolean;
-  bodySchema   ?: TBodySchema;
-  errorFallback?: ApiErrorFallback;
-  headers      ?: EndpointHeaders<TParamsSchema>;
-  params       ?: TParamsSchema;
-  query        ?: EndpointQuery<TParamsSchema>;
-  responseSchema?: TResponseSchema;
-  retry         ?: ApiRetry;
-  select        ?: (data: SchemaOutput<TResponseSchema>, response: Response) => TResult;
-  timeout       ?: number;
+  bodySchema       ?: TBodySchema;
+  errorFallback    ?: ApiErrorFallback;
+  headers          ?: EndpointHeaders<TParamsSchema>;
+  maxResponseBytes?: number;
+  params           ?: TParamsSchema;
+  query            ?: EndpointQuery<TParamsSchema>;
+  responseSchema   ?: TResponseSchema;
+  retry            ?: ApiRetry;
+  select           ?: (data: SchemaOutput<TResponseSchema>, response: Response) => TResult;
+  timeout          ?: number;
 }>;
 
 /** Represents api endpoint */

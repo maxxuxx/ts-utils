@@ -8,8 +8,7 @@ import {
   ApiAuthError,
   ApiHttpError,
   ApiParseError,
-  ApiValidationError,
-  getApiMessage
+  ApiValidationError
 } from "./errors.js";
 import type {
   ApiErrorCode,
@@ -88,7 +87,6 @@ const getApiRouteHttpErrorMessage = (
 ): string => (
   resolveApiRouteErrorMessage(error, error.code === undefined ? undefined : options.codeMessages?.[error.code])
   ?? resolveApiRouteErrorMessage(error, options.statusMessages?.[error.status])
-  ?? getApiMessage(error.body)
   ?? options.responseMessage
   ?? DEFAULT_API_ROUTE_ERROR_MESSAGE
 );

@@ -24,6 +24,15 @@ export const buildApiUrl = (
   return appendQueryToPath(path, query);
 };
 
+/** Removes query and fragment data from an API URL used in public contexts */
+export const redactApiUrl = (url: string): string => {
+  const queryIndex    = url.indexOf("?");
+  const fragmentIndex = url.indexOf("#");
+  const indexes       = [queryIndex, fragmentIndex].filter((index) => index >= 0);
+
+  return indexes.length === 0 ? url : url.slice(0, Math.min(...indexes));
+};
+
 const appendQueryToPath = (path: string, query?: QueryParams): string => {
   if (!query) {
     return path;

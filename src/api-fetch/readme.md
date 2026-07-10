@@ -2,7 +2,7 @@
 
 [한국어](./readme.kr.md)
 
-Fetch-based API client utilities with Zod validation, endpoint definitions, auth refresh, retry, timeout, hooks, logging, and route-handler error conversion.
+Fetch-based API client utilities with Zod validation, trusted-origin auth, replayable bodies, bounded responses, retry, timeout, hooks, logging, and route-handler error conversion
 
 ## Use this when
 
@@ -31,8 +31,8 @@ import {
 | `createApiFetcher` | Creates a configured fetch client with method shortcuts and `request`. |
 | `endpoint` | Factory namespace for typed endpoint definitions by HTTP method. |
 | `handleApiRoute`, `toApiRouteErrorResponse` | Convert known API errors into route responses. |
-| `ApiHttpError`, `ApiValidationError`, `ApiParseError`, `ApiTimeoutError` | Typed error classes raised by the client itself. |
-| `ApiAuthError` | Marker error you throw from your own auth code; `toApiRouteErrorResponse` maps it to a 401. The client never throws it. |
+| `ApiHttpError`, `ApiValidationError`, `ApiParseError`, `ApiTimeoutError` | Typed HTTP, validation, parse, and deadline failures |
+| `ApiAuthError`, `ApiAbortError`, `ApiResponseSizeError` | Terminal auth, caller cancellation, and response byte-limit failures |
 | `createApiLoggerHooks`, `formatApiLogEvent` | Generate hook-based API logging. |
 | `api-fetch/sveltekit` | Cookie-bound SvelteKit adapter for auth callbacks and refresh dedupe. |
 
@@ -46,8 +46,10 @@ const api = createApiFetcher({
     message: "Request failed"
   },
   retry: {
-    retries: 2,
-    delayMs: 300
+    delay: 300,
+    limit: 2,
+    strategy: "exponential",
+    jitter: 0.2
   },
   timeout: 5000
 });
@@ -110,6 +112,9 @@ apiServerClock.getServerTimeMs();
 
 - `bodySchema` validates JSON request bodies before the request is sent. Without it, `body` is still serialized as JSON.
 - Use `rawBody` for `FormData`, `Blob`, `URLSearchParams`, streams, or a pre-serialized body.
+- Use `rawBodyFactory(attempt)` when auth or general retries need a fresh raw body for every one-based network attempt
+- `rawBody` and `rawBodyFactory` are mutually exclusive, and one-shot `ReadableStream` bodies are not retried
+- `maxResponseBytes` rejects oversized declared or streamed response bodies before parsing
 - `responseSchema` validates the parsed response body and throws `ApiValidationError` for invalid responses.
 - The default result shape is `{ code, message?, response }`. Response envelopes with `data` are unwrapped when possible.
 - `serverTime: true` creates an internal clock exposed as `api.serverTime`; `serverTime.clock` records into a caller-owned clock.
@@ -118,10 +123,13 @@ apiServerClock.getServerTimeMs();
 ## Edge cases
 
 - Auth refresh is attempted for 401 and 419 by default and is deduped while a refresh is in flight.
-- Retries default to safe read-style behavior. Configure retry options explicitly for writes.
+- Auth is sent only to relative requests, the `baseURL` origin, and explicit `allowedOrigins`
+- Exhausted auth refresh clears the session best effort and throws `ApiAuthError` with a safe query-free context URL
+- Retries default to GET, one shared request budget, `Retry-After` support, fixed delay, and no jitter; configure write methods explicitly
+- Caller abort throws `ApiAbortError`; deadline expiry throws `ApiTimeoutError`; retry delay observes the caller signal
 - HTTP errors prefer server-provided `code` and `message`; fallback values only fill missing fields.
-- `handleApiRoute` preserves `ApiHttpError.code` in JSON responses when present. `codeMessages` override response messages before `statusMessages`, then the API message is used.
-- `handleApiRoute` accepts no options. If no mapped, route-level, or API message exists, it returns `API request failed`.
+- `handleApiRoute` preserves `ApiHttpError.code` and resolves `codeMessages`, `statusMessages`, `responseMessage`, then `API request failed`
+- Raw upstream messages are not exposed by route conversion unless an explicit mapping callback chooses them
 - Missing or invalid server time headers are ignored.
 - `handleApiRoute` only converts known API errors. Unknown errors are rethrown.
 

@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  ApiAbortError,
   ApiAuthError,
   ApiHttpError,
   ApiParseError,
+  ApiResponseSizeError,
   ApiTimeoutError,
   ApiValidationError,
   createApiFetcher,
@@ -15,6 +17,8 @@ import {
   responseEnvelopeSchema,
   toApiRouteErrorResponse,
   type FetchLike,
+  type RawBodyFactory,
+  type RetryStrategy,
   z
 } from "../src/api-fetch/index.js";
 import {
@@ -90,6 +94,20 @@ describe("api-fetch", () => {
 
     expect(fetch.mock.calls[0]?.[1]?.body).toBe(body);
     expect(headers.get("Content-Type")).toBeNull();
+  });
+
+  it("rejects raw body and raw body factory together before fetch", async () => {
+    const fetch = vi.fn<FetchLike>(async () => jsonResponse({ ok: true }));
+    const rawBodyFactory = vi.fn(async () => new URLSearchParams({ fresh: "body" }));
+    const api = createApiFetcher({ fetch });
+
+    await expect(api.post("/users", {
+      rawBody       : new URLSearchParams({ stale: "body" }),
+      rawBodyFactory
+    })).rejects.toThrow(TypeError);
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(rawBodyFactory).not.toHaveBeenCalled();
   });
 
   it("throws validation errors before invalid JSON requests are sent", async () => {
@@ -405,6 +423,45 @@ describe("api-fetch", () => {
     } satisfies Partial<ApiHttpError>);
   });
 
+  it("omits auth headers from untrusted origins", async () => {
+    let capturedHeaders: Headers | undefined;
+    const api = createApiFetcher({
+      baseURL: "https://api.example.com",
+      auth: {
+        getAccessToken: async () => "secret"
+      },
+      fetch: async (_input, init) => {
+        capturedHeaders = new Headers(init?.headers);
+
+        return jsonResponse({ ok: true });
+      }
+    });
+
+    await api.get("https://attacker.example/collect");
+
+    expect(capturedHeaders?.get("Authorization")).toBeNull();
+  });
+
+  it("attaches auth headers to explicitly allowed origins", async () => {
+    let capturedHeaders: Headers | undefined;
+    const api = createApiFetcher({
+      allowedOrigins: ["https://uploads.example.com"],
+      baseURL       : "https://api.example.com",
+      auth: {
+        getAccessToken: async () => "secret"
+      },
+      fetch: async (_input, init) => {
+        capturedHeaders = new Headers(init?.headers);
+
+        return jsonResponse({ ok: true });
+      }
+    });
+
+    await api.get("https://uploads.example.com/avatar");
+
+    expect(capturedHeaders?.get("Authorization")).toBe("Bearer secret");
+  });
+
   it("refreshes access tokens once and retries unauthorized requests", async () => {
     let accessToken = "expired";
     const fetch = vi.fn<FetchLike>(async (_input, init) => {
@@ -441,6 +498,93 @@ describe("api-fetch", () => {
     });
     expect(refresh).toHaveBeenCalledTimes(1);
     expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("normalizes auth refresh errors and redacts query strings from error context", async () => {
+    const refreshError = new Error("refresh failed");
+    const clear = vi.fn(async () => undefined);
+    const api = createApiFetcher({
+      baseURL: "https://api.example.com",
+      fetch  : async () => jsonResponse({ message: "expired" }, 401),
+      auth: {
+        clear,
+        getAccessToken: async () => "expired",
+        refresh       : async () => {
+          throw refreshError;
+        }
+      }
+    });
+
+    await expect(api.get("/private?token=secret#debug")).rejects.toMatchObject({
+      cause  : refreshError,
+      context: {
+        method: "GET",
+        path  : "/private?token=secret#debug",
+        url   : "https://api.example.com/private"
+      },
+      message: "API authentication failed",
+      name   : "ApiAuthError"
+    });
+    expect(clear).toHaveBeenCalledTimes(1);
+  });
+
+  it("normalizes auth refreshes that return no access token", async () => {
+    const clear = vi.fn(async () => undefined);
+    const api = createApiFetcher({
+      fetch: async () => jsonResponse({ message: "expired" }, 401),
+      auth : {
+        clear,
+        getAccessToken: async () => "expired",
+        refresh       : async () => null
+      }
+    });
+
+    await expect(api.get("/private")).rejects.toMatchObject({
+      cause: expect.any(ApiHttpError),
+      name : "ApiAuthError"
+    });
+    expect(clear).toHaveBeenCalledTimes(1);
+  });
+
+  it("normalizes a second auth response after refresh", async () => {
+    const clear = vi.fn(async () => undefined);
+    const fetch = vi.fn<FetchLike>(async () => jsonResponse({ message: "expired" }, 401));
+    const api = createApiFetcher({
+      fetch,
+      auth: {
+        clear,
+        getAccessToken: async () => "expired",
+        refresh       : async () => "fresh"
+      }
+    });
+
+    await expect(api.get("/private")).rejects.toMatchObject({
+      cause: expect.objectContaining({
+        status: 401
+      }),
+      name: "ApiAuthError"
+    });
+    expect(clear).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps auth normalization when best effort session clearing fails", async () => {
+    const clearError = new Error("clear failed");
+    const api = createApiFetcher({
+      fetch: async () => jsonResponse({ message: "expired" }, 401),
+      auth : {
+        clear: async () => {
+          throw clearError;
+        },
+        getAccessToken: async () => "expired",
+        refresh       : async () => null
+      }
+    });
+
+    await expect(api.get("/private")).rejects.toMatchObject({
+      cause: expect.any(ApiHttpError),
+      name : "ApiAuthError"
+    });
   });
 
   it("formats token headers with custom auth header logic", async () => {
@@ -739,6 +883,428 @@ describe("api-fetch", () => {
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 
+  it("recreates raw body for every general retry", async () => {
+    const bodies: RequestInit["body"][] = [];
+    const fetch = vi.fn<FetchLike>(async (_input, init) => {
+      bodies.push(init?.body);
+
+      return bodies.length === 1
+        ? jsonResponse({ message: "try again" }, 503)
+        : jsonResponse({ ok: true });
+    });
+    const rawBodyFactory = vi.fn(async (attempt: number) => new URLSearchParams({
+      attempt: String(attempt)
+    }));
+    const api = createApiFetcher({ fetch });
+
+    await api.post("/upload", {
+      rawBodyFactory,
+      retry: {
+        limit  : 1,
+        methods: ["POST"]
+      }
+    });
+
+    expect(rawBodyFactory.mock.calls).toEqual([[1], [2]]);
+    expect(bodies[0]).not.toBe(bodies[1]);
+    expect(String(bodies[0])).toBe("attempt=1");
+    expect(String(bodies[1])).toBe("attempt=2");
+  });
+
+  it("does not retry one-shot raw body streams", async () => {
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("body"));
+        controller.close();
+      }
+    });
+    const fetch = vi.fn<FetchLike>(async () => jsonResponse({ message: "try again" }, 503));
+    const api = createApiFetcher({ fetch });
+
+    await expect(api.post("/upload", {
+      rawBody: body,
+      retry  : {
+        limit  : 1,
+        methods: ["POST"]
+      }
+    })).rejects.toBeInstanceOf(ApiHttpError);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("recreates raw body for an auth retry", async () => {
+    const bodies: RequestInit["body"][] = [];
+    const fetch = vi.fn<FetchLike>(async (_input, init) => {
+      bodies.push(init?.body);
+      const headers = new Headers(init?.headers);
+
+      return headers.get("Authorization") === "Bearer fresh"
+        ? jsonResponse({ ok: true })
+        : jsonResponse({ message: "expired" }, 401);
+    });
+    const rawBodyFactory = vi.fn(async (attempt: number) => new URLSearchParams({
+      attempt: String(attempt)
+    }));
+    const api = createApiFetcher({
+      fetch,
+      auth: {
+        getAccessToken: async () => "expired",
+        refresh       : async () => "fresh"
+      }
+    });
+
+    await api.post("/upload", {
+      rawBodyFactory
+    });
+
+    expect(rawBodyFactory.mock.calls).toEqual([[1], [2]]);
+    expect(bodies[0]).not.toBe(bodies[1]);
+  });
+
+  it("recreates endpoint raw body for every retry", async () => {
+    const bodies: RequestInit["body"][] = [];
+    const fetch = vi.fn<FetchLike>(async (_input, init) => {
+      bodies.push(init?.body);
+
+      return bodies.length === 1
+        ? jsonResponse({ message: "try again" }, 503)
+        : jsonResponse({ ok: true });
+    });
+    const rawBodyFactory = vi.fn(async (attempt: number) => new URLSearchParams({
+      attempt: String(attempt)
+    }));
+    const upload = endpoint.post("/upload", {
+      retry: {
+        limit  : 1,
+        methods: ["POST"]
+      }
+    });
+    const api = createApiFetcher({ fetch });
+
+    await api.call(upload, {
+      rawBodyFactory
+    });
+
+    expect(rawBodyFactory.mock.calls).toEqual([[1], [2]]);
+    expect(bodies[0]).not.toBe(bodies[1]);
+  });
+
+  it("rejects response size from content-length before reading text", async () => {
+    const response = new Response("oversized", {
+      headers: {
+        "Content-Length": "9",
+        "Content-Type"  : "text/plain"
+      }
+    });
+    const readText   = vi.spyOn(response, "text");
+    const cancelBody = vi.spyOn(response.body as ReadableStream<Uint8Array>, "cancel");
+    const api = createApiFetcher({
+      fetch: async () => response,
+      maxResponseBytes: 3
+    });
+
+    await expect(api.get("/large")).rejects.toMatchObject({
+      limit: 3,
+      name : "ApiResponseSizeError",
+      size : 9
+    });
+    expect(readText).not.toHaveBeenCalled();
+    expect(cancelBody).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects streamed response size beyond the configured limit", async () => {
+    const encoder = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode("ab"));
+        controller.enqueue(encoder.encode("cd"));
+        controller.close();
+      }
+    });
+    const api = createApiFetcher({
+      fetch: async () => new Response(body, {
+        headers: {
+          "Content-Type": "text/plain"
+        }
+      }),
+      maxResponseBytes: 3
+    });
+
+    await expect(api.get("/large")).rejects.toMatchObject({
+      limit: 3,
+      name : "ApiResponseSizeError",
+      size : 4
+    });
+  });
+
+  it("enforces endpoint response size limits", async () => {
+    const api = createApiFetcher({
+      fetch: async () => new Response("large")
+    });
+    const download = endpoint.get("/download", {
+      maxResponseBytes: 3
+    });
+
+    await expect(api.call(download)).rejects.toMatchObject({
+      limit: 3,
+      name : "ApiResponseSizeError",
+      size : 5
+    });
+  });
+
+  it("rejects invalid response size limits before fetch", async () => {
+    const fetch = vi.fn<FetchLike>(async () => new Response("body"));
+    const api = createApiFetcher({ fetch });
+
+    await expect(api.get("/download", {
+      maxResponseBytes: 1.5
+    })).rejects.toBeInstanceOf(RangeError);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("honors Retry-After seconds", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+
+    try {
+      const attemptTimes: number[] = [];
+      const fetch = vi.fn<FetchLike>(async () => {
+        attemptTimes.push(Date.now());
+
+        return attemptTimes.length === 1
+          ? jsonResponse({ message: "slow down" }, 503, { "Retry-After": "2" })
+          : jsonResponse({ ok: true });
+      });
+      const api = createApiFetcher({ fetch });
+      const request = api.get("/unstable", {
+        retry: {
+          limit            : 1,
+          respectRetryAfter: true
+        }
+      });
+
+      await vi.runAllTimersAsync();
+      await request;
+
+      expect(attemptTimes).toEqual([0, 2_000]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("honors Retry-After HTTP dates", async () => {
+    const now = Date.UTC(2026, 6, 11, 0, 0, 0);
+
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+
+    try {
+      const attemptTimes: number[] = [];
+      const retryAt = new Date(now + 3_000).toUTCString();
+      const fetch = vi.fn<FetchLike>(async () => {
+        attemptTimes.push(Date.now());
+
+        return attemptTimes.length === 1
+          ? jsonResponse({ message: "slow down" }, 503, { "Retry-After": retryAt })
+          : jsonResponse({ ok: true });
+      });
+      const api = createApiFetcher({ fetch });
+      const request = api.get("/unstable", {
+        retry: {
+          limit            : 1,
+          respectRetryAfter: true
+        }
+      });
+
+      await vi.runAllTimersAsync();
+      await request;
+
+      expect(attemptTimes).toEqual([now, now + 3_000]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("ignores fractional Retry-After seconds", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+
+    try {
+      const attemptTimes: number[] = [];
+      const fetch = vi.fn<FetchLike>(async () => {
+        attemptTimes.push(Date.now());
+
+        return attemptTimes.length === 1
+          ? jsonResponse({ message: "slow down" }, 503, { "Retry-After": "0.5" })
+          : jsonResponse({ ok: true });
+      });
+      const api = createApiFetcher({ fetch });
+      const request = api.get("/unstable", {
+        retry: {
+          delay            : 100,
+          limit            : 1,
+          respectRetryAfter: true
+        }
+      });
+
+      await vi.runAllTimersAsync();
+      await request;
+
+      expect(attemptTimes).toEqual([0, 100]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("applies exponential retry delay without jitter", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+
+    try {
+      const attemptTimes: number[] = [];
+      const fetch = vi.fn<FetchLike>(async () => {
+        attemptTimes.push(Date.now());
+
+        return attemptTimes.length < 3
+          ? jsonResponse({ message: "try again" }, 503)
+          : jsonResponse({ ok: true });
+      });
+      const api = createApiFetcher({ fetch });
+      const request = api.get("/unstable", {
+        retry: {
+          delay   : 100,
+          limit   : 2,
+          strategy: "exponential"
+        }
+      });
+
+      await vi.runAllTimersAsync();
+      await request;
+
+      expect(attemptTimes).toEqual([0, 100, 300]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps retry jitter inside the configured ratio bounds", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+
+    const random = vi.spyOn(Math, "random")
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(1);
+
+    try {
+      const attemptTimes: number[] = [];
+      const fetch = vi.fn<FetchLike>(async () => {
+        attemptTimes.push(Date.now());
+
+        return attemptTimes.length < 3
+          ? jsonResponse({ message: "try again" }, 503)
+          : jsonResponse({ ok: true });
+      });
+      const api = createApiFetcher({ fetch });
+      const request = api.get("/unstable", {
+        retry: {
+          delay : 100,
+          jitter: 0.5,
+          limit : 2
+        }
+      });
+
+      await vi.runAllTimersAsync();
+      await request;
+
+      expect(attemptTimes).toEqual([0, 50, 200]);
+    } finally {
+      random.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it("rejects retry jitter ratios outside zero through one", async () => {
+    const fetch = vi.fn<FetchLike>(async () => jsonResponse({ ok: true }));
+    const api = createApiFetcher({ fetch });
+
+    await expect(api.get("/unstable", {
+      retry: {
+        jitter: 1.1,
+        limit : 1
+      }
+    })).rejects.toBeInstanceOf(RangeError);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("keeps one general retry budget across auth refresh", async () => {
+    let attempt = 0;
+    const fetch = vi.fn<FetchLike>(async () => {
+      attempt += 1;
+
+      if (attempt === 1 || attempt === 3) {
+        return jsonResponse({ message: "try again" }, 503);
+      }
+
+      if (attempt === 2) {
+        return jsonResponse({ message: "expired" }, 401);
+      }
+
+      return jsonResponse({ ok: true });
+    });
+    const api = createApiFetcher({
+      fetch,
+      auth: {
+        getAccessToken: async () => "expired",
+        refresh       : async () => "fresh"
+      }
+    });
+
+    await expect(api.get("/unstable", {
+      retry: 1
+    })).rejects.toMatchObject({
+      name  : "ApiHttpError",
+      status: 503
+    });
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it("turns caller abort during retry delay into an abort error", async () => {
+    vi.useFakeTimers();
+
+    const controller = new AbortController();
+    const reason = new Error("caller stopped");
+    const fetch = vi.fn<FetchLike>(async () => jsonResponse({ message: "try again" }, 503));
+    const api = createApiFetcher({ fetch });
+    try {
+      const request = api.get("/unstable", {
+        retry: {
+          delay      : 10_000,
+          limit      : 1,
+          shouldRetry: () => true
+        },
+        signal : controller.signal,
+        timeout: 100
+      });
+      const errorPromise = request.catch((error: unknown) => error);
+
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fetch).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(100);
+      controller.abort(reason);
+      await vi.runAllTimersAsync();
+
+      const error = await errorPromise;
+
+      expect(error).toMatchObject({
+        cause: reason,
+        name : "ApiAbortError"
+      });
+      expect(fetch).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("throws timeout errors when requests exceed timeout", async () => {
     const fetch = vi.fn<FetchLike>(async (_input, init) => new Promise<Response>((_resolve, reject) => {
       init?.signal?.addEventListener("abort", () => {
@@ -750,6 +1316,48 @@ describe("api-fetch", () => {
     await expect(api.get("/slow", {
       timeout: 1
     })).rejects.toBeInstanceOf(ApiTimeoutError);
+  });
+
+  it("distinguishes caller abort errors from timeout errors", async () => {
+    const controller = new AbortController();
+    const reason = new Error("caller stopped");
+    const fetch = vi.fn<FetchLike>(async (_input, init) => new Promise<Response>((_resolve, reject) => {
+      const signal = init?.signal;
+
+      if (signal?.aborted) {
+        reject(signal.reason);
+        return;
+      }
+
+      signal?.addEventListener("abort", () => {
+        reject(signal.reason);
+      });
+    }));
+    const api = createApiFetcher({ fetch });
+    const request = api.get("/slow", {
+      signal: controller.signal
+    });
+    const errorPromise = request.catch((error: unknown) => error);
+
+    controller.abort(reason);
+
+    const error = await errorPromise;
+
+    expect(error).toBeInstanceOf(ApiAbortError);
+    expect(error).toMatchObject({
+      cause: reason,
+      name : "ApiAbortError"
+    });
+  });
+
+  it("exports request lifecycle errors and option types", async () => {
+    const rawBodyFactory: RawBodyFactory = async () => undefined;
+    const retryStrategy: RetryStrategy   = "fixed";
+
+    expect(ApiAbortError).toBeTypeOf("function");
+    expect(ApiResponseSizeError).toBeTypeOf("function");
+    await expect(rawBodyFactory(1)).resolves.toBeUndefined();
+    expect(retryStrategy).toBe("fixed");
   });
 
   it("logs API responses with aligned method, status, duration, and endpoint path", async () => {
@@ -927,7 +1535,7 @@ describe("api-fetch", () => {
 
     expect(httpResponse.status).toBe(418);
     await expect(httpResponse.json()).resolves.toEqual({
-      message: "server failed"
+      message: "외부 응답이 올바르지 않습니다"
     });
   });
 
@@ -954,7 +1562,7 @@ describe("api-fetch", () => {
     expect(response.status).toBe(422);
     await expect(response.json()).resolves.toEqual({
       code   : "VALIDATION_ERROR",
-      message: "Request validation failed"
+      message: "요청을 처리하지 못했습니다"
     });
   });
 
@@ -1007,6 +1615,52 @@ describe("api-fetch", () => {
     expect(response.status).toBe(503);
     await expect(response.json()).resolves.toEqual({
       message: "API request failed"
+    });
+  });
+
+  it("uses the API route fallback instead of raw upstream messages", async () => {
+    const response = await handleApiRoute(() => {
+      throw new ApiHttpError(jsonResponse({
+        message: "upstream token=secret"
+      }, 503), {
+        message: "upstream token=secret"
+      }, {
+        method: "GET",
+        path  : "/private",
+        url   : "https://api.example.com/private"
+      }, {
+        message: "upstream token=secret"
+      });
+    });
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({
+      message: "API request failed"
+    });
+  });
+
+  it("uses explicit API route status messages before the fallback", async () => {
+    const response = await handleApiRoute(() => {
+      throw new ApiHttpError(jsonResponse({
+        message: "upstream failed"
+      }, 503), {
+        message: "upstream failed"
+      }, {
+        method: "GET",
+        path  : "/private",
+        url   : "https://api.example.com/private"
+      }, {
+        message: "upstream failed"
+      });
+    }, {
+      responseMessage: "route failed",
+      statusMessages : {
+        503: "service unavailable"
+      }
+    });
+
+    await expect(response.json()).resolves.toEqual({
+      message: "service unavailable"
     });
   });
 

@@ -115,15 +115,53 @@ export class ApiTimeoutError extends Error {
   }
 }
 
+// Abort errors
+/** Error raised when the caller aborts an API request */
+export class ApiAbortError extends Error {
+  readonly cause: unknown;
+  readonly context: ApiRequestContext;
+
+  constructor(cause: unknown, context: ApiRequestContext) {
+    super(`API request aborted: ${context.method} ${context.url}`);
+
+    this.name    = "ApiAbortError";
+    this.cause   = cause;
+    this.context = context;
+  }
+}
+
+// Response size errors
+/** Error raised when an API response exceeds its configured byte limit */
+export class ApiResponseSizeError extends Error {
+  readonly context: ApiRequestContext;
+  readonly limit: number;
+  readonly size: number;
+
+  constructor(limit: number, size: number, context: ApiRequestContext) {
+    super(`API response exceeded ${limit} bytes: ${context.method} ${context.url}`);
+
+    this.name    = "ApiResponseSizeError";
+    this.context = context;
+    this.limit   = limit;
+    this.size    = size;
+  }
+}
+
 // Auth errors
 /** Error raised for api auth failures */
 export class ApiAuthError extends Error {
   readonly cause: unknown;
+  readonly context: ApiRequestContext | undefined;
 
-  constructor(message: string, cause?: unknown) {
+  constructor(
+    message: string,
+    cause?: unknown,
+    context?: ApiRequestContext
+  ) {
     super(message);
 
-    this.name  = "ApiAuthError";
-    this.cause = cause;
+    this.name    = "ApiAuthError";
+    this.cause   = cause;
+    this.context = context;
   }
 }
