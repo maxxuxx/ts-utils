@@ -34,6 +34,7 @@ import { createTokenSession } from "@maxxuxx/ts-utils/session";
 |---|---|---|
 | [`@maxxuxx/ts-utils/parser`](./src/parser/readme.md) | Zod parser presets and wrappers for repeated runtime validation | [parser](./src/parser/readme.md) |
 | [`@maxxuxx/ts-utils/is`](./src/is/readme.md) | Runtime type guards for primitives, objects, collections, and built-ins | [is](./src/is/readme.md) |
+| [`@maxxuxx/ts-utils/result`](./src/result/readme.md) | Discriminated success and failure values with mapping helpers | [result](./src/result/readme.md) |
 | [`@maxxuxx/ts-utils/try-catch`](./src/try-catch/readme.md) | Result helpers for sync and async error boundaries | [try-catch](./src/try-catch/readme.md) |
 | [`@maxxuxx/ts-utils/format`](./src/format/readme.md) | Formatting helpers for numbers, currency, dates, phone numbers, and units | [format](./src/format/readme.md) |
 | [`@maxxuxx/ts-utils/normalize`](./src/normalize/readme.md) | Small coercion helpers for stable number, text, date, and boolean values | [normalize](./src/normalize/readme.md) |

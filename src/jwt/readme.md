@@ -50,6 +50,7 @@ if (claims && !jwt.isExpired(token, {
 - `decodeJwt` returns `null` for malformed tokens or non-object payloads.
 - `safeDecodeJwt` returns `{ ok, data }` or `{ ok, error: JwtDecodeError }`.
 - `isJwtExpired` treats malformed tokens and missing/non-numeric `exp` claims as expired.
+- `JwtResult` aliases the shared `Result` contract from `@maxxuxx/ts-utils/result`
 
 ## Edge cases
 
@@ -62,3 +63,4 @@ if (claims && !jwt.isExpired(token, {
 
 - `@maxxuxx/ts-utils/session` for token lifecycle and refresh.
 - `@maxxuxx/ts-utils/encoding` for lower-level byte and base64 helpers.
+- `@maxxuxx/ts-utils/result` for shared result factories and transformations

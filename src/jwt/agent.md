@@ -38,6 +38,8 @@ JWT `exp`, `iat`, and app-specific claims are not required by the decoder. App a
 
 Keep this module focused on JWT string decoding. Use app-local code for iron-session, cookies, redirects, refresh endpoints, and logout policy
 
+`JwtResult` aliases the shared `Result` type and safe decode helpers use the shared `ok` and `err` factories
+
 Keep module docs updated whenever JWT behavior, exports, error classes, or runtime assumptions change
 ## Public documentation
 

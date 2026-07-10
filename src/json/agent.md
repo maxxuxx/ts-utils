@@ -36,6 +36,8 @@ Do not import Zod directly in this module. Schema helpers should accept a struct
 
 Keep this module focused on JSON parsing and serialization. Do not add UTF, base64, or hex conversion here; use the `encoding` module for byte/string representation conversion
 
+`JsonResult` aliases the shared `Result` type and safe helpers use the shared `ok` and `err` factories
+
 Keep module docs updated whenever JSON behavior, exports, error classes, or schema semantics change
 ## Public documentation
 

@@ -51,6 +51,7 @@ result.data;
 - `tryCatchAsync`는 promise가 반환되기 전 sync throw도 capture합니다.
 - `getErrorMessage`는 `Error`, string, string `message`가 있는 object, JSON serialize, `String(value)` 순서로 처리합니다.
 - `normalizeError`는 기존 `Error` instance를 그대로 반환합니다.
+- `Result`, `ResultSuccess`, `ResultFailure`는 `@maxxuxx/ts-utils/result`의 공통 contract를 재사용합니다
 
 ## 주의할 점
 
@@ -62,3 +63,4 @@ result.data;
 
 - `@maxxuxx/ts-utils/promise`는 retry, timeout, concurrent task에 사용합니다.
 - `@maxxuxx/ts-utils/json`은 JSON-safe result helper에 사용합니다.
+- `@maxxuxx/ts-utils/result`는 direct result factory와 transform에 사용합니다

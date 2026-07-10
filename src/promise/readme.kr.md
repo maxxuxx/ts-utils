@@ -55,6 +55,7 @@ const result = await promise.allObject({
 - 기본 option은 `retries: 0`, `delayMs: 300`, timeout 없음입니다.
 - 공통 option을 먼저 적용하고, per-task option은 정의된 field만 override합니다.
 - `withTimeout`은 existing promise도 받을 수 있지만 retry helper는 task function이 필요합니다.
+- `PromiseResult`는 `@maxxuxx/ts-utils/result`의 공통 `Result` contract alias입니다
 
 ## 주의할 점
 
@@ -67,3 +68,4 @@ const result = await promise.allObject({
 
 - `@maxxuxx/ts-utils/api-fetch`는 HTTP retry/timeout behavior에 사용합니다.
 - `@maxxuxx/ts-utils/try-catch`는 단일 operation result wrapper에 사용합니다.
+- `@maxxuxx/ts-utils/result`는 공통 result factory와 transform에 사용합니다

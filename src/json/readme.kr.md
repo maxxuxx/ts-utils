@@ -53,6 +53,7 @@ const text = json.stringify(config, {
 - `parseJson`은 명시적 `fallback`이 없으면 throw합니다.
 - `safeStringifyJson`은 top-level `undefined`를 실패로 처리합니다.
 - schema helper는 `parse(value)` function이 있는 객체를 받을 수 있습니다.
+- `JsonResult`는 `@maxxuxx/ts-utils/result`의 공통 `Result` contract alias입니다
 
 ## 주의할 점
 
@@ -66,3 +67,4 @@ const text = json.stringify(config, {
 - `@maxxuxx/ts-utils/parser`는 Zod schema 작성에 사용합니다.
 - `@maxxuxx/ts-utils/encoding`은 encoded JSON payload에 사용합니다.
 - `@maxxuxx/ts-utils/env`는 JSON env preprocess schema에 사용합니다.
+- `@maxxuxx/ts-utils/result`는 공통 result factory와 transform에 사용합니다

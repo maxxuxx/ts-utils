@@ -1,3 +1,5 @@
+import { err, ok, type Result } from "../result/index.js";
+
 /** Represents jwt object */
 export type JwtObject = Record<string, unknown>;
 
@@ -36,15 +38,7 @@ export type JwtExpirationOptions = Readonly<{
 export type JwtExpirationInput = JwtExpirationOptions | number;
 
 /** Result returned by jwt */
-export type JwtResult<TData, TError = unknown> =
-  | {
-      ok: true;
-      data: TData;
-    }
-  | {
-      ok: false;
-      error: TError;
-    };
+export type JwtResult<TData, TError = unknown> = Result<TData, TError>;
 
 type BufferLike = {
   toString: (encoding?: string) => string;
@@ -70,23 +64,6 @@ export class JwtDecodeError extends Error {
   }
 }
 
-// Result helpers
-const createSuccess = <TData>(data: TData): {
-  ok: true;
-  data: TData;
-} => ({
-  data,
-  ok: true
-});
-
-const createFailure = <TError>(error: TError): {
-  ok: false;
-  error: TError;
-} => ({
-  error,
-  ok: false
-});
-
 // Decode helpers
 /** Decodes jwt */
 export const decodeJwt = <TPayload extends JwtPayload = JwtPayload>(
@@ -104,12 +81,12 @@ export const safeDecodeJwt = <TPayload extends JwtPayload = JwtPayload>(
   try {
     const payload = decodeJwtSegment<TPayload>(getJwtSegment(token, 1));
 
-    return createSuccess({
+    return ok({
       ...payload,
       token: readJwtToken(token)
     });
   } catch (error) {
-    return createFailure(new JwtDecodeError(error));
+    return err(new JwtDecodeError(error));
   }
 };
 
@@ -127,9 +104,9 @@ export const safeDecodeJwtHeader = <THeader extends JwtHeader = JwtHeader>(
   token: string | null | undefined
 ): JwtResult<THeader, JwtDecodeError> => {
   try {
-    return createSuccess(decodeJwtSegment<THeader>(getJwtSegment(token, 0)));
+    return ok(decodeJwtSegment<THeader>(getJwtSegment(token, 0)));
   } catch (error) {
-    return createFailure(new JwtDecodeError(error));
+    return err(new JwtDecodeError(error));
   }
 };
 

@@ -51,6 +51,7 @@ result.data;
 - `tryCatchAsync` also catches synchronous throws before a promise is returned.
 - `getErrorMessage` checks `Error`, strings, objects with string `message`, JSON serialization, then `String(value)`.
 - `normalizeError` returns existing `Error` instances unchanged.
+- `Result`, `ResultSuccess`, and `ResultFailure` reuse the shared contract from `@maxxuxx/ts-utils/result`
 
 ## Edge cases
 
@@ -62,3 +63,4 @@ result.data;
 
 - `@maxxuxx/ts-utils/promise` for retry, timeout, and concurrent tasks.
 - `@maxxuxx/ts-utils/json` for JSON-safe result helpers.
+- `@maxxuxx/ts-utils/result` for direct result factories and transformations

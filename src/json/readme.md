@@ -53,6 +53,7 @@ const text = json.stringify(config, {
 - `parseJson` throws without an explicit `fallback`.
 - `safeStringifyJson` treats top-level `undefined` as failure because `JSON.stringify` returns `undefined`.
 - Schema helpers accept any object with a `parse(value)` function.
+- `JsonResult` aliases the shared `Result` contract from `@maxxuxx/ts-utils/result`
 
 ## Edge cases
 
@@ -66,3 +67,4 @@ const text = json.stringify(config, {
 - `@maxxuxx/ts-utils/parser` for Zod schema creation.
 - `@maxxuxx/ts-utils/encoding` for encoded JSON payloads.
 - `@maxxuxx/ts-utils/env` for JSON env preprocess schemas.
+- `@maxxuxx/ts-utils/result` for shared result factories and transformations

@@ -41,6 +41,8 @@ Per-task options override only fields that are explicitly defined, so omitted fi
 
 `settle` and `settleObject` return `{ ok, data }` or `{ ok, error }` result objects instead of native `Promise.allSettled` records so call sites can branch on the same `ok` convention used elsewhere in this package
 
+`PromiseResult` aliases the shared `Result` type and settle helpers use the shared `ok` and `err` factories
+
 Keep module docs updated whenever promise behavior, exports, defaults, or task option semantics change
 ## Public documentation
 

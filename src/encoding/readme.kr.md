@@ -50,6 +50,7 @@ const result = utf8.safeDecode([0xff], {
 - decoded text가 아니라 raw bytes가 필요하면 `toBytes` helper를 사용합니다.
 - Node에서는 가능한 경우 `Buffer`를 사용하고 browser-like runtime에서는 base64에 `btoa`, `atob`를 사용합니다.
 - `decodeUtf8`은 `fatal`, `ignoreBOM` 같은 `TextDecoder` option을 받습니다.
+- `EncodingResult`는 `@maxxuxx/ts-utils/result`의 공통 `Result` contract alias입니다
 
 ## 주의할 점
 
@@ -62,3 +63,4 @@ const result = utf8.safeDecode([0xff], {
 
 - `@maxxuxx/ts-utils/json`은 encoded payload가 JSON text일 때 같이 사용합니다.
 - `@maxxuxx/ts-utils/jwt`는 JWT base64url segment decode를 담당합니다.
+- `@maxxuxx/ts-utils/result`는 공통 result factory와 transform에 사용합니다

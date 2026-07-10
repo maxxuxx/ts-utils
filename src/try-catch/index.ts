@@ -1,31 +1,26 @@
+import {
+  err,
+  ok,
+  type Result as SharedResult
+} from "../result/index.js";
+
 /** Success variant returned by try-catch helpers */
 // Result types
-export type ResultSuccess<TData> = Readonly<{
-  ok  : true;
-  data: TData;
-}>;
+export type ResultSuccess<TData> = Readonly<Extract<
+  SharedResult<TData, never>,
+  { ok: true }
+>>;
 
 /** Failure variant returned by try-catch helpers */
-export type ResultFailure<TError = unknown> = Readonly<{
-  ok   : false;
-  error: TError;
-}>;
+export type ResultFailure<TError = unknown> = Readonly<Extract<
+  SharedResult<never, TError>,
+  { ok: false }
+>>;
 
 /** Result returned by result */
 export type Result<TData, TError = unknown> =
   | ResultSuccess<TData>
   | ResultFailure<TError>;
-
-// Result factories
-const success = <TData>(data: TData): ResultSuccess<TData> => ({
-  ok  : true,
-  data: data
-});
-
-const failure = <TError>(error: TError): ResultFailure<TError> => ({
-  ok   : false,
-  error: error
-});
 
 // Try catch helpers
 /** Runs catch and returns a result object */
@@ -33,9 +28,9 @@ export const tryCatch = <TData, TError = unknown>(
   fn: () => TData
 ): Result<TData, TError> => {
   try {
-    return success(fn());
+    return ok(fn());
   } catch (error) {
-    return failure(error as TError);
+    return err(error as TError);
   }
 };
 
@@ -44,9 +39,9 @@ export const tryCatchAsync = async <TData, TError = unknown>(
   fn: () => PromiseLike<TData>
 ): Promise<Result<TData, TError>> => {
   try {
-    return success(await fn());
+    return ok(await fn());
   } catch (error) {
-    return failure(error as TError);
+    return err(error as TError);
   }
 };
 

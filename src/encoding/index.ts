@@ -1,16 +1,10 @@
+import { err, ok, type Result } from "../result/index.js";
+
 /** Binary input accepted by encoding helpers */
 export type EncodingBytes = ArrayBufferLike | ArrayBufferView | readonly number[];
 
 /** Result returned by encoding */
-export type EncodingResult<TData, TError = unknown> =
-  | {
-      ok: true;
-      data: TData;
-    }
-  | {
-      ok: false;
-      error: TError;
-    };
+export type EncodingResult<TData, TError = unknown> = Result<TData, TError>;
 
 /** Options for utf8 decode */
 export type Utf8DecodeOptions = {
@@ -41,22 +35,6 @@ export class EncodingError extends Error {
     this.cause = cause;
   }
 }
-
-const createSuccess = <TData>(data: TData): {
-  ok: true;
-  data: TData;
-} => ({
-  data,
-  ok: true
-});
-
-const createFailure = <TError>(error: TError): {
-  ok: false;
-  error: TError;
-} => ({
-  error,
-  ok: false
-});
 
 const getBuffer = (): BufferConstructorLike | undefined => (
   (globalThis as EncodingGlobal).Buffer
@@ -170,9 +148,9 @@ export const safeDecodeUtf8 = (
   options: Utf8DecodeOptions = {}
 ): EncodingResult<string, EncodingError> => {
   try {
-    return createSuccess(decodeUtf8(bytes, options));
+    return ok(decodeUtf8(bytes, options));
   } catch (error) {
-    return createFailure(new EncodingError(error, "UTF-8 decode failed"));
+    return err(new EncodingError(error, "UTF-8 decode failed"));
   }
 };
 

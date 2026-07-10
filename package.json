@@ -32,6 +32,10 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./result": {
+      "types": "./dist/result/index.d.ts",
+      "import": "./dist/result/index.js"
+    },
     "./parser": {
       "types": "./dist/parser/index.d.ts",
       "import": "./dist/parser/index.js"

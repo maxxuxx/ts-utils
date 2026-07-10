@@ -1,3 +1,5 @@
+import { err, ok, type Result } from "../result/index.js";
+
 /** Represents json primitive */
 export type JsonPrimitive = string | number | boolean | null;
 
@@ -16,15 +18,7 @@ export type JsonValue =
   | JsonPrimitive;
 
 /** Result returned by json */
-export type JsonResult<TData, TError = unknown> =
-  | {
-      ok: true;
-      data: TData;
-    }
-  | {
-      ok: false;
-      error: TError;
-    };
+export type JsonResult<TData, TError = unknown> = Result<TData, TError>;
 
 /** Schema contract for json */
 export type JsonSchema<TValue> = {
@@ -89,22 +83,6 @@ const readJsonText = (text: string | null | undefined): string => {
   return text;
 };
 
-const createSuccess = <TData>(data: TData): {
-  ok: true;
-  data: TData;
-} => ({
-  data,
-  ok: true
-});
-
-const createFailure = <TError>(error: TError): {
-  ok: false;
-  error: TError;
-} => ({
-  error,
-  ok: false
-});
-
 const isPlainRecord = (value: unknown): value is Record<string, unknown> => {
   if (typeof value !== "object" || value === null) {
     return false;
@@ -160,9 +138,9 @@ export const safeParseJson = <TValue = unknown>(
   text: string | null | undefined
 ): JsonResult<TValue, JsonParseError> => {
   try {
-    return createSuccess(JSON.parse(readJsonText(text)) as TValue);
+    return ok(JSON.parse(readJsonText(text)) as TValue);
   } catch (error) {
-    return createFailure(new JsonParseError(error));
+    return err(new JsonParseError(error));
   }
 };
 
@@ -193,14 +171,14 @@ export const safeStringifyJson = (
     const text = JSON.stringify(value, options.replacer, options.space);
 
     if (typeof text !== "string") {
-      return createFailure(new JsonStringifyError(
+      return err(new JsonStringifyError(
         new TypeError("JSON.stringify returned undefined")
       ));
     }
 
-    return createSuccess(text);
+    return ok(text);
   } catch (error) {
-    return createFailure(new JsonStringifyError(error));
+    return err(new JsonStringifyError(error));
   }
 };
 
@@ -234,9 +212,9 @@ export const safeParseJsonWithSchema = <TValue>(
   }
 
   try {
-    return createSuccess(schema.parse(result.data));
+    return ok(schema.parse(result.data));
   } catch (error) {
-    return createFailure(error);
+    return err(error);
   }
 };
 

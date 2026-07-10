@@ -34,6 +34,7 @@ import { createTokenSession } from "@maxxuxx/ts-utils/session";
 |---|---|---|
 | [`@maxxuxx/ts-utils/parser`](./src/parser/readme.kr.md) | 반복적인 런타임 검증을 위한 Zod parser preset과 wrapper | [parser](./src/parser/readme.kr.md) |
 | [`@maxxuxx/ts-utils/is`](./src/is/readme.kr.md) | primitive, object, collection, built-in 값을 판별하는 runtime type guard | [is](./src/is/readme.kr.md) |
+| [`@maxxuxx/ts-utils/result`](../src/result/readme.kr.md) | 성공/실패 Result 생성과 data/error 변환 helper | [result](../src/result/readme.kr.md) |
 | [`@maxxuxx/ts-utils/try-catch`](./src/try-catch/readme.kr.md) | 동기/비동기 에러 경계를 Result 형태로 다루는 helper | [try-catch](./src/try-catch/readme.kr.md) |
 | [`@maxxuxx/ts-utils/format`](./src/format/readme.kr.md) | 숫자, 원화, 날짜, 전화번호, 값+단위 표시 helper | [format](./src/format/readme.kr.md) |
 | [`@maxxuxx/ts-utils/normalize`](./src/normalize/readme.kr.md) | number, text, date, boolean 값으로 보정하는 작은 coercion helper | [normalize](./src/normalize/readme.kr.md) |

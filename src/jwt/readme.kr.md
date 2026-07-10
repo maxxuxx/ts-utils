@@ -50,6 +50,7 @@ if (claims && !jwt.isExpired(token, {
 - `decodeJwt`는 malformed token 또는 object가 아닌 payload에서 `null`을 반환합니다.
 - `safeDecodeJwt`는 `{ ok, data }` 또는 `{ ok, error: JwtDecodeError }`를 반환합니다.
 - `isJwtExpired`는 malformed token과 missing/non-numeric `exp`를 expired로 봅니다.
+- `JwtResult`는 `@maxxuxx/ts-utils/result`의 공통 `Result` contract alias입니다
 
 ## 주의할 점
 
@@ -62,3 +63,4 @@ if (claims && !jwt.isExpired(token, {
 
 - `@maxxuxx/ts-utils/session`은 token lifecycle과 refresh에 사용합니다.
 - `@maxxuxx/ts-utils/encoding`은 lower-level byte/base64 helper입니다.
+- `@maxxuxx/ts-utils/result`는 공통 result factory와 transform에 사용합니다

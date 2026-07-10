@@ -55,6 +55,7 @@ const result = await promise.allObject({
 - Default options are `retries: 0`, `delayMs: 300`, and no timeout.
 - Common options are applied first; per-task options override only fields they define.
 - `withTimeout` can accept an existing promise, but retry helpers require task functions.
+- `PromiseResult` aliases the shared `Result` contract from `@maxxuxx/ts-utils/result`
 
 ## Edge cases
 
@@ -67,3 +68,4 @@ const result = await promise.allObject({
 
 - `@maxxuxx/ts-utils/api-fetch` for HTTP retry and timeout behavior.
 - `@maxxuxx/ts-utils/try-catch` for small result wrappers around one operation.
+- `@maxxuxx/ts-utils/result` for shared result factories and transformations

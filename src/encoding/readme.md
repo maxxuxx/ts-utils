@@ -50,6 +50,7 @@ const result = utf8.safeDecode([0xff], {
 - Use `toBytes` helpers when the caller needs raw bytes instead of decoded text.
 - Node uses `Buffer` when available; browser-like runtimes use `btoa` and `atob` for base64.
 - `decodeUtf8` accepts standard `TextDecoder` options such as `fatal` and `ignoreBOM`.
+- `EncodingResult` aliases the shared `Result` contract from `@maxxuxx/ts-utils/result`
 
 ## Edge cases
 
@@ -62,3 +63,4 @@ const result = utf8.safeDecode([0xff], {
 
 - `@maxxuxx/ts-utils/json` when encoded payloads contain JSON text.
 - `@maxxuxx/ts-utils/jwt` for base64url JWT segment decoding.
+- `@maxxuxx/ts-utils/result` for shared result factories and transformations

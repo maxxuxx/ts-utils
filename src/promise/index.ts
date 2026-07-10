@@ -1,3 +1,5 @@
+import { err, ok, type Result } from "../result/index.js";
+
 /** Function that returns a value or promise for promise helpers */
 export type PromiseTask<TValue> = () => TValue | PromiseLike<TValue>;
 
@@ -34,15 +36,7 @@ export type PromiseTaskValue<TTask> =
       : never;
 
 /** Result returned by promise */
-export type PromiseResult<TData, TError = unknown> =
-  | {
-      ok: true;
-      data: TData;
-    }
-  | {
-      ok: false;
-      error: TError;
-    };
+export type PromiseResult<TData, TError = unknown> = Result<TData, TError>;
 
 /** Result returned by promise all */
 export type PromiseAllResult<TTasks extends readonly PromiseTaskConfig<unknown>[]> = {
@@ -198,15 +192,9 @@ const settleTaskConfig = async <TTask extends PromiseTaskConfig<unknown>>(
   options: PromiseRunOptions
 ): Promise<PromiseResult<PromiseTaskValue<TTask>>> => {
   try {
-    return {
-      data: await runTaskConfig(config, options),
-      ok  : true
-    };
+    return ok(await runTaskConfig(config, options));
   } catch (error) {
-    return {
-      error,
-      ok: false
-    };
+    return err(error);
   }
 };
 
