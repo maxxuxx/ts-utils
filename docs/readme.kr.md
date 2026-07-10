@@ -54,20 +54,11 @@ import { createTokenSession } from "@maxxuxx/ts-utils/session";
 | [`@maxxuxx/ts-utils/api-fetch`](./src/api-fetch/readme.kr.md) | validation, refresh, retry, timeout, hooks, endpoint를 포함한 fetch API client | [api-fetch](./src/api-fetch/readme.kr.md) |
 | [`@maxxuxx/ts-utils/api-fetch/sveltekit`](./src/api-fetch/readme.kr.md) | api-fetch auth refresh용 SvelteKit adapter | [api-fetch/sveltekit](./src/api-fetch/readme.kr.md) |
 | [`@maxxuxx/ts-utils/http-response`](./src/http-response/readme.kr.md) | route handler용 작은 Web Response helper | [http-response](./src/http-response/readme.kr.md) |
-| [`@maxxuxx/ts-utils/electron-log`](./src/electron-log/readme.kr.md) | Electron logging 공통 타입과 renderer bridge client | [electron-log](./src/electron-log/readme.kr.md) |
-| [`@maxxuxx/ts-utils/electron-log/main`](./src/electron-log/readme.kr.md) | main process logger 설정과 IPC bridge 등록 | [electron-log/main](./src/electron-log/readme.kr.md) |
-| [`@maxxuxx/ts-utils/electron-log/preload`](./src/electron-log/readme.kr.md) | preload logging bridge 노출 | [electron-log/preload](./src/electron-log/readme.kr.md) |
-| [`@maxxuxx/ts-utils/electron-log/renderer`](./src/electron-log/readme.kr.md) | renderer logging target 설정 | [electron-log/renderer](./src/electron-log/readme.kr.md) |
-| [`@maxxuxx/ts-utils/electron-updater`](./src/electron-updater/readme.kr.md) | updater state, schema, channel, type export | [electron-updater](./src/electron-updater/readme.kr.md) |
-| [`@maxxuxx/ts-utils/electron-updater/main`](./src/electron-updater/readme.kr.md) | main process update service와 IPC handler | [electron-updater/main](./src/electron-updater/readme.kr.md) |
-| [`@maxxuxx/ts-utils/electron-updater/preload`](./src/electron-updater/readme.kr.md) | preload updater bridge 생성과 노출 | [electron-updater/preload](./src/electron-updater/readme.kr.md) |
-| [`@maxxuxx/ts-utils/electron-updater/builder`](./src/electron-updater/readme.kr.md) | electron-builder publish config와 updater cache helper | [electron-updater/builder](./src/electron-updater/readme.kr.md) |
 
 ## 런타임 참고
 
-- 일반 유틸 모듈은 의존성을 작게 유지하며 browser, server, Electron shared code에서 쓰기 쉽게 설계됨
+- 일반 유틸 모듈은 의존성을 작게 유지하며 browser와 server code에서 쓰기 쉽게 설계됨
 - Zod 기반 모듈은 schema를 가까운 곳에서 정의할 수 있도록 각 subpath에서 `z`를 re-export함
-- Electron 모듈은 renderer bundle이 main process code를 가져오지 않도록 process-specific subpath를 사용함
 - Device helper는 browser와 Node subpath로 분리되어 있으며 target runtime을 알면 runtime-specific path를 우선 사용함
 
 ## 개발

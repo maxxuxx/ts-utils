@@ -62,4 +62,3 @@ const detectedId = await getDeviceUuid();
 ## 관련 모듈
 
 - `@maxxuxx/ts-utils/env`는 cookie name이나 platform 설정을 읽을 때 같이 사용할 수 있습니다.
-- `@maxxuxx/ts-utils/electron-log`는 Electron app에서 device lookup 실패를 기록할 때 유용합니다.

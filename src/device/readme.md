@@ -62,4 +62,3 @@ const detectedId = await getDeviceUuid();
 ## Related modules
 
 - `@maxxuxx/ts-utils/env` for runtime configuration around cookie names or platform behavior.
-- `@maxxuxx/ts-utils/electron-log` when recording device lookup failures in Electron apps.

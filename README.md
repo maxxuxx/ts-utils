@@ -54,20 +54,11 @@ import { createTokenSession } from "@maxxuxx/ts-utils/session";
 | [`@maxxuxx/ts-utils/api-fetch`](./src/api-fetch/readme.md) | Fetch API client with validation, refresh, retry, timeout, hooks, and endpoints | [api-fetch](./src/api-fetch/readme.md) |
 | [`@maxxuxx/ts-utils/api-fetch/sveltekit`](./src/api-fetch/readme.md) | SvelteKit adapter for api-fetch auth refresh | [api-fetch/sveltekit](./src/api-fetch/readme.md) |
 | [`@maxxuxx/ts-utils/http-response`](./src/http-response/readme.md) | Small Web Response helpers for route handlers | [http-response](./src/http-response/readme.md) |
-| [`@maxxuxx/ts-utils/electron-log`](./src/electron-log/readme.md) | Common Electron logging types and renderer bridge client | [electron-log](./src/electron-log/readme.md) |
-| [`@maxxuxx/ts-utils/electron-log/main`](./src/electron-log/readme.md) | Main process logger setup and IPC bridge registration | [electron-log/main](./src/electron-log/readme.md) |
-| [`@maxxuxx/ts-utils/electron-log/preload`](./src/electron-log/readme.md) | Preload logging bridge exposure | [electron-log/preload](./src/electron-log/readme.md) |
-| [`@maxxuxx/ts-utils/electron-log/renderer`](./src/electron-log/readme.md) | Renderer logging target setup | [electron-log/renderer](./src/electron-log/readme.md) |
-| [`@maxxuxx/ts-utils/electron-updater`](./src/electron-updater/readme.md) | Common updater state, schema, channel, and type exports | [electron-updater](./src/electron-updater/readme.md) |
-| [`@maxxuxx/ts-utils/electron-updater/main`](./src/electron-updater/readme.md) | Main process update service and IPC handlers | [electron-updater/main](./src/electron-updater/readme.md) |
-| [`@maxxuxx/ts-utils/electron-updater/preload`](./src/electron-updater/readme.md) | Preload updater bridge creation and exposure | [electron-updater/preload](./src/electron-updater/readme.md) |
-| [`@maxxuxx/ts-utils/electron-updater/builder`](./src/electron-updater/readme.md) | electron-builder publish config and updater cache helpers | [electron-updater/builder](./src/electron-updater/readme.md) |
 
 ## Runtime notes
 
-- General utility modules are dependency-light and designed for browser, server, and Electron shared code
+- General utility modules are dependency-light and designed for browser and server code
 - Zod-backed modules re-export `z` from their own subpath when colocated schemas are useful
-- Electron modules use process-specific subpaths so renderer bundles do not load main process code
 - Device helpers are split into browser and Node subpaths; prefer the runtime-specific path when the target runtime is known
 
 ## Development
