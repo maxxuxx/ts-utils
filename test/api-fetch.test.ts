@@ -786,6 +786,51 @@ describe("api-fetch", () => {
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 
+  it("preserves valid auth error codes for custom refresh classification", async () => {
+    const clear = vi.fn(async () => undefined);
+    const refresh = vi.fn(async () => "fresh");
+    const shouldRefreshOnError = vi.fn((error: unknown) => (
+      error instanceof ApiHttpError && error.code === "TOKEN_EXPIRED"
+    ));
+    const fetch = vi.fn<FetchLike>(async () => jsonResponse({
+      code   : "TOKEN_EXPIRED",
+      message: "upstream-secret"
+    }, 401, {
+      "X-Secret": "header-secret"
+    }));
+    const api = createApiFetcher({
+      fetch,
+      maxResponseBytes: 100,
+      auth: {
+        clear,
+        getAccessToken: async () => "expired",
+        refresh,
+        shouldRefreshOnError
+      }
+    });
+    const error = await api.get("/private?token=query-secret")
+      .catch((reason: unknown) => reason);
+
+    expect(error).toBeInstanceOf(ApiAuthError);
+    expect(error).toMatchObject({
+      cause: expect.objectContaining({
+        code   : "TOKEN_EXPIRED",
+        message: "API request failed: GET /private (401)",
+        status : 401
+      }),
+      name: "ApiAuthError"
+    });
+    expect((error as ApiAuthError).cause).not.toHaveProperty("body");
+    expect((error as ApiAuthError).cause).not.toHaveProperty("response");
+    expect(JSON.stringify(error)).not.toContain("upstream-secret");
+    expect(JSON.stringify(error)).not.toContain("header-secret");
+    expect(JSON.stringify(error)).not.toContain("query-secret");
+    expect(shouldRefreshOnError).toHaveBeenCalledTimes(2);
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(clear).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
   it("prioritizes oversized auth responses before response size checks", async () => {
     const clear = vi.fn(async () => undefined);
     const response = new Response("response-secret", {

@@ -298,15 +298,19 @@ const sendRequest = async <
         getServerTimeNow(clientOptions.serverTime)
       );
 
-      if (
-        !response.ok
-        && authEnabled
-        && AUTH_REFRESH_STATUS_CODES.includes(response.status as 401 | 419)
-      ) {
-        try {
-          await response.body?.cancel();
-        } catch {
-          // Response cancellation is best effort and must not replace auth handling
+      try {
+        responseBody = await readResponseBody(response, context, responseLimit);
+      } catch (responseError) {
+        const isUnreadableAuthResponse = !response.ok
+          && authEnabled
+          && AUTH_REFRESH_STATUS_CODES.includes(response.status as 401 | 419)
+          && (
+            responseError instanceof ApiParseError
+            || responseError instanceof ApiResponseSizeError
+          );
+
+        if (!isUnreadableAuthResponse) {
+          throw responseError;
         }
 
         const resolvedErrorFallback = resolveErrorFallback(
@@ -331,8 +335,6 @@ const sendRequest = async <
 
         throw error;
       }
-
-      responseBody = await readResponseBody(response, context, responseLimit);
 
       if (!response.ok) {
         const resolvedErrorFallback = resolveErrorFallback(
