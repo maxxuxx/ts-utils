@@ -2,7 +2,7 @@
 
 [한국어](./readme.kr.md)
 
-Dependency-free helpers for sleep, timeout, retry, parallel task execution, and result-style settling.
+Dependency-free helpers for sleep, timeout, retry, keyed single-flight work, parallel task execution, and result-style settling
 
 ## Use this when
 
@@ -14,6 +14,7 @@ Dependency-free helpers for sleep, timeout, retry, parallel task execution, and 
 
 ```ts
 import {
+  createSingleFlight,
   promise,
   run,
   retry,
@@ -30,6 +31,7 @@ import {
 | `sleep` | Waits for a non-negative number of milliseconds. |
 | `withTimeout` | Applies a timeout to a task function or existing promise. |
 | `retry`, `run` | Runs a task function with retry and timeout options. |
+| `createSingleFlight` | Shares one in-flight task per key and optionally retains successful results |
 | `all`, `allObject` | Runs configured tasks in parallel and rejects on the first failure. |
 | `settle`, `settleObject` | Runs configured tasks in parallel and returns result objects. |
 | `promise` | Namespace containing the same helpers. |
@@ -49,9 +51,47 @@ const result = await promise.allObject({
 });
 ```
 
+## Retry cancellation example
+
+```ts
+const user = await retry(async ({ attempt, signal }) => {
+  console.log(`attempt ${attempt}`);
+
+  const response = await fetch("/api/user", { signal });
+
+  return await response.json();
+}, {
+  retries  : 2,
+  timeoutMs: 5000
+});
+```
+
+Timeout aborts the attempt signal before retry delay starts, but work stops only when the task observes the signal
+
+No-argument callbacks such as `retry(fetchUser)` remain supported and simply ignore the context
+
+## Single-flight example
+
+```ts
+const refresh = createSingleFlight<string, Tokens>({
+  successTtlMs: 1000
+});
+
+const tokens = await refresh.run(userId, refreshTokens);
+
+refresh.clear(userId);
+refresh.clear();
+console.log(refresh.size);
+```
+
+Calls with the same key share one in-flight promise while different keys run independently
+
+Rejected work is removed immediately, successful work is retained from its resolution time only when `successTtlMs` is positive, and the default TTL is `0`
+
 ## Behavior notes
 
 - Tasks are functions, not already-started promises, when retrying is needed.
+- Every task attempt receives `{ attempt, signal }` with a one-based attempt number
 - Default options are `retries: 0`, `delayMs: 300`, and no timeout.
 - Common options are applied first; per-task options override only fields they define.
 - `withTimeout` can accept an existing promise, but retry helpers require task functions.
@@ -61,8 +101,13 @@ const result = await promise.allObject({
 
 - Timeout applies to each retry attempt.
 - `PromiseTimeoutError` includes the configured timeout in milliseconds.
-- Negative or non-finite timing values and non-integer retries throw `RangeError`.
-- Timed out work is not cancelled unless the task itself observes an abort signal you manage separately.
+- Sleep, timeout, retry delay, and success TTL values outside `0` through `2_147_483_647` throw `RangeError`
+- Non-integer retry counts throw `RangeError`
+- `sleep(ms, { signal })` rejects with the signal abort reason and clears its timer
+- Timeout aborts the current attempt signal before a retry starts
+- Aborting a signal requests cancellation but cannot stop work that does not observe the signal
+- Existing promises passed to `withTimeout` cannot receive the generated attempt signal
+- `clear` removes single-flight entries but does not abort work that is already running
 
 ## Related modules
 

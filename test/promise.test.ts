@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   PromiseTimeoutError,
+  type RetryContext,
   all,
   allObject,
+  createSingleFlight,
   promise,
   retry,
   run,
@@ -73,6 +75,58 @@ describe("promise module", () => {
       timeoutMs: 1
     })).rejects.toBeInstanceOf(PromiseTimeoutError);
     expect(calls).toBe(2);
+  });
+
+  it("aborts a timed attempt before the next retry begins", async () => {
+    const signals: AbortSignal[] = [];
+
+    await expect(retry((context: RetryContext) => {
+      const previousSignal = signals.at(-1);
+
+      if (previousSignal !== undefined) {
+        expect(previousSignal.aborted).toBe(true);
+      }
+
+      expect(context.attempt).toBe(signals.length + 1);
+      signals.push(context.signal);
+
+      return new Promise(() => undefined);
+    }, {
+      delayMs  : 0,
+      retries  : 1,
+      timeoutMs: 1
+    })).rejects.toBeInstanceOf(PromiseTimeoutError);
+    expect(signals).toHaveLength(2);
+    expect(signals[0]?.aborted).toBe(true);
+  });
+
+  it("rejects timer overflow before scheduling sleep", () => {
+    expect(() => sleep(2_147_483_648)).toThrow(RangeError);
+  });
+
+  it("rejects timer overflow before scheduling a timeout", async () => {
+    await expect(withTimeout(() => "ok", {
+      timeoutMs: 2_147_483_648
+    })).rejects.toThrow(RangeError);
+  });
+
+  it("rejects timer overflow before using a retry delay", async () => {
+    await expect(retry(() => "ok", {
+      delayMs: 2_147_483_648
+    })).rejects.toThrow(RangeError);
+  });
+
+  it("aborts a pending sleep", async () => {
+    const controller = new AbortController();
+    const pending = sleep(10_000, {
+      signal: controller.signal
+    });
+
+    controller.abort();
+
+    await expect(pending).rejects.toMatchObject({
+      name: "AbortError"
+    });
   });
 
   it("runs multiple tasks as a typed tuple", async () => {
@@ -180,12 +234,180 @@ describe("promise module", () => {
   });
 
   it("validates timing options", async () => {
-    await expect(sleep(-1)).rejects.toThrow(RangeError);
+    expect(() => sleep(-1)).toThrow(RangeError);
     await expect(withTimeout(() => "ok", {
       timeoutMs: -1
     })).rejects.toThrow(RangeError);
     await expect(retry(() => "ok", {
       retries: 1.5
     })).rejects.toThrow(RangeError);
+  });
+
+  describe("single-flight", () => {
+    it("exposes the factory through the promise namespace", () => {
+      expect(promise.createSingleFlight).toBeTypeOf("function");
+    });
+
+    it("shares in-flight work for the same key", async () => {
+      const singleFlight = createSingleFlight<string, string>();
+      let calls = 0;
+      let release = (_value: string): void => {
+        throw new Error("task did not start");
+      };
+      const task = (): Promise<string> => {
+        calls += 1;
+
+        return new Promise((resolve) => {
+          release = resolve;
+        });
+      };
+      const first = singleFlight.run("user", task);
+      const second = singleFlight.run("user", task);
+
+      expect(first).toBe(second);
+      await Promise.resolve();
+      expect(calls).toBe(1);
+
+      release("ready");
+
+      await expect(Promise.all([first, second])).resolves.toEqual([
+        "ready",
+        "ready"
+      ]);
+    });
+
+    it("runs different keys independently", async () => {
+      const singleFlight = createSingleFlight<string, string>();
+      let calls = 0;
+      const first = singleFlight.run("first", async () => {
+        calls += 1;
+
+        return "first";
+      });
+      const second = singleFlight.run("second", async () => {
+        calls += 1;
+
+        return "second";
+      });
+
+      expect(first).not.toBe(second);
+      await expect(Promise.all([first, second])).resolves.toEqual([
+        "first",
+        "second"
+      ]);
+      expect(calls).toBe(2);
+    });
+
+    it("evicts rejected work", async () => {
+      const singleFlight = createSingleFlight<string, string>();
+      let calls = 0;
+
+      await expect(singleFlight.run("user", async () => {
+        calls += 1;
+
+        throw new Error("failed");
+      })).rejects.toThrow("failed");
+      await expect(singleFlight.run("user", async () => {
+        calls += 1;
+
+        return "ready";
+      })).resolves.toBe("ready");
+      expect(calls).toBe(2);
+    });
+
+    it("evicts successful work when the TTL is zero", async () => {
+      const singleFlight = createSingleFlight<string, number>({
+        successTtlMs: 0
+      });
+      let calls = 0;
+      const task = async (): Promise<number> => {
+        calls += 1;
+
+        return calls;
+      };
+
+      await expect(singleFlight.run("user", task)).resolves.toBe(1);
+      await expect(singleFlight.run("user", task)).resolves.toBe(2);
+      expect(calls).toBe(2);
+    });
+
+    it("retains successful work for a positive TTL", async () => {
+      const singleFlight = createSingleFlight<string, number>({
+        successTtlMs: 50
+      });
+      let calls = 0;
+      const task = async (): Promise<number> => {
+        calls += 1;
+
+        return calls;
+      };
+
+      await expect(singleFlight.run("user", task)).resolves.toBe(1);
+      await expect(singleFlight.run("user", task)).resolves.toBe(1);
+      expect(calls).toBe(1);
+
+      await sleep(60);
+
+      await expect(singleFlight.run("user", task)).resolves.toBe(2);
+    });
+
+    it("clears one key without removing other keys", async () => {
+      const singleFlight = createSingleFlight<string, number>({
+        successTtlMs: 10_000
+      });
+      let calls = 0;
+      const task = async (): Promise<number> => {
+        calls += 1;
+
+        return calls;
+      };
+
+      await expect(singleFlight.run("first", task)).resolves.toBe(1);
+      await expect(singleFlight.run("second", task)).resolves.toBe(2);
+
+      singleFlight.clear("first");
+
+      await expect(singleFlight.run("first", task)).resolves.toBe(3);
+      await expect(singleFlight.run("second", task)).resolves.toBe(2);
+    });
+
+    it("clears every key when no key is provided", async () => {
+      const singleFlight = createSingleFlight<string, string>({
+        successTtlMs: 10_000
+      });
+
+      await singleFlight.run("first", async () => "first");
+      await singleFlight.run("second", async () => "second");
+
+      singleFlight.clear();
+
+      expect(singleFlight.size).toBe(0);
+    });
+
+    it("reports in-flight and retained entry count", async () => {
+      const singleFlight = createSingleFlight<string, string>({
+        successTtlMs: 10_000
+      });
+      let release = (_value: string): void => {
+        throw new Error("task did not start");
+      };
+      const pending = singleFlight.run("user", () => new Promise((resolve) => {
+        release = resolve;
+      }));
+
+      expect(singleFlight.size).toBe(1);
+
+      await Promise.resolve();
+      release("ready");
+      await pending;
+
+      expect(singleFlight.size).toBe(1);
+    });
+
+    it("rejects a TTL outside the timer range", () => {
+      expect(() => createSingleFlight({
+        successTtlMs: 2_147_483_648
+      })).toThrow(RangeError);
+    });
   });
 });
