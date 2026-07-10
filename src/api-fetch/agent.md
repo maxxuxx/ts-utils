@@ -94,6 +94,18 @@ Missing refresh callbacks, non-replayable auth requests, refresh throw, empty re
 
 Concurrent refresh calls are deduped per fetcher instance through a shared refresh promise
 
+The SvelteKit adapter separates shared refresh result creation from cookie-context persistence through `refresh` and `applyRefresh`
+
+Adapter dedupe requires `applyRefresh`; every fetcher participant applies the shared result to its own cookies before retrying
+
+Use an explicit `namespace` plus a stable `getRefreshKey` when different SvelteKit fetcher instances should share refresh work
+
+Without a namespace, SvelteKit single-flight state belongs to the created adapter and must not collide with unrelated fetchers that happen to use the same token string
+
+Failed or empty refresh results are evicted immediately, while an `applyRefresh` failure clears only the affected cookie context through the normal terminal auth path
+
+`dedupeRefresh: false` keeps direct refresh compatibility and allows `refresh` to return the next access token without `applyRefresh`
+
 General retry is separate from auth refresh and defaults to `GET` only
 
 General retry uses one request-wide budget, respects `Retry-After` by default, and supports fixed or exponential delay with bounded jitter

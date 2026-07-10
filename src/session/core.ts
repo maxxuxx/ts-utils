@@ -3,8 +3,8 @@ import {
   type JwtPayload,
   type JwtPayloadWithToken
 } from "../jwt/index.js";
+import { createSingleFlight } from "../promise/index.js";
 import type {
-  MaybePromise,
   SafeSchema,
   TokenSessionController,
   TokenSessionData,
@@ -23,10 +23,6 @@ const DEFAULT_ERROR_MESSAGES: Record<TokenSessionReason, string> = {
   invalid_token: "Session token is invalid",
   unauthorized : "Session is unauthorized"
 };
-
-type RefreshPromise = Promise<TokenSessionTokens>;
-
-const refreshPromises = new Map<string, RefreshPromise>();
 
 /** Error raised for token session failures */
 export class TokenSessionError extends Error {
@@ -53,27 +49,19 @@ export const createTokenSession = <
   options: TokenSessionOptions<TContext, TUser, TTokens, TClaims>
 ): TokenSessionController<TContext, TUser, TTokens> => {
   const useRefreshToken = options.useRefreshToken ?? true;
-
-  const parseUser = (value: unknown): TUser => {
-    if (value === null || value === undefined) {
-      throw createSessionError("unauthorized");
-    }
-
-    return parseSchema(value, options.userSchema, "unauthorized");
-  };
-
-  const parseTokens = (value: unknown): TTokens => {
-    if (!isRecord(value)) {
-      throw createSessionError("invalid_token");
-    }
-
-    const tokens = parseSchema(value, options.tokenSchema, "invalid_token");
-
-    if (!readAccessToken(tokens)) {
-      throw createSessionError("invalid_token");
-    }
-
-    return tokens;
+  const {
+    parseSession,
+    parseTokens,
+    parseUser
+  } = createTokenSessionParsers(options);
+  const refreshSingleFlight = createSingleFlight<string, TTokens>({
+    successTtlMs: resolveRefreshCacheMs(options.dedupeRefresh)
+  });
+  const writeSession = async (
+    context: TContext,
+    session: TokenSessionData<TUser, TTokens>
+  ): Promise<void> => {
+    await options.write(context, parseSession(session));
   };
 
   const readClaims = (accessToken: string): JwtPayloadWithToken<TClaims> | null => {
@@ -95,11 +83,11 @@ export const createTokenSession = <
   };
 
   const refresh = async (context: TContext): Promise<string> => {
-    const session      = await options.read(context);
-    const user         = parseUser(session.user);
-    const tokens       = parseTokens(session.tokens);
-    const accessToken  = readAccessToken(tokens);
-    const refreshToken = readRefreshToken(tokens);
+    const session       = parseSession(await options.read(context));
+    const user          = parseUser(session.user);
+    const tokens        = parseTokens(session.tokens);
+    const accessToken   = readAccessToken(tokens);
+    const refreshToken  = readRefreshToken(tokens);
     const refreshTokens = options.refreshTokens;
 
     if (!useRefreshToken || !accessToken || !refreshToken || !refreshTokens) {
@@ -129,13 +117,12 @@ export const createTokenSession = <
     };
     const nextTokens = options.dedupeRefresh === false
       ? await executeRefresh()
-      : await runRefreshOnce(
+      : await refreshSingleFlight.run(
         refreshToken,
-        executeRefresh,
-        resolveRefreshCacheMs(options.dedupeRefresh)
+        executeRefresh
       );
 
-    await options.write(context, {
+    await writeSession(context, {
       ...session,
       tokens: nextTokens,
       user
@@ -145,7 +132,7 @@ export const createTokenSession = <
   };
 
   const ensure = async (context: TContext): Promise<TUser> => {
-    const session      = await options.read(context);
+    const session      = parseSession(await options.read(context));
     const user         = parseUser(session.user);
     const tokens       = parseTokens(session.tokens);
     const accessToken  = readAccessToken(tokens);
@@ -190,14 +177,11 @@ export const createTokenSession = <
       await options.clear(context);
     },
     ensure,
-    get: async (context) => options.read(context),
+    get: async (context) => parseSession(await options.read(context)),
     getAccessToken: async (context) => {
-      const session = await options.read(context);
-      const tokens  = parseTokensOrNull(session.tokens, {
-        tokenSchema: options.tokenSchema
-      });
+      const session = parseSession(await options.read(context));
 
-      return readAccessToken(tokens);
+      return readAccessToken(session.tokens);
     },
     parseTokens: (tokens) => {
       const parsedTokens = parseTokensOrNull(tokens, {
@@ -210,12 +194,12 @@ export const createTokenSession = <
     },
     refresh,
     set: async (context, session) => {
-      await options.write(context, session);
+      await writeSession(context, session);
     },
     updateUser: async (context, user) => {
-      const session = await options.read(context);
+      const session = parseSession(await options.read(context));
 
-      await options.write(context, {
+      await writeSession(context, {
         ...session,
         user
       });
@@ -224,6 +208,67 @@ export const createTokenSession = <
 };
 
 // Parsing helpers
+type TokenSessionParserOptions<
+  TUser,
+  TTokens extends TokenSessionTokens
+> = Readonly<{
+  tokenSchema?: SafeSchema<TTokens>;
+  userSchema ?: SafeSchema<TUser>;
+}>;
+
+/** Creates the shared schema parser used by core and framework session adapters */
+export const createTokenSessionParsers = <
+  TUser,
+  TTokens extends TokenSessionTokens
+>(
+  options: TokenSessionParserOptions<TUser, TTokens>
+) => {
+  const parseUser = (value: unknown): TUser => {
+    if (value === null || value === undefined) {
+      throw createSessionError("unauthorized");
+    }
+
+    return parseSchema(value, options.userSchema, "unauthorized");
+  };
+
+  const parseTokens = (value: unknown): TTokens => {
+    if (!isRecord(value)) {
+      throw createSessionError("invalid_token");
+    }
+
+    const tokens = parseSchema(value, options.tokenSchema, "invalid_token");
+
+    if (!readAccessToken(tokens)) {
+      throw createSessionError("invalid_token");
+    }
+
+    return tokens;
+  };
+
+  const parseSession = (
+    value: unknown
+  ): TokenSessionData<TUser, TTokens> => {
+    if (!isRecord(value)) {
+      throw createSessionError("invalid");
+    }
+
+    return {
+      ...(value.tokens === undefined ? {} : {
+        tokens: parseTokens(value.tokens)
+      }),
+      ...(value.user === undefined ? {} : {
+        user: parseUser(value.user)
+      })
+    };
+  };
+
+  return {
+    parseSession,
+    parseTokens,
+    parseUser
+  };
+};
+
 const parseSchema = <TData>(
   value: unknown,
   schema: SafeSchema<TData> | undefined,
@@ -263,42 +308,6 @@ const resolveRefreshCacheMs = (
   return dedupeRefresh.cacheSuccessMs ?? DEFAULT_REFRESH_CACHE_MS;
 };
 
-const runRefreshOnce = <TTokens extends TokenSessionTokens>(
-  key: string,
-  refresh: () => MaybePromise<TTokens>,
-  cacheSuccessMs: number
-): Promise<TTokens> => {
-  const existing = refreshPromises.get(key);
-
-  if (existing) {
-    return existing as Promise<TTokens>;
-  }
-
-  const promise = Promise.resolve()
-    .then(refresh)
-    .then((tokens) => {
-      if (cacheSuccessMs > 0) {
-        setTimeout(() => {
-          if (refreshPromises.get(key) === promise) {
-            refreshPromises.delete(key);
-          }
-        }, cacheSuccessMs);
-      } else {
-        refreshPromises.delete(key);
-      }
-
-      return tokens;
-    })
-    .catch((error) => {
-      refreshPromises.delete(key);
-      throw error;
-    });
-
-  refreshPromises.set(key, promise);
-
-  return promise;
-};
-
 const parseTokensOrNull = <
   TTokens extends TokenSessionTokens,
   TClaims extends JwtPayload
@@ -333,7 +342,7 @@ const parseTokensOrNull = <
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
-  typeof value === "object" && value !== null
+  typeof value === "object" && value !== null && !Array.isArray(value)
 );
 
 const parseSchemaOrNull = <TData>(

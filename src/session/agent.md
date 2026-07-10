@@ -18,7 +18,7 @@ Do not export framework-specific helpers from the root package entry
 
 ## Dependency policy
 
-The core session entry should stay dependency free apart from local JWT helpers
+The core session entry should stay dependency free apart from local JWT and promise helpers
 
 `iron-session` is an optional peer dependency because only SvelteKit/server cookie consumers need it
 
@@ -28,7 +28,7 @@ The core session entry should stay dependency free apart from local JWT helpers
 
 `types.ts` contains public store, token, refresh, and controller contracts
 
-`core.ts` contains `createTokenSession`, schema parsing, optional JWT claim parsing, refresh decisions, and `TokenSessionError`
+`core.ts` contains `createTokenSession`, the shared session parser, optional JWT claim parsing, controller-scoped refresh single-flight, refresh decisions, and `TokenSessionError`
 
 `sveltekit.ts` contains the `iron-session` cookie adapter for SvelteKit-style cookies
 
@@ -54,7 +54,17 @@ Session JWT paths use `safeDecodeJwtWithSchema` so invalid base64url and UTF-8 f
 
 Refresh results are parsed through `tokenSchema` and, when configured, `jwtSchema` before being written back to storage
 
+Use `userSchema` and `tokenSchema` together as the single session boundary parser for restored values, controller reads, `set`, `updateUser`, and refresh writes
+
+Invalid persisted JSON or schema-invalid React session data must be removed from storage and replaced with an empty or configured valid fallback
+
+React sessions are memory-only when `storage` is omitted or set to `"memory"`; persistent `localStorage`, `sessionStorage`, or a custom storage adapter requires an explicit option
+
 `refreshThresholdSeconds` refreshes only when a JWT is present, a refresh token exists, and `refreshTokens` is configured
+
+Core refresh single-flight state belongs to each controller so unrelated controllers never share results only because their refresh-token strings match
+
+Every core refresh participant writes the shared validated token result into its own storage context
 
 The core controller is storage agnostic. Apps provide `read`, `write`, and `clear`
 

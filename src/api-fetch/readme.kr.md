@@ -96,6 +96,51 @@ await api.get("/me");
 apiServerClock.getServerTimeMs();
 ```
 
+## SvelteKit refresh 공유
+
+SvelteKit adapter는 shared refresh result 생성과 cookie 저장을 분리합니다
+
+```ts
+import {
+  createApiFetcher
+} from "@maxxuxx/ts-utils/api-fetch/sveltekit";
+
+type CookieContext = {
+  accessToken: string;
+  refreshKey : string;
+};
+
+type RefreshResult = {
+  accessToken: string;
+};
+
+const api = createApiFetcher<CookieContext, RefreshResult>({
+  cookies,
+  auth: {
+    namespace: "app-session",
+    getAccessToken: (context) => context.accessToken,
+    getRefreshKey : (context) => context.refreshKey,
+    refresh       : async (_context, error) => refreshTokens(error),
+    applyRefresh  : async (context, result) => {
+      context.accessToken = result.accessToken;
+
+      return context.accessToken;
+    },
+    clear: async (context) => {
+      context.accessToken = "";
+    }
+  }
+});
+```
+
+refresh 작업을 공유해야 하는 fetcher instance는 같은 explicit `namespace`와 stable refresh key를 사용합니다
+
+`refresh`는 namespace와 key마다 한 번 실행되고 모든 cookie context는 request retry 전에 `applyRefresh`를 실행합니다
+
+`namespace`를 생략하면 refresh single-flight state는 해당 adapter instance 안에만 유지됩니다
+
+`refresh`가 cookie context를 직접 갱신하고 다음 access token을 반환하는 경우에만 `dedupeRefresh: false`로 `applyRefresh`를 생략합니다
+
 ## 동작 메모
 
 - `bodySchema`가 있으면 요청 전 JSON body를 검증합니다.
@@ -112,6 +157,8 @@ apiServerClock.getServerTimeMs();
 ## 주의할 점
 
 - 기본 auth refresh 대상은 401과 419이며, refresh 중복 호출은 dedupe됩니다.
+- SvelteKit adapter dedupe에는 `applyRefresh`가 필요하며 실패하거나 비어 있는 shared result는 유지하지 않습니다
+- SvelteKit `applyRefresh` 실패는 terminal auth 처리에서 해당 request의 cookie context만 clear합니다
 - auth는 relative request, `baseURL` origin, 명시한 `allowedOrigins`에만 전송합니다
 - refresh callback이 없거나 auth request를 재생할 수 없거나 refresh가 소진되면 session을 best effort로 clear하고 `ApiAuthError`를 throw합니다
 - retry는 GET, 요청 전체에서 하나의 budget, `Retry-After`, fixed delay, jitter 없음이 기본이며 write method는 명시해야 합니다

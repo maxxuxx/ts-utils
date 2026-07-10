@@ -108,6 +108,51 @@ await api.get("/me");
 apiServerClock.getServerTimeMs();
 ```
 
+## SvelteKit refresh sharing
+
+The SvelteKit adapter shares refresh result creation separately from cookie persistence
+
+```ts
+import {
+  createApiFetcher
+} from "@maxxuxx/ts-utils/api-fetch/sveltekit";
+
+type CookieContext = {
+  accessToken: string;
+  refreshKey : string;
+};
+
+type RefreshResult = {
+  accessToken: string;
+};
+
+const api = createApiFetcher<CookieContext, RefreshResult>({
+  cookies,
+  auth: {
+    namespace: "app-session",
+    getAccessToken: (context) => context.accessToken,
+    getRefreshKey : (context) => context.refreshKey,
+    refresh       : async (_context, error) => refreshTokens(error),
+    applyRefresh  : async (context, result) => {
+      context.accessToken = result.accessToken;
+
+      return context.accessToken;
+    },
+    clear: async (context) => {
+      context.accessToken = "";
+    }
+  }
+});
+```
+
+Use the same explicit `namespace` and stable refresh key for fetcher instances that should share work
+
+`refresh` runs once per namespace and key, while every participating cookie context runs `applyRefresh` before its request retry
+
+When `namespace` is omitted, refresh single-flight state stays local to that adapter instance
+
+Set `dedupeRefresh: false` only when `refresh` directly updates its cookie context and returns the next access token without `applyRefresh`
+
 ## Behavior notes
 
 - `bodySchema` validates JSON request bodies before the request is sent. Without it, `body` is still serialized as JSON.
@@ -124,6 +169,8 @@ apiServerClock.getServerTimeMs();
 ## Edge cases
 
 - Auth refresh is attempted for 401 and 419 by default and is deduped while a refresh is in flight.
+- SvelteKit adapter dedupe requires `applyRefresh`; failed or empty shared results are not retained
+- A SvelteKit `applyRefresh` failure clears only that request's cookie context through terminal auth handling
 - Auth is sent only to relative requests, the `baseURL` origin, and explicit `allowedOrigins`
 - Auth responses without refresh, non-replayable auth requests, and exhausted refresh clear the session best effort and throw `ApiAuthError`
 - Retries default to GET, one shared request budget, `Retry-After` support, fixed delay, and no jitter; configure write methods explicitly

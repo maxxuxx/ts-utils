@@ -91,6 +91,78 @@ describe("session module", () => {
     } satisfies Partial<TokenSessionError>);
   });
 
+  it("rejects schema-invalid core session reads", async () => {
+    const session = createTokenSession<void, TestUser, TestTokens>({
+      clear: () => undefined,
+      read : () => ({
+        tokens: {
+          accessToken: "valid-token"
+        },
+        user: {
+          id: 123
+        } as unknown as TestUser
+      }),
+      tokenSchema: Tokens,
+      useRefreshToken: false,
+      userSchema : User,
+      write: () => undefined
+    });
+
+    await expect(session.get(undefined)).rejects.toMatchObject({
+      reason: "unauthorized"
+    } satisfies Partial<TokenSessionError>);
+  });
+
+  it("rejects schema-invalid core session set writes", async () => {
+    const write = vi.fn();
+    const session = createTokenSession<void, TestUser, TestTokens>({
+      clear: () => undefined,
+      read : () => ({}),
+      tokenSchema: Tokens,
+      useRefreshToken: false,
+      userSchema : User,
+      write
+    });
+
+    await expect(session.set(undefined, {
+      tokens: {
+        accessToken: "valid-token"
+      },
+      user: {
+        id: 123
+      } as unknown as TestUser
+    })).rejects.toMatchObject({
+      reason: "unauthorized"
+    } satisfies Partial<TokenSessionError>);
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it("rejects token-invalid core updateUser writes", async () => {
+    const write = vi.fn();
+    const session = createTokenSession<void, TestUser, TestTokens>({
+      clear: () => undefined,
+      read : () => ({
+        tokens: {
+          accessToken: ""
+        },
+        user: {
+          id: "user-1"
+        }
+      }),
+      tokenSchema: Tokens,
+      useRefreshToken: false,
+      userSchema : User,
+      write
+    });
+
+    await expect(session.updateUser(undefined, {
+      id: "user-2"
+    })).rejects.toMatchObject({
+      reason: "invalid_token"
+    } satisfies Partial<TokenSessionError>);
+    expect(write).not.toHaveBeenCalled();
+  });
+
   it("parses token pairs with configured token and JWT schemas", () => {
     const accessToken = createToken({
       exp: 1_700_003_600
@@ -381,6 +453,69 @@ describe("session module", () => {
     ]);
   });
 
+  it("keeps refresh single-flight isolated per session controller", async () => {
+    const refreshGate = createDeferred<void>();
+    const createController = (name: string) => {
+      let storedSession: TestSession = {
+        tokens: {
+          accessToken : `expired-${name}`,
+          refreshToken: "controller-isolation-refresh-token"
+        },
+        user: {
+          id: `user-${name}`
+        }
+      };
+      const refreshTokens = vi.fn(async () => {
+        await refreshGate.promise;
+
+        return {
+          accessToken : `fresh-${name}`,
+          refreshToken: `next-${name}`
+        };
+      });
+      const session = createTokenSession<void, TestUser, TestTokens>({
+        clear: () => {
+          storedSession = {};
+        },
+        read: () => storedSession,
+        refreshTokens,
+        tokenSchema: Tokens,
+        userSchema : User,
+        write: (_context, nextSession) => {
+          storedSession = nextSession;
+        }
+      });
+
+      return {
+        getStoredSession: () => storedSession,
+        refreshTokens,
+        session
+      };
+    };
+    const controllerA = createController("a");
+    const controllerB = createController("b");
+    const refreshA = controllerA.session.refresh(undefined);
+    const refreshB = controllerB.session.refresh(undefined);
+
+    await vi.waitFor(() => {
+      const refreshCalls = controllerA.refreshTokens.mock.calls.length
+        + controllerB.refreshTokens.mock.calls.length;
+
+      expect(refreshCalls).toBeGreaterThan(0);
+    });
+
+    refreshGate.resolve();
+
+    await expect(Promise.all([refreshA, refreshB])).resolves.toEqual([
+      "fresh-a",
+      "fresh-b"
+    ]);
+    expect(controllerA.refreshTokens).toHaveBeenCalledTimes(1);
+    expect(controllerB.refreshTokens).toHaveBeenCalledTimes(1);
+    expect(controllerA.getStoredSession().tokens?.refreshToken).toBe("next-a");
+    expect(controllerB.getStoredSession().tokens?.refreshToken).toBe("next-b");
+  });
+
   it("shares rotated session tokens across concurrent retried API requests", async () => {
     const nowSeconds = 1_700_000_000;
     const expiringAccessToken = createToken({
@@ -627,6 +762,229 @@ describe("session module", () => {
     expect(restoredSession.get().tokens?.accessToken).toBe("react-token");
 
     unsubscribe();
+  });
+
+  it("uses memory storage by default and with explicit memory storage", async () => {
+    const localStorage = createMemoryStorage();
+
+    vi.stubGlobal("localStorage", localStorage);
+
+    try {
+      for (const storage of [undefined, "memory"] as const) {
+        const storageKey = `memory-session-${storage ?? "default"}`;
+        const session = createReactTokenSession<TestUser, TestTokens>({
+          storage,
+          storageKey,
+          tokenSchema: Tokens,
+          useRefreshToken: false,
+          userSchema : User
+        });
+
+        await session.set({
+          tokens: {
+            accessToken: "memory-token"
+          },
+          user: {
+            id: "user-1"
+          }
+        });
+
+        expect(session.get().tokens?.accessToken).toBe("memory-token");
+        expect(localStorage.getItem(storageKey)).toBeNull();
+      }
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("persists React sessions only with explicit local or session storage", async () => {
+    const localStorage   = createMemoryStorage();
+    const sessionStorage = createMemoryStorage();
+
+    vi.stubGlobal("localStorage", localStorage);
+    vi.stubGlobal("sessionStorage", sessionStorage);
+
+    try {
+      const localSession = createReactTokenSession<TestUser, TestTokens>({
+        storage   : "local",
+        storageKey: "local-session",
+        tokenSchema: Tokens,
+        useRefreshToken: false,
+        userSchema : User
+      });
+      const browserSession = createReactTokenSession<TestUser, TestTokens>({
+        storage   : "session",
+        storageKey: "browser-session",
+        tokenSchema: Tokens,
+        useRefreshToken: false,
+        userSchema : User
+      });
+
+      await localSession.set({
+        tokens: {
+          accessToken: "local-token"
+        },
+        user: {
+          id: "local-user"
+        }
+      });
+      await browserSession.set({
+        tokens: {
+          accessToken: "session-token"
+        },
+        user: {
+          id: "session-user"
+        }
+      });
+
+      expect(JSON.parse(localStorage.getItem("local-session") ?? "null")).toEqual({
+        tokens: {
+          accessToken: "local-token"
+        },
+        user: {
+          id: "local-user"
+        }
+      });
+      expect(JSON.parse(sessionStorage.getItem("browser-session") ?? "null")).toEqual({
+        tokens: {
+          accessToken: "session-token"
+        },
+        user: {
+          id: "session-user"
+        }
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("clears corrupt stored React session JSON", () => {
+    const storage = createMemoryStorage();
+
+    storage.setItem("corrupt-session", "{broken");
+
+    const session = createReactTokenSession<TestUser, TestTokens>({
+      storage,
+      storageKey: "corrupt-session",
+      tokenSchema: Tokens,
+      useRefreshToken: false,
+      userSchema : User
+    });
+
+    expect(session.get()).toEqual({});
+    expect(storage.getItem("corrupt-session")).toBeNull();
+  });
+
+  it("clears empty stored React session JSON", () => {
+    const storage = createMemoryStorage();
+
+    storage.setItem("empty-session", "");
+
+    createReactTokenSession<TestUser, TestTokens>({
+      storage,
+      storageKey: "empty-session",
+      tokenSchema: Tokens,
+      useRefreshToken: false,
+      userSchema : User
+    });
+
+    expect(storage.getItem("empty-session")).toBeNull();
+  });
+
+  it("clears schema-invalid restored React sessions", () => {
+    const storage = createMemoryStorage();
+
+    storage.setItem("invalid-session", JSON.stringify({
+      tokens: {
+        accessToken: "stored-token"
+      },
+      user: {
+        id: 123
+      }
+    }));
+
+    const session = createReactTokenSession<TestUser, TestTokens>({
+      storage,
+      storageKey: "invalid-session",
+      tokenSchema: Tokens,
+      useRefreshToken: false,
+      userSchema : User
+    });
+
+    expect(session.get()).toEqual({});
+    expect(storage.getItem("invalid-session")).toBeNull();
+  });
+
+  it("clears schema-invalid array React sessions", () => {
+    const storage = createMemoryStorage();
+
+    storage.setItem("array-session", "[]");
+
+    const session = createReactTokenSession<TestUser, TestTokens>({
+      storage,
+      storageKey: "array-session",
+      tokenSchema: Tokens,
+      useRefreshToken: false,
+      userSchema : User
+    });
+
+    expect(session.get()).toEqual({});
+    expect(storage.getItem("array-session")).toBeNull();
+  });
+
+  it("rejects schema-invalid React session set writes", async () => {
+    const storage = createMemoryStorage();
+    const session = createReactTokenSession<TestUser, TestTokens>({
+      storage,
+      storageKey: "invalid-set-session",
+      tokenSchema: Tokens,
+      useRefreshToken: false,
+      userSchema : User
+    });
+
+    await expect(session.set({
+      tokens: {
+        accessToken: ""
+      },
+      user: {
+        id: "user-1"
+      }
+    })).rejects.toMatchObject({
+      reason: "invalid_token"
+    } satisfies Partial<TokenSessionError>);
+    expect(session.get()).toEqual({});
+    expect(storage.getItem("invalid-set-session")).toBeNull();
+  });
+
+  it("rejects schema-invalid React updateUser writes without changing storage", async () => {
+    const storage = createMemoryStorage();
+    const session = createReactTokenSession<TestUser, TestTokens>({
+      storage,
+      storageKey: "invalid-user-session",
+      tokenSchema: Tokens,
+      useRefreshToken: false,
+      userSchema : User
+    });
+
+    await session.set({
+      tokens: {
+        accessToken: "valid-token"
+      },
+      user: {
+        id: "user-1"
+      }
+    });
+    const storedSession = storage.getItem("invalid-user-session");
+
+    await expect(session.updateUser({
+      id: 123
+    } as unknown as TestUser)).rejects.toMatchObject({
+      reason: "unauthorized"
+    } satisfies Partial<TokenSessionError>);
+    expect(session.get().user).toEqual({
+      id: "user-1"
+    });
+    expect(storage.getItem("invalid-user-session")).toBe(storedSession);
   });
 });
 

@@ -1,5 +1,8 @@
 import { useSyncExternalStore } from "react";
-import { createTokenSession } from "./core.js";
+import {
+  createTokenSession,
+  createTokenSessionParsers
+} from "./core.js";
 import type {
   TokenSessionController,
   TokenSessionData,
@@ -10,7 +13,7 @@ import type { JwtPayload } from "../jwt/index.js";
 
 // Storage types
 /** Represents react session storage name */
-export type ReactSessionStorageName = "local" | "session";
+export type ReactSessionStorageName = "local" | "memory" | "session";
 
 /** Represents react session storage */
 export type ReactSessionStorage = Readonly<{
@@ -71,10 +74,19 @@ export const createReactTokenSession = <
 >(
   options: ReactTokenSessionOptions<TUser, TTokens, TClaims>
 ): ReactTokenSession<TUser, TTokens> => {
-  const storage       = resolveStorage(options.storage);
-  const serverSession = options.serverSession ?? options.initialSession ?? {};
-  const listeners     = new Set<() => void>();
-  let snapshot        = readStoredSession(storage, options.storageKey, serverSession);
+  const storage          = resolveStorage(options.storage);
+  const { parseSession } = createTokenSessionParsers(options);
+  const serverSession    = parseRestoredSession(
+    options.serverSession ?? options.initialSession ?? {},
+    parseSession
+  );
+  const listeners        = new Set<() => void>();
+  let snapshot            = readStoredSession(
+    storage,
+    options.storageKey,
+    serverSession,
+    parseSession
+  );
 
   const notify = () => {
     for (const listener of listeners) {
@@ -108,10 +120,17 @@ export const createReactTokenSession = <
   const subscribe = (listener: () => void) => {
     listeners.add(listener);
 
-    const removeStorageListener = addStorageListener(options.storageKey, () => {
-      snapshot = readStoredSession(storage, options.storageKey, serverSession);
-      notify();
-    });
+    const removeStorageListener = storage
+      ? addStorageListener(options.storageKey, () => {
+        snapshot = readStoredSession(
+          storage,
+          options.storageKey,
+          serverSession,
+          parseSession
+        );
+        notify();
+      })
+      : () => undefined;
 
     return () => {
       listeners.delete(listener);
@@ -151,20 +170,41 @@ const readStoredSession = <
 >(
   storage: ReactSessionStorage | null,
   key: string,
-  fallback: TokenSessionData<TUser, TTokens>
+  fallback: TokenSessionData<TUser, TTokens>,
+  parseSession: (value: unknown) => TokenSessionData<TUser, TTokens>
 ): TokenSessionData<TUser, TTokens> => {
-  const value = storage?.getItem(key);
+  if (!storage) {
+    return fallback;
+  }
 
-  if (!value) {
+  const value = storage.getItem(key);
+
+  if (value === null) {
     return fallback;
   }
 
   try {
     const parsed = JSON.parse(value) as unknown;
 
-    return isRecord(parsed) ? parsed as TokenSessionData<TUser, TTokens> : fallback;
+    return parseSession(parsed);
   } catch {
+    storage.removeItem(key);
+
     return fallback;
+  }
+};
+
+const parseRestoredSession = <
+  TUser,
+  TTokens extends TokenSessionTokens
+>(
+  value: unknown,
+  parseSession: (value: unknown) => TokenSessionData<TUser, TTokens>
+): TokenSessionData<TUser, TTokens> => {
+  try {
+    return parseSession(value);
+  } catch {
+    return {};
   }
 };
 
@@ -184,7 +224,11 @@ const resolveStorage = (
     return root.sessionStorage ?? null;
   }
 
-  return root.localStorage ?? null;
+  if (storage === "local") {
+    return root.localStorage ?? null;
+  }
+
+  return null;
 };
 
 const addStorageListener = (

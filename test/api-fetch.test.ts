@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import {
   ApiAbortError,
@@ -22,7 +22,8 @@ import {
   z
 } from "../src/api-fetch/index.js";
 import {
-  createApiFetcher as createSvelteKitApiFetcher
+  createApiFetcher as createSvelteKitApiFetcher,
+  type SvelteKitDirectRefreshAuthOptions
 } from "../src/api-fetch/sveltekit.js";
 import {
   createServerClock
@@ -1053,9 +1054,15 @@ describe("api-fetch", () => {
     });
   });
 
-  it("dedupes SvelteKit auth refreshes across fetcher instances with the same access token", async () => {
-    const cookiesA = { accessToken: "expired" };
-    const cookiesB = { accessToken: "expired" };
+  it("shares SvelteKit refresh results and applies them to every cookie context", async () => {
+    const cookiesA = {
+      accessToken: "expired-shared",
+      refreshKey : "shared-refresh"
+    };
+    const cookiesB = {
+      accessToken: "expired-shared",
+      refreshKey : "shared-refresh"
+    };
     const refreshGate = createDeferred<void>();
     const fetch = vi.fn<FetchLike>(async (_input, init) => {
       const headers = new Headers(init?.headers);
@@ -1066,14 +1073,26 @@ describe("api-fetch", () => {
 
       return jsonResponse({ message: "expired" }, 401);
     });
-    const refresh = vi.fn(async (cookies: typeof cookiesA) => {
+    const refresh = vi.fn(async () => {
       await refreshGate.promise;
-      cookies.accessToken = "fresh";
 
-      return "fresh";
+      return {
+        accessToken: "fresh"
+      };
+    });
+    const applyRefresh = vi.fn(async (
+      cookies: typeof cookiesA,
+      result: { accessToken: string }
+    ) => {
+      cookies.accessToken = result.accessToken;
+
+      return cookies.accessToken;
     });
     const auth = {
+      applyRefresh,
       getAccessToken: (cookies: typeof cookiesA) => cookies.accessToken,
+      getRefreshKey : (cookies: typeof cookiesA) => cookies.refreshKey,
+      namespace     : "shared-cookie-contexts",
       refresh
     };
     const apiA = createSvelteKitApiFetcher({
@@ -1111,31 +1130,102 @@ describe("api-fetch", () => {
       }
     ]);
     expect(refresh).toHaveBeenCalledTimes(1);
+    expect(applyRefresh).toHaveBeenCalledTimes(2);
     expect(fetch).toHaveBeenCalledTimes(4);
+    expect(cookiesA.accessToken).toBe("fresh");
+    expect(cookiesB.accessToken).toBe("fresh");
   });
 
-  it("keeps SvelteKit auth refreshes separate for different access tokens", async () => {
-    const cookiesA = { accessToken: "expired-a" };
-    const cookiesB = { accessToken: "expired-b" };
+  it("keeps SvelteKit refreshes separate for different namespaces", async () => {
+    const cookiesA = {
+      accessToken: "expired-namespace",
+      id         : "a",
+      refreshKey : "shared-refresh"
+    };
+    const cookiesB = {
+      accessToken: "expired-namespace",
+      id         : "b",
+      refreshKey : "shared-refresh"
+    };
     const fetch = vi.fn<FetchLike>(async (_input, init) => {
       const headers = new Headers(init?.headers);
       const authorization = headers.get("Authorization");
 
-      if (authorization === "Bearer fresh-expired-a" || authorization === "Bearer fresh-expired-b") {
+      if (authorization === "Bearer fresh-a" || authorization === "Bearer fresh-b") {
         return jsonResponse({ ok: true });
       }
 
       return jsonResponse({ message: "expired" }, 401);
     });
     const refresh = vi.fn(async (cookies: typeof cookiesA) => {
-      const accessToken = `fresh-${cookies.accessToken}`;
-
-      cookies.accessToken = accessToken;
-
-      return accessToken;
+      return {
+        accessToken: `fresh-${cookies.id}`
+      };
     });
-    const auth = {
+    const createAuth = (namespace: string) => ({
+      applyRefresh: async (
+        cookies: typeof cookiesA,
+        result: { accessToken: string }
+      ) => {
+        cookies.accessToken = result.accessToken;
+
+        return cookies.accessToken;
+      },
       getAccessToken: (cookies: typeof cookiesA) => cookies.accessToken,
+      getRefreshKey : (cookies: typeof cookiesA) => cookies.refreshKey,
+      namespace,
+      refresh
+    });
+
+    await Promise.all([
+      createSvelteKitApiFetcher({
+        cookies: cookiesA,
+        fetch,
+        auth   : createAuth("namespace-a")
+      }).get("/me"),
+      createSvelteKitApiFetcher({
+        cookies: cookiesB,
+        fetch,
+        auth   : createAuth("namespace-b")
+      }).get("/me")
+    ]);
+
+    expect(refresh).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps SvelteKit refreshes separate for different refresh keys", async () => {
+    const cookiesA = {
+      accessToken: "expired-keys",
+      refreshKey : "refresh-a"
+    };
+    const cookiesB = {
+      accessToken: "expired-keys",
+      refreshKey : "refresh-b"
+    };
+    const fetch = vi.fn<FetchLike>(async (_input, init) => {
+      const accessToken = new Headers(init?.headers)
+        .get("Authorization")
+        ?.replace("Bearer ", "");
+
+      return accessToken?.startsWith("fresh-")
+        ? jsonResponse({ ok: true })
+        : jsonResponse({ message: "expired" }, 401);
+    });
+    const refresh = vi.fn(async (cookies: typeof cookiesA) => ({
+      accessToken: `fresh-${cookies.refreshKey}`
+    }));
+    const auth = {
+      applyRefresh: async (
+        cookies: typeof cookiesA,
+        result: { accessToken: string }
+      ) => {
+        cookies.accessToken = result.accessToken;
+
+        return cookies.accessToken;
+      },
+      getAccessToken: (cookies: typeof cookiesA) => cookies.accessToken,
+      getRefreshKey : (cookies: typeof cookiesA) => cookies.refreshKey,
+      namespace     : "separate-refresh-keys",
       refresh
     };
 
@@ -1153,6 +1243,212 @@ describe("api-fetch", () => {
     ]);
 
     expect(refresh).toHaveBeenCalledTimes(2);
+    expect(cookiesA.accessToken).toBe("fresh-refresh-a");
+    expect(cookiesB.accessToken).toBe("fresh-refresh-b");
+  });
+
+  it("evicts failed SvelteKit refreshes before the next request", async () => {
+    const cookies = {
+      accessToken: "expired-failure",
+      refreshKey : "retry-refresh"
+    };
+    const refreshError = new Error("refresh failed");
+    const refresh = vi.fn()
+      .mockRejectedValueOnce(refreshError)
+      .mockResolvedValueOnce({ accessToken: "fresh" });
+    const clear = vi.fn(async () => undefined);
+    const api = createSvelteKitApiFetcher({
+      cookies,
+      fetch: async (_input, init) => (
+        new Headers(init?.headers).get("Authorization") === "Bearer fresh"
+          ? jsonResponse({ ok: true })
+          : jsonResponse({ message: "expired" }, 401)
+      ),
+      auth: {
+        applyRefresh: async (context, result: { accessToken: string }) => {
+          context.accessToken = result.accessToken;
+
+          return context.accessToken;
+        },
+        clear,
+        getAccessToken: (context) => context.accessToken,
+        getRefreshKey : (context) => context.refreshKey,
+        namespace     : "failed-refresh-eviction",
+        refresh
+      }
+    });
+
+    await expect(api.get("/me")).rejects.toMatchObject({
+      cause: refreshError,
+      name : "ApiAuthError"
+    });
+    await expect(api.get("/me")).resolves.toMatchObject({
+      response: { ok: true }
+    });
+    expect(refresh).toHaveBeenCalledTimes(2);
+    expect(clear).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears only the SvelteKit cookie context whose refresh apply fails", async () => {
+    const cookiesA = {
+      accessToken: "expired-apply",
+      cleared    : false,
+      id         : "a",
+      refreshKey : "shared-apply"
+    };
+    const cookiesB = {
+      accessToken: "expired-apply",
+      cleared    : false,
+      id         : "b",
+      refreshKey : "shared-apply"
+    };
+    const refreshGate = createDeferred<void>();
+    const refresh = vi.fn(async () => {
+      await refreshGate.promise;
+
+      return { accessToken: "fresh" };
+    });
+    const applyRefresh = vi.fn(async (
+      cookies: typeof cookiesA,
+      result: { accessToken: string }
+    ) => {
+      if (cookies.id === "a") {
+        throw new Error("cookie write failed");
+      }
+
+      cookies.accessToken = result.accessToken;
+
+      return cookies.accessToken;
+    });
+    const clear = vi.fn(async (cookies: typeof cookiesA) => {
+      cookies.accessToken = "";
+      cookies.cleared     = true;
+    });
+    const auth = {
+      applyRefresh,
+      clear,
+      getAccessToken: (cookies: typeof cookiesA) => cookies.accessToken,
+      getRefreshKey : (cookies: typeof cookiesA) => cookies.refreshKey,
+      namespace     : "apply-failure-context",
+      refresh
+    };
+    const fetch = vi.fn<FetchLike>(async (_input, init) => (
+      new Headers(init?.headers).get("Authorization") === "Bearer fresh"
+        ? jsonResponse({ ok: true })
+        : jsonResponse({ message: "expired" }, 401)
+    ));
+    const requestA = createSvelteKitApiFetcher({
+      cookies: cookiesA,
+      fetch,
+      auth
+    }).get("/me");
+    const requestB = createSvelteKitApiFetcher({
+      cookies: cookiesB,
+      fetch,
+      auth
+    }).get("/me");
+    const resultA = requestA.catch((error: unknown) => error);
+    const resultB = requestB.catch((error: unknown) => error);
+
+    await vi.waitFor(() => {
+      expect(refresh).toHaveBeenCalledTimes(1);
+    });
+
+    refreshGate.resolve();
+
+    await expect(resultA).resolves.toBeInstanceOf(ApiAuthError);
+    await expect(resultB).resolves.toMatchObject({
+      response: { ok: true }
+    });
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(applyRefresh).toHaveBeenCalledTimes(2);
+    expect(clear).toHaveBeenCalledTimes(1);
+    expect(clear).toHaveBeenCalledWith(cookiesA);
+    expect(cookiesA.cleared).toBe(true);
+    expect(cookiesB.cleared).toBe(false);
+    expect(cookiesB.accessToken).toBe("fresh");
+  });
+
+  it("requires applyRefresh for deduped SvelteKit refreshes", () => {
+    expect(() => createSvelteKitApiFetcher({
+      cookies: { accessToken: "expired" },
+      fetch  : async () => jsonResponse({ ok: true }),
+      auth   : {
+        getAccessToken: (cookies: { accessToken: string }) => cookies.accessToken,
+        refresh       : async () => "fresh"
+      } as never
+    })).toThrow(TypeError);
+  });
+
+  if (false) {
+    // @ts-expect-error deduped refresh requires applyRefresh
+    createSvelteKitApiFetcher({
+      cookies: { accessToken: "expired" },
+      fetch  : async () => jsonResponse({ ok: true }),
+      auth   : {
+        getAccessToken: (cookies: { accessToken: string }) => cookies.accessToken,
+        refresh       : async () => "fresh"
+      }
+    });
+  }
+
+  it("allows direct SvelteKit refresh without applyRefresh when dedupe is disabled", async () => {
+    const cookies = { accessToken: "expired-direct" };
+    const refresh = vi.fn(async (context: typeof cookies) => {
+      context.accessToken = "fresh";
+
+      return context.accessToken;
+    });
+    const api = createSvelteKitApiFetcher({
+      cookies,
+      dedupeRefresh: false,
+      fetch: async (_input, init) => (
+        new Headers(init?.headers).get("Authorization") === "Bearer fresh"
+          ? jsonResponse({ ok: true })
+          : jsonResponse({ message: "expired" }, 401)
+      ),
+      auth: {
+        getAccessToken: (context) => context.accessToken,
+        refresh
+      }
+    });
+
+    await expect(api.get("/me")).resolves.toMatchObject({
+      response: { ok: true }
+    });
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("passes custom non-HTTP errors to SvelteKit refresh as unknown", async () => {
+    const cookies = { accessToken: "expired-custom" };
+    const customError = new Error("custom auth failure");
+    const auth: SvelteKitDirectRefreshAuthOptions<typeof cookies> = {
+      getAccessToken: (context) => context.accessToken,
+      refresh: vi.fn(async (_context, error) => {
+        expectTypeOf(error).toBeUnknown;
+        expect(error).toBe(customError);
+        cookies.accessToken = "fresh";
+
+        return cookies.accessToken;
+      }),
+      shouldRefreshOnError: (error) => error === customError
+    };
+    const api = createSvelteKitApiFetcher({
+      cookies,
+      dedupeRefresh: false,
+      fetch: async (_input, init) => {
+        if (new Headers(init?.headers).get("Authorization") === "Bearer fresh") {
+          return jsonResponse({ ok: true });
+        }
+
+        throw customError;
+      },
+      auth
+    });
+
+    await expect(api.get("/me")).resolves.toMatchObject({
+      response: { ok: true }
+    });
   });
 
   it("creates reusable endpoints with path params, query, response schema, and select", async () => {
