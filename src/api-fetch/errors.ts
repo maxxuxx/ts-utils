@@ -3,24 +3,29 @@ import type {
   ApiHttpErrorOptions,
   ApiRequestContext
 } from "./types.js";
+import { redactApiUrl } from "./url.js";
+
+const sanitizeContext = (context: ApiRequestContext): ApiRequestContext => ({
+  method: context.method,
+  path  : redactApiUrl(context.path),
+  url   : redactApiUrl(context.url)
+});
 
 // HTTP errors
 /** Error raised for api http failures */
 export class ApiHttpError extends Error {
-  readonly body: unknown;
   readonly code: ApiErrorCode | undefined;
   readonly context: ApiRequestContext;
-  readonly response: Response;
   readonly status: number;
-  readonly statusText: string;
 
   constructor(
     response: Response,
-    body: unknown,
+    _body: unknown,
     context: ApiRequestContext,
     options: ApiHttpErrorOptions | string = {}
   ) {
-    const defaultMessage = `API request failed: ${context.method} ${context.url} (${response.status})`;
+    const safeContext    = sanitizeContext(context);
+    const defaultMessage = `API request failed: ${safeContext.method} ${safeContext.url} (${response.status})`;
     const message = typeof options === "string"
       ? options
       : options.message ?? defaultMessage;
@@ -28,12 +33,9 @@ export class ApiHttpError extends Error {
     super(message);
 
     this.name       = "ApiHttpError";
-    this.body       = body;
     this.code       = typeof options === "string" ? undefined : options.code;
-    this.context    = context;
-    this.response   = response;
+    this.context    = safeContext;
     this.status     = response.status;
-    this.statusText = response.statusText;
   }
 }
 
@@ -62,24 +64,22 @@ export const getApiErrorCode = (data: unknown): ApiErrorCode | undefined => {
 // Validation errors
 /** Error raised for api validation failures */
 export class ApiValidationError extends Error {
-  readonly body: unknown;
   readonly context: ApiRequestContext;
   readonly target: "request" | "response";
-  readonly validationError: unknown;
 
   constructor(
     target: "request" | "response",
-    validationError: unknown,
-    body: unknown,
+    _validationError: unknown,
+    _body: unknown,
     context: ApiRequestContext
   ) {
-    super(`API ${target} validation failed: ${context.method} ${context.url}`);
+    const safeContext = sanitizeContext(context);
 
-    this.name            = "ApiValidationError";
-    this.body            = body;
-    this.context         = context;
-    this.target          = target;
-    this.validationError = validationError;
+    super(`API ${target} validation failed: ${safeContext.method} ${safeContext.url}`);
+
+    this.name    = "ApiValidationError";
+    this.context = safeContext;
+    this.target  = target;
   }
 }
 
@@ -88,15 +88,15 @@ export class ApiValidationError extends Error {
 export class ApiParseError extends Error {
   readonly context: ApiRequestContext;
   readonly status: number;
-  readonly text: string;
 
-  constructor(response: Response, text: string, context: ApiRequestContext) {
-    super(`API response parse failed: ${context.method} ${context.url} (${response.status})`);
+  constructor(response: Response, _text: string, context: ApiRequestContext) {
+    const safeContext = sanitizeContext(context);
+
+    super(`API response parse failed: ${safeContext.method} ${safeContext.url} (${response.status})`);
 
     this.name    = "ApiParseError";
-    this.context = context;
+    this.context = safeContext;
     this.status  = response.status;
-    this.text    = text;
   }
 }
 
@@ -107,10 +107,12 @@ export class ApiTimeoutError extends Error {
   readonly timeout: number;
 
   constructor(timeout: number, context: ApiRequestContext) {
-    super(`API request timed out: ${context.method} ${context.url} (${timeout}ms)`);
+    const safeContext = sanitizeContext(context);
+
+    super(`API request timed out: ${safeContext.method} ${safeContext.url} (${timeout}ms)`);
 
     this.name    = "ApiTimeoutError";
-    this.context = context;
+    this.context = safeContext;
     this.timeout = timeout;
   }
 }
@@ -122,11 +124,13 @@ export class ApiAbortError extends Error {
   readonly context: ApiRequestContext;
 
   constructor(cause: unknown, context: ApiRequestContext) {
-    super(`API request aborted: ${context.method} ${context.url}`);
+    const safeContext = sanitizeContext(context);
+
+    super(`API request aborted: ${safeContext.method} ${safeContext.url}`);
 
     this.name    = "ApiAbortError";
     this.cause   = cause;
-    this.context = context;
+    this.context = safeContext;
   }
 }
 
@@ -138,10 +142,12 @@ export class ApiResponseSizeError extends Error {
   readonly size: number;
 
   constructor(limit: number, size: number, context: ApiRequestContext) {
-    super(`API response exceeded ${limit} bytes: ${context.method} ${context.url}`);
+    const safeContext = sanitizeContext(context);
+
+    super(`API response exceeded ${limit} bytes: ${safeContext.method} ${safeContext.url}`);
 
     this.name    = "ApiResponseSizeError";
-    this.context = context;
+    this.context = safeContext;
     this.limit   = limit;
     this.size    = size;
   }
@@ -162,6 +168,6 @@ export class ApiAuthError extends Error {
 
     this.name    = "ApiAuthError";
     this.cause   = cause;
-    this.context = context;
+    this.context = context ? sanitizeContext(context) : undefined;
   }
 }

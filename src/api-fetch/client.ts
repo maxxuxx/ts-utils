@@ -4,6 +4,7 @@ import {
   readResponseBody,
   validateMaxResponseBytes
 } from "./body.js";
+import type { ParsedRequestBody } from "./body.js";
 import {
   ApiAbortError,
   ApiAuthError,
@@ -60,6 +61,7 @@ type ResolvedApiFetcherOptions = Omit<ApiFetcherOptions, "serverTime"> & {
 
 type RequestExecutionState = {
   networkAttempt: number;
+  parsedBody     ?: ParsedRequestBody;
   retriesUsed   : number;
 };
 
@@ -111,7 +113,7 @@ export const createApiFetcher = (
     const resolvedURL = buildApiUrl(path, baseURL);
     const authContext = {
       method,
-      path,
+      path: redactApiUrl(path),
       url: redactApiUrl(resolvedURL)
     };
     const authEnabled = requestOptions.auth !== false
@@ -149,8 +151,12 @@ export const createApiFetcher = (
         executionState
       );
     } catch (error) {
-      if (!isRequestBodyReplayable(requestOptions) || !shouldRefreshAuth(error, options)) {
+      if (!isAuthFailure(error, options)) {
         throw error;
+      }
+
+      if (!options.auth?.refresh || !isRequestBodyReplayable(requestOptions)) {
+        return throwAuthError(options.auth, error, authContext);
       }
 
       let nextAccessToken: string | null | undefined;
@@ -177,7 +183,7 @@ export const createApiFetcher = (
           executionState
         );
       } catch (retryError) {
-        if (!shouldRefreshAuth(retryError, options)) {
+        if (!isAuthFailure(retryError, options)) {
           throw retryError;
         }
 
@@ -246,7 +252,7 @@ const sendRequest = async <
   const startedAt = Date.now();
   const context = {
     method,
-    path,
+    path: redactApiUrl(path),
     startedAt,
     url: redactApiUrl(url)
   };
@@ -256,11 +262,7 @@ const sendRequest = async <
     maxResponseBytes ?? clientOptions.maxResponseBytes
   );
   const bodyReplayable = isRequestBodyReplayable(options);
-  let parsedBody       = await parseRequestBody(
-    options,
-    context,
-    executionState.networkAttempt += 1
-  );
+  let parsedBody       = await getRequestBody(options, context, executionState);
   const headersInit = buildHeaders(
     mergeHeaders(clientOptions.headers, headers),
     accessToken,
@@ -272,11 +274,7 @@ const sendRequest = async <
 
   for (let attempt = 0; ; attempt += 1) {
     if (attempt > 0) {
-      parsedBody = await parseRequestBody(
-        options,
-        context,
-        executionState.networkAttempt += 1
-      );
+      parsedBody = await getRequestBody(options, context, executionState);
     }
 
     const signal = createRequestSignal(fetchOptions.signal, timeoutMs);
@@ -312,7 +310,7 @@ const sendRequest = async <
           context,
           {
             code   : getApiErrorCode(responseBody) ?? resolvedErrorFallback?.code,
-            message: getApiMessage(responseBody) ?? resolvedErrorFallback?.message
+            message: resolvedErrorFallback?.message
           }
         );
 
@@ -497,11 +495,11 @@ const isResponseProcessingError = (
 );
 
 // Auth helpers
-const shouldRefreshAuth = (
+const isAuthFailure = (
   error: unknown,
   options: ApiFetcherOptions
 ): boolean => {
-  if (!options.auth?.refresh) {
+  if (!options.auth) {
     return false;
   }
 
@@ -653,9 +651,36 @@ const isRequestBodyReplayable = (
   options: Pick<ApiRequestOptions, "rawBody" | "rawBodyFactory">
 ): boolean => (
   options.rawBodyFactory !== undefined
-  || typeof ReadableStream === "undefined"
-  || !(options.rawBody instanceof ReadableStream)
+  || !isOneShotStream(options.rawBody)
 );
+
+const isOneShotStream = (value: unknown): boolean => (
+  typeof value === "object"
+  && value !== null
+  && typeof (value as { getReader?: unknown }).getReader === "function"
+);
+
+const getRequestBody = async <
+  TBodySchema extends OptionalSchema,
+  TResponseSchema extends OptionalSchema,
+  TResult
+>(
+  options: ApiRequestOptions<TBodySchema, TResponseSchema, TResult>,
+  context: ApiRequestContext,
+  state: RequestExecutionState
+): Promise<ParsedRequestBody> => {
+  state.networkAttempt += 1;
+
+  if (options.rawBodyFactory) {
+    return parseRequestBody(options, context, state.networkAttempt);
+  }
+
+  if (!state.parsedBody) {
+    state.parsedBody = await parseRequestBody(options, context, state.networkAttempt);
+  }
+
+  return state.parsedBody;
+};
 
 const waitForRetry = async (
   options: ResolvedRetryOptions,
@@ -664,15 +689,23 @@ const waitForRetry = async (
 ): Promise<void> => {
   const delay = getRetryDelay(options, context, Date.now(), Math.random());
 
-  if (delay <= 0) {
-    if (signal?.aborted) {
-      await sleep(0, { signal });
+  try {
+    if (delay <= 0) {
+      if (signal?.aborted) {
+        await sleep(0, { signal });
+      }
+
+      return;
     }
 
-    return;
-  }
+    await sleep(delay, { signal: signal ?? undefined });
+  } catch (error) {
+    if (signal?.aborted) {
+      throw new ApiAbortError(signal.reason, context);
+    }
 
-  await sleep(delay, { signal: signal ?? undefined });
+    throw error;
+  }
 };
 
 // Signal helpers

@@ -338,7 +338,7 @@ describe("api-fetch", () => {
     expect(clock.getServerTimeMs()).toBe(3_950);
   });
 
-  it("throws typed HTTP errors with parsed response bodies", async () => {
+  it("throws typed HTTP errors with sanitized public properties", async () => {
     const fetch = vi.fn<FetchLike>(async () => jsonResponse({
       code   : "UNAUTHORIZED",
       message: "unauthorized"
@@ -348,12 +348,8 @@ describe("api-fetch", () => {
     await expect(api.get("/me", {
       responseSchema: User
     })).rejects.toMatchObject({
-      body  : {
-        code   : "UNAUTHORIZED",
-        message: "unauthorized"
-      },
       code   : "UNAUTHORIZED",
-      message: "unauthorized",
+      message: "API request failed: GET /me (401)",
       status: 401
     } satisfies Partial<ApiHttpError>);
   });
@@ -379,7 +375,6 @@ describe("api-fetch", () => {
         message: "내 정보를 불러오지 못했습니다"
       }
     })).rejects.toMatchObject({
-      body   : { error: "denied" },
       code   : "REQUEST_FAILED",
       message: "내 정보를 불러오지 못했습니다",
       status : 403
@@ -403,7 +398,7 @@ describe("api-fetch", () => {
     } satisfies Partial<ApiHttpError>);
   });
 
-  it("keeps server error code and message before fallback values", async () => {
+  it("keeps server error codes while using configured safe messages", async () => {
     const fetch = vi.fn<FetchLike>(async () => jsonResponse({
       code   : 1001,
       message: "server failed"
@@ -418,7 +413,7 @@ describe("api-fetch", () => {
 
     await expect(api.get("/server-error")).rejects.toMatchObject({
       code   : 1001,
-      message: "server failed",
+      message: "request failed",
       status : 500
     } satisfies Partial<ApiHttpError>);
   });
@@ -460,6 +455,202 @@ describe("api-fetch", () => {
     await api.get("https://uploads.example.com/avatar");
 
     expect(capturedHeaders?.get("Authorization")).toBe("Bearer secret");
+  });
+
+  it.each([
+    String.raw`\\attacker.example\collect`,
+    String.raw`/\attacker.example/collect`,
+    "  //attacker.example/collect"
+  ])("omits auth headers from ambiguous network path %s", async (path) => {
+    for (const baseURL of [undefined, "https://api.example.com"]) {
+      let capturedHeaders: Headers | undefined;
+      const api = createApiFetcher({
+        baseURL,
+        auth: {
+          getAccessToken: async () => "secret"
+        },
+        fetch: async (_input, init) => {
+          capturedHeaders = new Headers(init?.headers);
+
+          return jsonResponse({ ok: true });
+        }
+      });
+
+      await api.get(path);
+
+      expect(capturedHeaders?.get("Authorization")).toBeNull();
+    }
+  });
+
+  it("does not trust the internal relative-resolution origin", async () => {
+    let capturedHeaders: Headers | undefined;
+    const api = createApiFetcher({
+      auth: {
+        getAccessToken: async () => "secret"
+      },
+      fetch: async (_input, init) => {
+        capturedHeaders = new Headers(init?.headers);
+
+        return jsonResponse({ ok: true });
+      }
+    });
+
+    await api.get("https://relative.invalid/collect");
+
+    expect(capturedHeaders?.get("Authorization")).toBeNull();
+  });
+
+  it.each([
+    "//relative.invalid/collect",
+    String.raw`\\relative.invalid\collect`
+  ])("does not trust sentinel-origin network path %s", async (path) => {
+    let capturedHeaders: Headers | undefined;
+    const api = createApiFetcher({
+      auth: {
+        getAccessToken: async () => "secret"
+      },
+      fetch: async (_input, init) => {
+        capturedHeaders = new Headers(init?.headers);
+
+        return jsonResponse({ ok: true });
+      }
+    });
+
+    await api.get(path);
+
+    expect(capturedHeaders?.get("Authorization")).toBeNull();
+  });
+
+  it("keeps secrets unreachable from public HTTP error properties", async () => {
+    const api = createApiFetcher({
+      baseURL: "https://api.example.com",
+      fetch  : async () => jsonResponse({
+        message: "upstream-token",
+        secret : "response-body-token"
+      }, 403, {
+        "X-Secret": "response-header-token"
+      })
+    });
+    const error = await api.get("/private?token=query-token#fragment-token")
+      .catch((reason: unknown) => reason);
+
+    expect(error).toBeInstanceOf(ApiHttpError);
+    expect(error).not.toHaveProperty("body");
+    expect(error).not.toHaveProperty("response");
+    expect(error).not.toHaveProperty("statusText");
+    expect(error).toMatchObject({
+      context: {
+        path: "/private",
+        url : "https://api.example.com/private"
+      }
+    });
+
+    const exposed = JSON.stringify(Object.fromEntries(
+      Object.getOwnPropertyNames(error as object).map((key) => [
+        key,
+        (error as Record<string, unknown>)[key]
+      ])
+    ));
+
+    expect(exposed).not.toContain("query-token");
+    expect(exposed).not.toContain("fragment-token");
+    expect(exposed).not.toContain("upstream-token");
+    expect(exposed).not.toContain("response-body-token");
+    expect(exposed).not.toContain("response-header-token");
+  });
+
+  it("keeps parse and validation payloads unreachable from public errors", async () => {
+    const parseApi = createApiFetcher({
+      fetch: async () => new Response('{"token":"parse-token"', {
+        headers: {
+          "Content-Type": "application/json"
+        }
+      })
+    });
+    const parseError = await parseApi.get("/parse?token=query-token")
+      .catch((reason: unknown) => reason);
+
+    expect(parseError).toBeInstanceOf(ApiParseError);
+    expect(parseError).not.toHaveProperty("text");
+    expect(parseError).toMatchObject({
+      context: {
+        path: "/parse",
+        url : "/parse"
+      }
+    });
+    expect(JSON.stringify(parseError)).not.toContain("parse-token");
+    expect(JSON.stringify(parseError)).not.toContain("query-token");
+
+    const validationApi = createApiFetcher({
+      fetch: async () => jsonResponse({
+        secret: "validation-token"
+      })
+    });
+    const validationError = await validationApi.get("/validate?token=query-token", {
+      responseSchema: z.object({
+        id: z.number()
+      })
+    }).catch((reason: unknown) => reason);
+
+    expect(validationError).toBeInstanceOf(ApiValidationError);
+    expect(validationError).not.toHaveProperty("body");
+    expect(validationError).toMatchObject({
+      context: {
+        path: "/validate",
+        url : "/validate"
+      }
+    });
+    expect(JSON.stringify(validationError)).not.toContain("validation-token");
+    expect(JSON.stringify(validationError)).not.toContain("query-token");
+  });
+
+  it("redacts endpoint validation error paths before request execution", async () => {
+    const fetch = vi.fn<FetchLike>(async () => jsonResponse({ ok: true }));
+    const api = createApiFetcher({ fetch });
+    const getUser = endpoint.get("/users/:id?token=query-token#fragment-token", {
+      params: z.object({
+        id: z.number()
+      })
+    });
+    const error = await api.call(getUser, {
+      params: {
+        id: "invalid" as unknown as number
+      }
+    }).catch((reason: unknown) => reason);
+
+    expect(error).toBeInstanceOf(ApiValidationError);
+    expect(error).toMatchObject({
+      context: {
+        path: "/users/:id",
+        url : "/users/:id"
+      }
+    });
+    expect(JSON.stringify(error)).not.toContain("query-token");
+    expect(JSON.stringify(error)).not.toContain("fragment-token");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("does not expose custom validation issue secrets", async () => {
+    const bodySchema = z.string().superRefine((value, context) => {
+      context.addIssue({
+        code   : "custom",
+        message: `invalid ${value}`,
+        params : {
+          value
+        }
+      });
+    });
+    const api = createApiFetcher({
+      fetch: async () => jsonResponse({ ok: true })
+    });
+    const error = await api.post("/validate", {
+      body      : "validation-secret",
+      bodySchema
+    }).catch((reason: unknown) => reason);
+
+    expect(error).toBeInstanceOf(ApiValidationError);
+    expect(error).not.toHaveProperty("validationError");
+    expect(JSON.stringify(error)).not.toContain("validation-secret");
   });
 
   it("refreshes access tokens once and retries unauthorized requests", async () => {
@@ -519,7 +710,7 @@ describe("api-fetch", () => {
       cause  : refreshError,
       context: {
         method: "GET",
-        path  : "/private?token=secret#debug",
+        path  : "/private",
         url   : "https://api.example.com/private"
       },
       message: "API authentication failed",
@@ -544,6 +735,57 @@ describe("api-fetch", () => {
       name : "ApiAuthError"
     });
     expect(clear).toHaveBeenCalledTimes(1);
+  });
+
+  it("normalizes auth responses when no refresh callback exists", async () => {
+    const clear = vi.fn(async () => undefined);
+    const api = createApiFetcher({
+      fetch: async () => jsonResponse({ message: "expired" }, 401),
+      auth : {
+        clear,
+        getAccessToken: async () => "expired"
+      }
+    });
+
+    await expect(api.get("/private")).rejects.toMatchObject({
+      cause: expect.objectContaining({
+        status: 401
+      }),
+      name: "ApiAuthError"
+    });
+    expect(clear).toHaveBeenCalledTimes(1);
+  });
+
+  it("normalizes one-shot stream auth responses without attempting refresh", async () => {
+    const clear = vi.fn(async () => undefined);
+    const refresh = vi.fn(async () => "fresh");
+    const fetch = vi.fn<FetchLike>(async () => jsonResponse({ message: "expired" }, 401));
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("body"));
+        controller.close();
+      }
+    });
+    const api = createApiFetcher({
+      fetch,
+      auth: {
+        clear,
+        getAccessToken: async () => "expired",
+        refresh
+      }
+    });
+
+    await expect(api.post("/private", {
+      rawBody: body
+    })).rejects.toMatchObject({
+      cause: expect.objectContaining({
+        status: 401
+      }),
+      name: "ApiAuthError"
+    });
+    expect(clear).toHaveBeenCalledTimes(1);
+    expect(refresh).not.toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 
   it("normalizes a second auth response after refresh", async () => {
@@ -931,6 +1173,73 @@ describe("api-fetch", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
+  it("detects structurally compatible one-shot raw body streams", async () => {
+    const body = {
+      getReader: () => ({})
+    } as unknown as RequestInit["body"];
+    const fetch = vi.fn<FetchLike>(async () => jsonResponse({ message: "try again" }, 503));
+    const api = createApiFetcher({ fetch });
+
+    await expect(api.post("/upload", {
+      rawBody: body,
+      retry  : {
+        limit  : 1,
+        methods: ["POST"]
+      }
+    })).rejects.toBeInstanceOf(ApiHttpError);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("parses transforms and serializes JSON body once per logical request", async () => {
+    const toJSON = vi.fn(() => ({ name: "haru" }));
+    const transform = vi.fn(() => ({ toJSON }));
+    const bodySchema = z.object({
+      name: z.string()
+    }).transform(transform);
+    let attempt = 0;
+    const bodies: RequestInit["body"][] = [];
+    const fetch = vi.fn<FetchLike>(async (_input, init) => {
+      attempt += 1;
+      bodies.push(init?.body);
+
+      if (attempt === 1) {
+        return jsonResponse({ message: "try again" }, 503);
+      }
+
+      if (attempt === 2) {
+        return jsonResponse({ message: "expired" }, 401);
+      }
+
+      return jsonResponse({ ok: true });
+    });
+    const api = createApiFetcher({
+      fetch,
+      auth: {
+        getAccessToken: async () => "expired",
+        refresh       : async () => "fresh"
+      }
+    });
+
+    await api.post("/users", {
+      body: {
+        name: "haru"
+      },
+      bodySchema,
+      retry: {
+        limit  : 1,
+        methods: ["POST"]
+      }
+    });
+
+    expect(transform).toHaveBeenCalledTimes(1);
+    expect(toJSON).toHaveBeenCalledTimes(1);
+    expect(bodies).toEqual([
+      JSON.stringify({ name: "haru" }),
+      JSON.stringify({ name: "haru" }),
+      JSON.stringify({ name: "haru" })
+    ]);
+  });
+
   it("recreates raw body for an auth retry", async () => {
     const bodies: RequestInit["body"][] = [];
     const fetch = vi.fn<FetchLike>(async (_input, init) => {
@@ -1235,6 +1544,21 @@ describe("api-fetch", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, -1, 1.5])(
+    "rejects invalid retry limit %s before fetch",
+    async (limit) => {
+      for (const retry of [limit, { limit }]) {
+        const fetch = vi.fn<FetchLike>(async () => jsonResponse({ ok: true }));
+        const api = createApiFetcher({ fetch });
+
+        await expect(api.get("/unstable", {
+          retry
+        })).rejects.toBeInstanceOf(RangeError);
+        expect(fetch).not.toHaveBeenCalled();
+      }
+    }
+  );
+
   it("keeps one general retry budget across auth refresh", async () => {
     let attempt = 0;
     const fetch = vi.fn<FetchLike>(async () => {
@@ -1297,8 +1621,61 @@ describe("api-fetch", () => {
 
       expect(error).toMatchObject({
         cause: reason,
+        context: {
+          method: "GET",
+          path  : "/unstable",
+          url   : "/unstable"
+        },
         name : "ApiAbortError"
       });
+      expect((error as ApiAbortError).context).not.toHaveProperty("error");
+      expect((error as ApiAbortError).context).not.toHaveProperty("response");
+      expect(fetch).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("normalizes caller abort during a network error retry delay", async () => {
+    vi.useFakeTimers();
+
+    const controller = new AbortController();
+    const reason = new Error("caller stopped");
+    const fetch = vi.fn<FetchLike>(async () => {
+      throw new Error("network failed");
+    });
+    const api = createApiFetcher({ fetch });
+
+    try {
+      const request = api.get("/unstable", {
+        retry: {
+          delay      : 10_000,
+          limit      : 1,
+          shouldRetry: () => true
+        },
+        signal: controller.signal
+      });
+      const errorPromise = request.catch((error: unknown) => error);
+
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fetch).toHaveBeenCalledTimes(1);
+
+      controller.abort(reason);
+      await vi.runAllTimersAsync();
+
+      const error = await errorPromise;
+
+      expect(error).toMatchObject({
+        cause: reason,
+        context: {
+          method: "GET",
+          path  : "/unstable",
+          url   : "/unstable"
+        },
+        name : "ApiAbortError"
+      });
+      expect((error as ApiAbortError).context).not.toHaveProperty("error");
+      expect((error as ApiAbortError).context).not.toHaveProperty("response");
       expect(fetch).toHaveBeenCalledTimes(1);
     } finally {
       vi.useRealTimers();

@@ -80,13 +80,17 @@ The default token header is `Authorization: Bearer <accessToken>`
 
 Auth headers are attached only to relative requests, the resolved `baseURL` origin, and explicit `allowedOrigins`
 
-Public error contexts remove query strings and fragments from `context.url`
+Public error contexts remove query strings and fragments from both `context.path` and `context.url`
+
+HTTP, parse, and validation errors must not retain raw response bodies, response objects, headers, parse text, or validation input bodies
+
+HTTP error messages use configured safe fallbacks or a generic request failure and never upstream response messages
 
 Use `formatTokenHeader` when a project sends the access token through a different header shape, such as `X-Access-Token`
 
 Refresh retry happens once after `401` or `419` by default
 
-Refresh throw, empty refresh results, and a second auth response clear the session on a best-effort basis and throw `ApiAuthError`
+Missing refresh callbacks, non-replayable auth requests, refresh throw, empty refresh results, and a second auth response clear the session on a best-effort basis and throw `ApiAuthError`
 
 Concurrent refresh calls are deduped per fetcher instance through a shared refresh promise
 
@@ -94,13 +98,15 @@ General retry is separate from auth refresh and defaults to `GET` only
 
 General retry uses one request-wide budget, respects `Retry-After` by default, and supports fixed or exponential delay with bounded jitter
 
-Use `rawBodyFactory` for a fresh one-based body per network attempt; one-shot `ReadableStream` values passed through `rawBody` are not retried
+JSON validation, transformation, and serialization happen once per logical request
+
+Use `rawBodyFactory` for a fresh one-based body per network attempt; structurally stream-like one-shot values passed through `rawBody` are not retried
 
 `maxResponseBytes` rejects declared or streamed oversized responses with `ApiResponseSizeError`
 
 Timeout uses `AbortController` and throws `ApiTimeoutError`
 
-Caller cancellation throws `ApiAbortError`, including cancellation during retry delay
+Observed caller cancellation throws `ApiAbortError`, including cancellation during retry delay; custom fetch implementations must reject or otherwise observe the signal during active work
 
 Hooks are available globally and per request for observability
 

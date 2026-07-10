@@ -99,6 +99,7 @@ apiServerClock.getServerTimeMs();
 ## 동작 메모
 
 - `bodySchema`가 있으면 요청 전 JSON body를 검증합니다.
+- JSON validation, transformation, serialization은 logical request마다 한 번 실행하고 retry에서는 직렬화된 body를 재사용합니다
 - `rawBody`는 `FormData`, `Blob`, `URLSearchParams`, 이미 직렬화된 body에 사용합니다.
 - auth 또는 일반 retry마다 새 raw body가 필요하면 one-based `rawBodyFactory(attempt)`를 사용합니다
 - `rawBody`와 `rawBodyFactory`는 함께 사용할 수 없고 one-shot `ReadableStream`은 retry하지 않습니다
@@ -112,10 +113,12 @@ apiServerClock.getServerTimeMs();
 
 - 기본 auth refresh 대상은 401과 419이며, refresh 중복 호출은 dedupe됩니다.
 - auth는 relative request, `baseURL` origin, 명시한 `allowedOrigins`에만 전송합니다
-- refresh가 소진되면 session을 best effort로 clear하고 query가 제거된 context와 함께 `ApiAuthError`를 throw합니다
+- refresh callback이 없거나 auth request를 재생할 수 없거나 refresh가 소진되면 session을 best effort로 clear하고 `ApiAuthError`를 throw합니다
 - retry는 GET, 요청 전체에서 하나의 budget, `Retry-After`, fixed delay, jitter 없음이 기본이며 write method는 명시해야 합니다
-- caller abort는 `ApiAbortError`, deadline 만료는 `ApiTimeoutError`이며 retry delay도 caller signal을 관찰합니다
-- HTTP error는 server의 `code`, `message`를 우선 사용하고 fallback은 비어 있는 값만 채웁니다.
+- 관찰된 caller abort는 `ApiAbortError`, deadline 만료는 `ApiTimeoutError`이며 retry delay는 항상 caller signal을 관찰합니다
+- custom fetch 구현은 active work 중 caller signal을 직접 관찰하거나 reject해야 합니다
+- HTTP error는 server code만 보존할 수 있고 raw body, response, header, parse text, validation input, query, fragment, upstream message는 보존하지 않습니다
+- HTTP error message는 설정한 safe fallback 또는 generic request failure를 사용합니다
 - `handleApiRoute`는 `ApiHttpError.code`를 보존하고 `codeMessages`, `statusMessages`, `responseMessage`, `API request failed` 순서로 message를 정합니다
 - 명시한 mapping callback이 선택하지 않는 한 raw upstream message를 route response에 노출하지 않습니다
 - server time header가 없거나 올바르지 않으면 무시합니다.

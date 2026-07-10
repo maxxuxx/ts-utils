@@ -9,12 +9,15 @@ export const buildApiUrl = (
   query?: QueryParams
 ): string => {
   if (isAbsoluteUrl(path) || baseUrl) {
+    const normalizedPath = path.trimStart();
     const url = isAbsoluteUrl(path)
       ? new URL(path)
-      : new URL(
-        path.startsWith("/") ? path.slice(1) : path,
-        baseUrl?.endsWith("/") ? baseUrl : `${baseUrl}/`
-      );
+      : isNetworkPath(normalizedPath)
+        ? new URL(normalizedPath, baseUrl)
+        : new URL(
+          path.startsWith("/") ? path.slice(1) : path,
+          baseUrl?.endsWith("/") ? baseUrl : `${baseUrl}/`
+        );
 
     appendQuery(url.searchParams, query);
 
@@ -56,3 +59,5 @@ const appendQueryToPath = (path: string, query?: QueryParams): string => {
 };
 
 const isAbsoluteUrl = (path: string): boolean => /^https?:\/\//.test(path);
+
+const isNetworkPath = (path: string): boolean => /^[\\/]{2}/.test(path);

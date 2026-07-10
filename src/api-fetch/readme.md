@@ -111,6 +111,7 @@ apiServerClock.getServerTimeMs();
 ## Behavior notes
 
 - `bodySchema` validates JSON request bodies before the request is sent. Without it, `body` is still serialized as JSON.
+- JSON validation, transformation, and serialization run once per logical request and reuse the serialized body for retries
 - Use `rawBody` for `FormData`, `Blob`, `URLSearchParams`, streams, or a pre-serialized body.
 - Use `rawBodyFactory(attempt)` when auth or general retries need a fresh raw body for every one-based network attempt
 - `rawBody` and `rawBodyFactory` are mutually exclusive, and one-shot `ReadableStream` bodies are not retried
@@ -124,10 +125,12 @@ apiServerClock.getServerTimeMs();
 
 - Auth refresh is attempted for 401 and 419 by default and is deduped while a refresh is in flight.
 - Auth is sent only to relative requests, the `baseURL` origin, and explicit `allowedOrigins`
-- Exhausted auth refresh clears the session best effort and throws `ApiAuthError` with a safe query-free context URL
+- Auth responses without refresh, non-replayable auth requests, and exhausted refresh clear the session best effort and throw `ApiAuthError`
 - Retries default to GET, one shared request budget, `Retry-After` support, fixed delay, and no jitter; configure write methods explicitly
-- Caller abort throws `ApiAbortError`; deadline expiry throws `ApiTimeoutError`; retry delay observes the caller signal
-- HTTP errors prefer server-provided `code` and `message`; fallback values only fill missing fields.
+- Observed caller abort throws `ApiAbortError`; deadline expiry throws `ApiTimeoutError`; retry delay always observes the caller signal
+- Custom fetch implementations must reject or otherwise observe the caller signal during active work
+- HTTP errors may retain a server code but never retain raw bodies, responses, headers, parse text, validation inputs, query strings, fragments, or upstream messages
+- HTTP error messages use a configured safe fallback or the generic request failure
 - `handleApiRoute` preserves `ApiHttpError.code` and resolves `codeMessages`, `statusMessages`, `responseMessage`, then `API request failed`
 - Raw upstream messages are not exposed by route conversion unless an explicit mapping callback chooses them
 - Missing or invalid server time headers are ignored.

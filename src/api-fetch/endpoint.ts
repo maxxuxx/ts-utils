@@ -1,6 +1,7 @@
 import { ApiValidationError } from "./errors.js";
 import { mergeHeaders } from "./headers.js";
 import { mergeQuery } from "./query.js";
+import { redactApiUrl } from "./url.js";
 import { ApiMethod } from "./types.js";
 import type {
   AnyApiEndpoint,
@@ -71,11 +72,12 @@ export const executeEndpoint = async <TEndpoint extends AnyApiEndpoint>(
     rawBodyFactory,
     ...callOptions
   } = input;
+  const safePath = redactApiUrl(apiEndpoint.path);
   const context = {
     method   : apiEndpoint.method,
-    path     : apiEndpoint.path,
+    path     : safePath,
     startedAt: Date.now(),
-    url      : apiEndpoint.path
+    url      : safePath
   };
   const params = parseEndpointParams(apiEndpoint, rawParams, context);
   const path   = buildEndpointPath(apiEndpoint.path, params);

@@ -58,15 +58,21 @@ const resolveRetryLimit = (
   retry: ApiRetry | undefined,
   options: ApiRetryOptions | undefined
 ): number => {
+  let limit: number;
+
   if (retry === true) {
-    return 1;
+    limit = 1;
+  } else if (typeof retry === "number") {
+    limit = retry;
+  } else {
+    limit = options?.limit ?? 0;
   }
 
-  if (typeof retry === "number") {
-    return retry;
+  if (!Number.isSafeInteger(limit) || limit < 0) {
+    throw new RangeError("retry limit must be a non-negative safe integer");
   }
 
-  return options?.limit ?? 0;
+  return limit;
 };
 
 // Retry delay calculation
