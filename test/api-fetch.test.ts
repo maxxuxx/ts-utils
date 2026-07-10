@@ -756,6 +756,68 @@ describe("api-fetch", () => {
     expect(clear).toHaveBeenCalledTimes(1);
   });
 
+  it("prioritizes malformed auth responses before body parsing", async () => {
+    const clear = vi.fn(async () => undefined);
+    const refresh = vi.fn(async () => "fresh");
+    const fetch = vi.fn<FetchLike>(async () => new Response("{bad", {
+      headers: {
+        "Content-Type": "application/json"
+      },
+      status: 401
+    }));
+    const api = createApiFetcher({
+      fetch,
+      auth: {
+        clear,
+        getAccessToken: async () => "expired",
+        refresh
+      }
+    });
+
+    await expect(api.get("/private")).rejects.toMatchObject({
+      cause: expect.objectContaining({
+        name  : "ApiHttpError",
+        status: 401
+      }),
+      name: "ApiAuthError"
+    });
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(clear).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("prioritizes oversized auth responses before response size checks", async () => {
+    const clear = vi.fn(async () => undefined);
+    const response = new Response("response-secret", {
+      headers: {
+        "Content-Length": "15",
+        "Content-Type"  : "text/plain"
+      },
+      status: 419
+    });
+    const cancelBody = vi.spyOn(response.body as ReadableStream<Uint8Array>, "cancel");
+    const fetch = vi.fn<FetchLike>(async () => response);
+    const api = createApiFetcher({
+      fetch,
+      maxResponseBytes: 1,
+      auth: {
+        clear,
+        getAccessToken: async () => "expired"
+      }
+    });
+
+    await expect(api.get("/private")).rejects.toMatchObject({
+      cause: expect.objectContaining({
+        name  : "ApiHttpError",
+        status: 419
+      }),
+      name: "ApiAuthError"
+    });
+    expect(clear).toHaveBeenCalledTimes(1);
+    expect(cancelBody).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
   it("normalizes one-shot stream auth responses without attempting refresh", async () => {
     const clear = vi.fn(async () => undefined);
     const refresh = vi.fn(async () => "fresh");

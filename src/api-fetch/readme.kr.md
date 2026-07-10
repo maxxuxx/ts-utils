@@ -118,7 +118,8 @@ apiServerClock.getServerTimeMs();
 - 관찰된 caller abort는 `ApiAbortError`, deadline 만료는 `ApiTimeoutError`이며 retry delay는 항상 caller signal을 관찰합니다
 - custom fetch 구현은 active work 중 caller signal을 직접 관찰하거나 reject해야 합니다
 - HTTP error는 server code만 보존할 수 있고 raw body, response, header, parse text, validation input, query, fragment, upstream message는 보존하지 않습니다
-- HTTP error message는 설정한 safe fallback 또는 generic request failure를 사용합니다
+- `errorFallback.message`는 upstream message가 없을 때만 쓰는 fallback이 아니라 항상 사용하는 configured safe HTTP error message입니다
+- configured safe message가 없으면 generic request failure를 사용하고 upstream message는 항상 무시합니다
 - `handleApiRoute`는 `ApiHttpError.code`를 보존하고 `codeMessages`, `statusMessages`, `responseMessage`, `API request failed` 순서로 message를 정합니다
 - 명시한 mapping callback이 선택하지 않는 한 raw upstream message를 route response에 노출하지 않습니다
 - server time header가 없거나 올바르지 않으면 무시합니다.

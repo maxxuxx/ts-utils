@@ -67,13 +67,13 @@ export type ApiResponse<TResponse> = Readonly<{
 /** Application error code copied from an API error body */
 export type ApiErrorCode = string | number;
 
-/** Fallback code and message used when an API error body is incomplete */
+/** Configured error code fallback and safe message used instead of upstream error text */
 export type ApiErrorFallback = Readonly<{
   code   ?: ApiErrorCode;
   message?: string;
 }>;
 
-/** Options for api http error */
+/** Safe code and message options for an API HTTP error */
 export type ApiHttpErrorOptions = ApiErrorFallback;
 
 /** Minimal compatible shape for fetch */

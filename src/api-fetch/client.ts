@@ -297,6 +297,41 @@ const sendRequest = async <
         clientSendTimeMs,
         getServerTimeNow(clientOptions.serverTime)
       );
+
+      if (
+        !response.ok
+        && authEnabled
+        && AUTH_REFRESH_STATUS_CODES.includes(response.status as 401 | 419)
+      ) {
+        try {
+          await response.body?.cancel();
+        } catch {
+          // Response cancellation is best effort and must not replace auth handling
+        }
+
+        const resolvedErrorFallback = resolveErrorFallback(
+          clientOptions.errorFallback,
+          errorFallback
+        );
+        const error = new ApiHttpError(response, undefined, context, {
+          code   : resolvedErrorFallback?.code,
+          message: resolvedErrorFallback?.message
+        });
+
+        await callErrorHooks(
+          clientOptions.hooks?.onResponseError,
+          hooks?.onResponseError,
+          {
+            ...context,
+            durationMs: getDurationMs(context),
+            error,
+            response
+          }
+        );
+
+        throw error;
+      }
+
       responseBody = await readResponseBody(response, context, responseLimit);
 
       if (!response.ok) {

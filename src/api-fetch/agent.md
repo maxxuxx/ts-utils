@@ -68,7 +68,7 @@ If the validated response body has a `data` property plus `code` or `message`, t
 
 `select` returns a custom value instead of the default `{ code, message?, response }` result and disables the automatic envelope unwrap for that call
 
-`errorFallback` sets optional `ApiHttpError.code` and `ApiHttpError.message` fallback values when an HTTP error body has no string or number `code` and no string `message`
+`errorFallback.code` fills a missing server code while `errorFallback.message` is the configured safe error message because upstream messages are always ignored
 
 Endpoint definitions use `endpoint.get("/users/:id", { params, responseSchema })` so route declarations read like HTTP routes
 

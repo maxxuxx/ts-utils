@@ -130,7 +130,8 @@ apiServerClock.getServerTimeMs();
 - Observed caller abort throws `ApiAbortError`; deadline expiry throws `ApiTimeoutError`; retry delay always observes the caller signal
 - Custom fetch implementations must reject or otherwise observe the caller signal during active work
 - HTTP errors may retain a server code but never retain raw bodies, responses, headers, parse text, validation inputs, query strings, fragments, or upstream messages
-- HTTP error messages use a configured safe fallback or the generic request failure
+- `errorFallback.message` is the configured safe HTTP error message, not an upstream-message fallback; upstream messages are always ignored
+- Without a configured safe message, HTTP errors use the generic request failure
 - `handleApiRoute` preserves `ApiHttpError.code` and resolves `codeMessages`, `statusMessages`, `responseMessage`, then `API request failed`
 - Raw upstream messages are not exposed by route conversion unless an explicit mapping callback chooses them
 - Missing or invalid server time headers are ignored.
