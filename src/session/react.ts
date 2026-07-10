@@ -76,37 +76,50 @@ export const createReactTokenSession = <
 ): ReactTokenSession<TUser, TTokens> => {
   const storage          = resolveStorage(options.storage);
   const { parseSession } = createTokenSessionParsers(options);
-  const serverSession    = parseRestoredSession(
+  const serverSession    = createSnapshot(parseRestoredSession(
     options.serverSession ?? options.initialSession ?? {},
     parseSession
-  );
-  const listeners        = new Set<() => void>();
+  ));
+  const subscriptions    = new Set<Readonly<{
+    listener: () => void;
+  }>>();
   let snapshot            = readStoredSession(
     storage,
     options.storageKey,
     serverSession,
     parseSession
   );
+  let removeStorageListener: (() => void) | null = null;
 
   const notify = () => {
-    for (const listener of listeners) {
-      listener();
+    for (const subscription of subscriptions) {
+      subscription.listener();
     }
   };
 
   const writeSnapshot = (session: TokenSessionData<TUser, TTokens>) => {
-    snapshot = session;
+    const nextSnapshot = createSnapshot(session);
 
     if (storage) {
-      storage.setItem(options.storageKey, JSON.stringify(session));
+      const serialized = JSON.stringify(nextSnapshot);
+
+      if (serialized === undefined) {
+        throw new TypeError("Session snapshot is not JSON serializable");
+      }
+
+      storage.setItem(options.storageKey, serialized);
     }
 
+    snapshot = nextSnapshot;
     notify();
   };
 
   const clearSnapshot = () => {
-    snapshot = {};
+    const nextSnapshot = createSnapshot<TUser, TTokens>({});
+
     storage?.removeItem(options.storageKey);
+
+    snapshot = nextSnapshot;
     notify();
   };
 
@@ -118,23 +131,35 @@ export const createReactTokenSession = <
   });
 
   const subscribe = (listener: () => void) => {
-    listeners.add(listener);
+    if (subscriptions.size === 0 && storage) {
+      removeStorageListener = addStorageListener(
+        options.storageKey,
+        storage,
+        () => {
+          const nextSnapshot = readStoredSession(
+            storage,
+            options.storageKey,
+            createSnapshot<TUser, TTokens>({}),
+            parseSession
+          );
 
-    const removeStorageListener = storage
-      ? addStorageListener(options.storageKey, () => {
-        snapshot = readStoredSession(
-          storage,
-          options.storageKey,
-          serverSession,
-          parseSession
-        );
-        notify();
-      })
-      : () => undefined;
+          snapshot = nextSnapshot;
+          notify();
+        }
+      );
+    }
+
+    const subscription = { listener };
+
+    subscriptions.add(subscription);
 
     return () => {
-      listeners.delete(listener);
-      removeStorageListener();
+      subscriptions.delete(subscription);
+
+      if (subscriptions.size === 0 && removeStorageListener) {
+        removeStorageListener();
+        removeStorageListener = null;
+      }
     };
   };
 
@@ -186,7 +211,7 @@ const readStoredSession = <
   try {
     const parsed = JSON.parse(value) as unknown;
 
-    return parseSession(parsed);
+    return createSnapshot(parseSession(parsed));
   } catch {
     storage.removeItem(key);
 
@@ -233,6 +258,7 @@ const resolveStorage = (
 
 const addStorageListener = (
   key: string,
+  storage: ReactSessionStorage,
   listener: () => void
 ): (() => void) => {
   const root = globalThis as typeof globalThis & {
@@ -245,7 +271,7 @@ const addStorageListener = (
   }
 
   const storageListener = (event: unknown) => {
-    if (!isStorageEventForKey(event, key)) {
+    if (!isStorageEventForSession(event, key, storage)) {
       return;
     }
 
@@ -257,15 +283,60 @@ const addStorageListener = (
   return () => root.removeEventListener?.("storage", storageListener);
 };
 
-const isStorageEventForKey = (
+const isStorageEventForSession = (
   event: unknown,
-  key: string
+  key: string,
+  storage: ReactSessionStorage
 ): boolean => {
   if (!isRecord(event)) {
     return false;
   }
 
+  if (event.storageArea !== storage) {
+    return false;
+  }
+
   return event.key === key || event.key === null;
+};
+
+const createSnapshot = <
+  TUser,
+  TTokens extends TokenSessionTokens
+>(
+  session: TokenSessionData<TUser, TTokens>
+): TokenSessionData<TUser, TTokens> => (
+  deepFreeze(structuredClone(session))
+);
+
+const deepFreeze = <TValue>(
+  value: TValue,
+  seen = new WeakSet<object>()
+): TValue => {
+  if (!isRecordLike(value) || seen.has(value)) {
+    return value;
+  }
+
+  if (!Array.isArray(value) && !isPlainSnapshotObject(value)) {
+    throw new TypeError("Session snapshots support only plain object and array containers");
+  }
+
+  seen.add(value);
+
+  for (const key of Reflect.ownKeys(value)) {
+    deepFreeze((value as Record<PropertyKey, unknown>)[key], seen);
+  }
+
+  return Object.freeze(value);
+};
+
+const isRecordLike = (value: unknown): value is object => (
+  typeof value === "object" && value !== null
+);
+
+const isPlainSnapshotObject = (value: object): boolean => {
+  const prototype = Object.getPrototypeOf(value);
+
+  return prototype === Object.prototype || prototype === null;
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (

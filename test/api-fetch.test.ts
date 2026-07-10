@@ -1136,6 +1136,69 @@ describe("api-fetch", () => {
     expect(cookiesB.accessToken).toBe("fresh");
   });
 
+  it("shares SvelteKit refresh flights across different cache configurations", async () => {
+    const cookiesA = {
+      accessToken: "expired-config",
+      refreshKey : "shared-config-refresh"
+    };
+    const cookiesB = {
+      accessToken: "expired-config",
+      refreshKey : "shared-config-refresh"
+    };
+    const refreshGate = createDeferred<void>();
+    const refresh = vi.fn(async () => {
+      await refreshGate.promise;
+
+      return { accessToken: "fresh-config" };
+    });
+    const auth = {
+      applyRefresh: async (
+        cookies: typeof cookiesA,
+        result: { accessToken: string }
+      ) => {
+        cookies.accessToken = result.accessToken;
+
+        return cookies.accessToken;
+      },
+      getAccessToken: (cookies: typeof cookiesA) => cookies.accessToken,
+      getRefreshKey : (cookies: typeof cookiesA) => cookies.refreshKey,
+      namespace     : "shared-cache-config",
+      refresh
+    };
+    const fetch = vi.fn<FetchLike>(async (_input, init) => (
+      new Headers(init?.headers).get("Authorization") === "Bearer fresh-config"
+        ? jsonResponse({ ok: true })
+        : jsonResponse({ message: "expired" }, 401)
+    ));
+    const requestA = createSvelteKitApiFetcher({
+      cookies: cookiesA,
+      dedupeRefresh: {
+        cacheSuccessMs: 0
+      } as never,
+      fetch,
+      auth
+    }).get("/me");
+    const requestB = createSvelteKitApiFetcher({
+      cookies: cookiesB,
+      dedupeRefresh: {
+        cacheSuccessMs: 5_000
+      } as never,
+      fetch,
+      auth
+    }).get("/me");
+
+    await vi.waitFor(() => {
+      expect(refresh).toHaveBeenCalled();
+    });
+
+    refreshGate.resolve();
+
+    await expect(Promise.all([requestA, requestB])).resolves.toHaveLength(2);
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(cookiesA.accessToken).toBe("fresh-config");
+    expect(cookiesB.accessToken).toBe("fresh-config");
+  });
+
   it("keeps SvelteKit refreshes separate for different namespaces", async () => {
     const cookiesA = {
       accessToken: "expired-namespace",
@@ -1386,6 +1449,20 @@ describe("api-fetch", () => {
       cookies: { accessToken: "expired" },
       fetch  : async () => jsonResponse({ ok: true }),
       auth   : {
+        getAccessToken: (cookies: { accessToken: string }) => cookies.accessToken,
+        refresh       : async () => "fresh"
+      }
+    });
+
+    createSvelteKitApiFetcher({
+      cookies: { accessToken: "expired" },
+      // @ts-expect-error SvelteKit refresh dedupe no longer accepts cache settings
+      dedupeRefresh: {
+        cacheSuccessMs: 2_000
+      },
+      fetch: async () => jsonResponse({ ok: true }),
+      auth : {
+        applyRefresh: () => "fresh",
         getAccessToken: (cookies: { accessToken: string }) => cookies.accessToken,
         refresh       : async () => "fresh"
       }

@@ -57,11 +57,17 @@ export const createTokenSession = <
   const refreshSingleFlight = createSingleFlight<string, TTokens>({
     successTtlMs: resolveRefreshCacheMs(options.dedupeRefresh)
   });
+  const writeParsedSession = async (
+    context: TContext,
+    session: TokenSessionData<TUser, TTokens>
+  ): Promise<void> => {
+    await options.write(context, session);
+  };
   const writeSession = async (
     context: TContext,
     session: TokenSessionData<TUser, TTokens>
   ): Promise<void> => {
-    await options.write(context, parseSession(session));
+    await writeParsedSession(context, parseSession(session));
   };
 
   const readClaims = (accessToken: string): JwtPayloadWithToken<TClaims> | null => {
@@ -81,11 +87,32 @@ export const createTokenSession = <
 
     return decoded.data;
   };
+  const readEnsuredUser = async (context: TContext): Promise<TUser> => {
+    const session      = parseSession(await options.read(context));
+    const user         = requireUser(session.user);
+    const tokens       = requireTokens(session.tokens);
+    const accessToken  = readAccessToken(tokens);
+    const refreshToken = readRefreshToken(tokens);
+
+    if (!accessToken || (useRefreshToken && !refreshToken)) {
+      throw createSessionError("invalid_token");
+    }
+
+    const claims = readClaims(accessToken);
+
+    if (claims && isExpired(claims, options.now)) {
+      throw createSessionError("expired");
+    }
+
+    return user;
+  };
 
   const refresh = async (context: TContext): Promise<string> => {
-    const session       = parseSession(await options.read(context));
-    const user          = parseUser(session.user);
-    const tokens        = parseTokens(session.tokens);
+    const storedSession  = await options.read(context);
+    const tokenIdentity  = readTokenIdentity(storedSession);
+    const session        = parseSession(storedSession);
+    const user           = requireUser(session.user);
+    const tokens         = requireTokens(session.tokens);
     const accessToken   = readAccessToken(tokens);
     const refreshToken  = readRefreshToken(tokens);
     const refreshTokens = options.refreshTokens;
@@ -115,17 +142,60 @@ export const createTokenSession = <
 
       return nextTokens;
     };
-    const nextTokens = options.dedupeRefresh === false
-      ? await executeRefresh()
-      : await refreshSingleFlight.run(
-        refreshToken,
-        executeRefresh
-      );
+    let nextTokens: TTokens;
 
-    await writeSession(context, {
-      ...session,
+    try {
+      nextTokens = options.dedupeRefresh === false
+        ? await executeRefresh()
+        : await refreshSingleFlight.run(
+          refreshToken,
+          executeRefresh
+        );
+    } catch (error) {
+      const currentStoredSession = await options.read(context);
+      const currentSession       = parseSession(currentStoredSession);
+      const currentTokenIdentity = readTokenIdentity(currentStoredSession);
+
+      if (!hasSameTokenIdentity(tokenIdentity, currentTokenIdentity)) {
+        const currentAccessToken = readAccessToken(currentSession.tokens);
+
+        if (currentAccessToken) {
+          readClaims(currentAccessToken);
+
+          return currentAccessToken;
+        }
+
+        throw createSessionError("invalid_token");
+      }
+
+      throw error;
+    }
+
+    const currentStoredSession = await options.read(context);
+    const currentSession       = parseSession(currentStoredSession);
+    const currentTokenIdentity = readTokenIdentity(currentStoredSession);
+
+    if (!hasSameTokenIdentity(
+      tokenIdentity,
+      currentTokenIdentity
+    )) {
+      const currentAccessToken = readAccessToken(currentSession.tokens);
+
+      if (currentAccessToken) {
+        readClaims(currentAccessToken);
+
+        return currentAccessToken;
+      }
+
+      throw createSessionError("invalid_token");
+    }
+
+    const currentUser = requireUser(currentSession.user);
+
+    await writeParsedSession(context, {
+      ...currentSession,
       tokens: nextTokens,
-      user
+      user  : currentUser
     });
 
     return readAccessToken(nextTokens) ?? "";
@@ -133,8 +203,8 @@ export const createTokenSession = <
 
   const ensure = async (context: TContext): Promise<TUser> => {
     const session      = parseSession(await options.read(context));
-    const user         = parseUser(session.user);
-    const tokens       = parseTokens(session.tokens);
+    const user         = requireUser(session.user);
+    const tokens       = requireTokens(session.tokens);
     const accessToken  = readAccessToken(tokens);
     const refreshToken = readRefreshToken(tokens);
 
@@ -156,7 +226,7 @@ export const createTokenSession = <
       if (useRefreshToken && refreshToken && options.refreshTokens) {
         await refresh(context);
 
-        return user;
+        return readEnsuredUser(context);
       }
 
       throw createSessionError("expired");
@@ -167,6 +237,8 @@ export const createTokenSession = <
       && refreshToken
       && options.refreshTokens) {
       await refresh(context);
+
+      return readEnsuredUser(context);
     }
 
     return user;
@@ -198,10 +270,11 @@ export const createTokenSession = <
     },
     updateUser: async (context, user) => {
       const session = parseSession(await options.read(context));
+      const nextUser = parseUser(user);
 
-      await writeSession(context, {
+      await writeParsedSession(context, {
         ...session,
-        user
+        user: nextUser
       });
     }
   });
@@ -293,6 +366,24 @@ const createSessionError = (
 ): TokenSessionError => (
   new TokenSessionError(reason, cause)
 );
+
+const requireUser = <TUser>(user: TUser | undefined): TUser => {
+  if (user === null || user === undefined) {
+    throw createSessionError("unauthorized");
+  }
+
+  return user;
+};
+
+const requireTokens = <TTokens extends TokenSessionTokens>(
+  tokens: TTokens | undefined
+): TTokens => {
+  if (!tokens) {
+    throw createSessionError("invalid_token");
+  }
+
+  return tokens;
+};
 
 const resolveRefreshCacheMs = (
   dedupeRefresh: boolean | TokenSessionRefreshDedupeOptions | undefined
@@ -388,6 +479,34 @@ const readRefreshToken = (
   typeof tokens?.refreshToken === "string" && tokens.refreshToken.trim()
     ? tokens.refreshToken
     : undefined
+);
+
+type TokenIdentity = Readonly<{
+  accessToken : string | undefined;
+  refreshToken: string | undefined;
+}>;
+
+const readTokenIdentity = (session: unknown): TokenIdentity => {
+  const tokens = isRecord(session) && isRecord(session.tokens)
+    ? session.tokens
+    : undefined;
+
+  return {
+    accessToken : readString(tokens?.accessToken),
+    refreshToken: readString(tokens?.refreshToken)
+  };
+};
+
+const hasSameTokenIdentity = (
+  first: TokenIdentity,
+  second: TokenIdentity
+): boolean => (
+  first.accessToken === second.accessToken
+  && first.refreshToken === second.refreshToken
+);
+
+const readString = (value: unknown): string | undefined => (
+  typeof value === "string" ? value : undefined
 );
 
 // Expiration helpers

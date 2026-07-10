@@ -100,6 +100,8 @@ Adapter dedupe requires `applyRefresh`; every fetcher participant applies the sh
 
 Use an explicit `namespace` plus a stable `getRefreshKey` when different SvelteKit fetcher instances should share refresh work
 
+Named SvelteKit refresh sharing is in-flight only and uses one flight per namespace regardless of caller configuration; do not add adapter success-result caching or cache-based flight partitions
+
 Without a namespace, SvelteKit single-flight state belongs to the created adapter and must not collide with unrelated fetchers that happen to use the same token string
 
 Failed or empty refresh results are evicted immediately, while an `applyRefresh` failure clears only the affected cookie context through the normal terminal auth path

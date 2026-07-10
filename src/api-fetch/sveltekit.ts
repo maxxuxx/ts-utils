@@ -10,13 +10,9 @@ import type {
   MaybePromise
 } from "./types.js";
 
-const DEFAULT_REFRESH_CACHE_MS = 2_000;
 const EMPTY_REFRESH_RESULT = Symbol("empty refresh result");
 
-const namedRefreshFlights = new Map<
-  string,
-  Map<number, SingleFlight<string, unknown>>
->();
+const namedRefreshFlights = new Map<string, SingleFlight<string, unknown>>();
 
 type SvelteKitApiAuthBaseOptions<TCookies> = Readonly<{
   clear               ?: (cookies: TCookies) => MaybePromise<void>;
@@ -69,11 +65,6 @@ export type SvelteKitApiAuthOptions<TCookies, TRefresh = string> =
   | SvelteKitDirectRefreshAuthOptions<TCookies>
   | SvelteKitRefreshAuthOptions<TCookies, TRefresh>;
 
-/** Options for svelte kit refresh dedupe */
-export type SvelteKitRefreshDedupeOptions = Readonly<{
-  cacheSuccessMs?: number;
-}>;
-
 /** Options for svelte kit api fetcher */
 export type SvelteKitApiFetcherOptions<TCookies, TRefresh = string> =
   Omit<ApiFetcherOptions, "auth"> & Readonly<{
@@ -83,7 +74,7 @@ export type SvelteKitApiFetcherOptions<TCookies, TRefresh = string> =
         auth?:
           | SvelteKitApiAuthWithoutRefresh<TCookies>
           | SvelteKitRefreshAuthOptions<TCookies, TRefresh>;
-        dedupeRefresh?: true | SvelteKitRefreshDedupeOptions;
+        dedupeRefresh?: true;
       }>
     | Readonly<{
         auth?: SvelteKitApiAuthOptions<TCookies, TRefresh>;
@@ -109,8 +100,7 @@ export const createApiFetcher = <TCookies, TRefresh = string>(
   const refreshSingleFlight = !auth?.refresh || dedupeRefresh === false
     ? undefined
     : resolveRefreshSingleFlight<TRefresh>(
-      "namespace" in auth ? auth.namespace : undefined,
-      resolveRefreshCacheMs(dedupeRefresh)
+      "namespace" in auth ? auth.namespace : undefined
     );
 
   return createCoreApiFetcher({
@@ -213,40 +203,18 @@ async function refreshWithDedupe<TCookies, TRefresh>({
     : applyRefresh(cookies, result);
 }
 
-function resolveRefreshCacheMs(
-  dedupeRefresh: true | SvelteKitRefreshDedupeOptions | undefined
-): number {
-  if (dedupeRefresh === true || dedupeRefresh === undefined) {
-    return DEFAULT_REFRESH_CACHE_MS;
-  }
-
-  return dedupeRefresh.cacheSuccessMs ?? DEFAULT_REFRESH_CACHE_MS;
-}
-
 function resolveRefreshSingleFlight<TRefresh>(
-  namespace: string | undefined,
-  cacheSuccessMs: number
+  namespace: string | undefined
 ): SingleFlight<string, TRefresh> {
   if (namespace === undefined) {
-    return createSingleFlight<string, TRefresh>({
-      successTtlMs: cacheSuccessMs
-    });
+    return createSingleFlight<string, TRefresh>();
   }
 
-  let cacheFlights = namedRefreshFlights.get(namespace);
+  let refreshSingleFlight = namedRefreshFlights.get(namespace);
 
-  if (!cacheFlights) {
-    cacheFlights = new Map<number, SingleFlight<string, unknown>>();
-    namedRefreshFlights.set(namespace, cacheFlights);
-  }
-
-  let refreshSingleFlight = cacheFlights.get(cacheSuccessMs);
-
-  if (!refreshSingleFlight) {
-    refreshSingleFlight = createSingleFlight<string, unknown>({
-      successTtlMs: cacheSuccessMs
-    });
-    cacheFlights.set(cacheSuccessMs, refreshSingleFlight);
+  if (refreshSingleFlight === undefined) {
+    refreshSingleFlight = createSingleFlight<string, unknown>();
+    namedRefreshFlights.set(namespace, refreshSingleFlight);
   }
 
   return refreshSingleFlight as SingleFlight<string, TRefresh>;

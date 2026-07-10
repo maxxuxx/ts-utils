@@ -56,15 +56,31 @@ Refresh results are parsed through `tokenSchema` and, when configured, `jwtSchem
 
 Use `userSchema` and `tokenSchema` together as the single session boundary parser for restored values, controller reads, `set`, `updateUser`, and refresh writes
 
+Apply schema transforms once at each boundary and never pass parsed user or token output back through the same schema before storage
+
 Invalid persisted JSON or schema-invalid React session data must be removed from storage and replaced with an empty or configured valid fallback
 
 React sessions are memory-only when `storage` is omitted or set to `"memory"`; persistent `localStorage`, `sessionStorage`, or a custom storage adapter requires an explicit option
+
+React snapshots must be detached, recursively frozen, and identity-stable between committed updates so callers cannot mutate auth state outside controller methods
+
+React snapshot containers must be plain objects or arrays; reject mutable internal-slot containers such as `Date`, `Map`, `Set`, and typed arrays during preparation
+
+React persistence follows prepare, persist, then commit; serialization, `setItem`, or `removeItem` failure must leave the cached snapshot and notifications unchanged
+
+Use the server or initial session only for construction hydration. A matching later storage deletion or clear event produces an empty snapshot
+
+Attach one storage event handler on the first React subscriber, detach it after the last unsubscribe, and filter events by both storage area and key while accepting matching-area clear events
 
 `refreshThresholdSeconds` refreshes only when a JWT is present, a refresh token exists, and `refreshTokens` is configured
 
 Core refresh single-flight state belongs to each controller so unrelated controllers never share results only because their refresh-token strings match
 
 Every core refresh participant writes the shared validated token result into its own storage context
+
+Before a pending refresh writes, re-read the context and compare its raw access and refresh token identity with the identity that started the work
+
+When identity changed to a newer login, return its current access token without writing. When the session was cleared, fail with `TokenSessionError` without writing. When only the user changed, preserve the current user with the refreshed tokens
 
 The core controller is storage agnostic. Apps provide `read`, `write`, and `clear`
 

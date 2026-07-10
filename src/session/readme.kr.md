@@ -68,6 +68,7 @@ const user = await session.ensure(undefined);
 - `useRefreshToken`의 기본값은 `true`입니다. access-token-only API는 `false`로 설정합니다.
 - `userSchema`와 `tokenSchema`는 복원한 session 값과 모든 controller write를 검증합니다
 - schema-invalid `set`과 `updateUser`는 현재 session을 변경하기 전에 reject됩니다
+- schema transform은 read, input, refresh-result boundary마다 한 번 실행하며 parsed output을 storage 전에 다시 parse하지 않습니다
 - `jwtSchema`가 있을 때만 JWT parsing과 expiration check가 실행됩니다.
 - `jwtSchema`는 원본 token이 붙기 전의 strict decoded payload claim을 검증합니다
 - invalid base64url 또는 UTF-8은 `jwtSchema` parsing 전에 실패합니다
@@ -104,6 +105,14 @@ const tabSession = createReactTokenSession({
 
 malformed JSON 또는 `userSchema`나 `tokenSchema`가 거부한 값은 controller snapshot을 노출하기 전에 persistent storage에서 제거합니다
 
+server 또는 initial session은 initial hydration에만 사용합니다. 이후 matching storage deletion 또는 clear event는 empty snapshot을 만듭니다
+
+snapshot은 caller reference와 분리해 recursive freeze하고 committed update 사이의 반복 read는 같은 object identity를 반환합니다
+
+snapshot container는 plain object 또는 array여야 합니다. `Date`, `Map`, `Set`, typed array처럼 internal state가 변하는 built-in은 current snapshot 변경 전에 reject합니다
+
+persistent write는 다음 snapshot 준비와 serialization을 먼저 수행하고 storage 성공 후에만 commit하고 notify합니다
+
 ## 주의할 점
 
 - refresh token이 필요한 설정에서 refresh token이 없으면 `invalid_token`입니다.
@@ -111,6 +120,9 @@ malformed JSON 또는 `userSchema`나 `tokenSchema`가 거부한 값은 controll
 - 동일 refresh token으로 들어온 concurrent refresh는 기본적으로 한 controller 안에서 dedupe됩니다
 - 서로 다른 controller는 refresh-token string이 같아도 refresh state를 공유하지 않습니다
 - 하나의 core refresh를 기다린 모든 context는 검증된 결과를 각자의 store에 기록합니다
+- pending refresh는 write 전에 current raw token identity를 다시 확인합니다
+- 새 login은 덮어쓰지 않고 current access token을 사용하며 clear된 session은 복원하지 않고 reject합니다
+- refresh 중 user만 변경되면 current user와 refreshed token을 함께 보존합니다
 - SvelteKit adapter는 call 인자 또는 `getCookies`에서 cookies가 필요하며 없으면 session error가 발생합니다.
 
 ## 관련 모듈

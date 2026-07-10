@@ -68,6 +68,7 @@ const user = await session.ensure(undefined);
 - `useRefreshToken` defaults to `true`. Set it to `false` for access-token-only APIs.
 - `userSchema` and `tokenSchema` validate restored session values and every controller write
 - Schema-invalid `set` and `updateUser` calls reject before changing the current session
+- Schema transforms run once per read, input, or refresh-result boundary and parsed output is not reparsed before storage
 - JWT parsing and expiration checks run only when `jwtSchema` is provided.
 - `jwtSchema` validates strictly decoded payload claims before the original token is attached
 - Invalid base64url or UTF-8 fails before `jwtSchema` parsing
@@ -104,6 +105,14 @@ const tabSession = createReactTokenSession({
 
 Malformed JSON and values rejected by `userSchema` or `tokenSchema` are removed from persistent storage before the controller exposes its snapshot
 
+The server or initial session is used only for initial hydration. A later matching storage deletion or clear event produces an empty snapshot
+
+Snapshots are detached and recursively frozen, while repeated reads return the same object identity until a committed update
+
+Snapshot containers must be plain objects or arrays. Mutable built-ins with internal state, including `Date`, `Map`, `Set`, and typed arrays, are rejected before the current snapshot changes
+
+Persistent writes prepare and serialize the next snapshot before storage mutation, then commit and notify only after storage succeeds
+
 ## Edge cases
 
 - When refresh tokens are required, missing refresh tokens cause `invalid_token`.
@@ -111,6 +120,9 @@ Malformed JSON and values rejected by `userSchema` or `tokenSchema` are removed 
 - Concurrent refresh calls with the same refresh token are deduped within one controller by default
 - Separate controllers keep independent refresh state even when their refresh-token strings match
 - Every context waiting on one core refresh writes the validated result to its own store
+- A pending refresh rechecks the current raw token identity before writing
+- A newer login remains untouched and supplies its current access token, while a cleared session rejects without being restored
+- User-only changes made during refresh are preserved with the refreshed tokens
 - SvelteKit adapter requires cookies from the call or `getCookies`; missing cookies produce a session error.
 
 ## Related modules

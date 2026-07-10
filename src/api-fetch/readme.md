@@ -149,6 +149,8 @@ Use the same explicit `namespace` and stable refresh key for fetcher instances t
 
 `refresh` runs once per namespace and key, while every participating cookie context runs `applyRefresh` before its request retry
 
+Adapter sharing retains only in-flight work and does not cache successful refresh results or partition flights by cache duration
+
 When `namespace` is omitted, refresh single-flight state stays local to that adapter instance
 
 Set `dedupeRefresh: false` only when `refresh` directly updates its cookie context and returns the next access token without `applyRefresh`
@@ -170,6 +172,7 @@ Set `dedupeRefresh: false` only when `refresh` directly updates its cookie conte
 
 - Auth refresh is attempted for 401 and 419 by default and is deduped while a refresh is in flight.
 - SvelteKit adapter dedupe requires `applyRefresh`; failed or empty shared results are not retained
+- Explicit SvelteKit namespaces use one in-flight runner, so the same stable key shares work without cache configuration
 - A SvelteKit `applyRefresh` failure clears only that request's cookie context through terminal auth handling
 - Auth is sent only to relative requests, the `baseURL` origin, and explicit `allowedOrigins`
 - Auth responses without refresh, non-replayable auth requests, and exhausted refresh clear the session best effort and throw `ApiAuthError`

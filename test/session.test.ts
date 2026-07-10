@@ -7,7 +7,8 @@ import {
 } from "../src/api-fetch/index.js";
 import {
   TokenSessionError,
-  createTokenSession
+  createTokenSession,
+  type TokenSessionData
 } from "../src/session/index.js";
 import { createReactTokenSession } from "../src/session/react.js";
 import { createSession } from "../src/session/sveltekit.js";
@@ -24,6 +25,13 @@ type TestTokens = {
 type TestSession = {
   tokens?: TestTokens;
   user?: TestUser;
+};
+
+type NestedUser = {
+  id: string;
+  profile: {
+    name: string;
+  };
 };
 
 const User = z.object({
@@ -339,6 +347,508 @@ describe("session module", () => {
       reason: "invalid_token"
     } satisfies Partial<TokenSessionError>);
     expect(storedSession.tokens).toBe(currentTokens);
+  });
+
+  it("does not restore a cleared session after a pending refresh", async () => {
+    let storedSession: TestSession = {
+      tokens: {
+        accessToken : "expired-clear-token",
+        refreshToken: "clear-refresh-token"
+      },
+      user: {
+        id: "user-1"
+      }
+    };
+    const refreshGate = createDeferred<void>();
+    const refreshTokens = vi.fn(async () => {
+      await refreshGate.promise;
+
+      return {
+        accessToken : "stale-cleared-access-token",
+        refreshToken: "stale-cleared-refresh-token"
+      };
+    });
+    const session = createTokenSession<void, TestUser, TestTokens>({
+      clear: () => {
+        storedSession = {};
+      },
+      read: () => storedSession,
+      refreshTokens,
+      tokenSchema: Tokens,
+      userSchema : User,
+      write: (_context, nextSession) => {
+        storedSession = nextSession;
+      }
+    });
+    const pendingRefresh = session.refresh(undefined);
+
+    await vi.waitFor(() => {
+      expect(refreshTokens).toHaveBeenCalledTimes(1);
+    });
+
+    await session.clear(undefined);
+    refreshGate.resolve();
+
+    await expect(pendingRefresh).rejects.toMatchObject({
+      reason: "invalid_token"
+    } satisfies Partial<TokenSessionError>);
+    expect(storedSession).toEqual({});
+  });
+
+  it("does not overwrite a newer login after a pending refresh", async () => {
+    let storedSession: TestSession = {
+      tokens: {
+        accessToken : "expired-login-token",
+        refreshToken: "old-login-refresh-token"
+      },
+      user: {
+        id: "old-user"
+      }
+    };
+    const refreshGate = createDeferred<void>();
+    const refreshTokens = vi.fn(async () => {
+      await refreshGate.promise;
+
+      return {
+        accessToken : "stale-login-access-token",
+        refreshToken: "stale-login-refresh-token"
+      };
+    });
+    const session = createTokenSession<void, TestUser, TestTokens>({
+      clear: () => {
+        storedSession = {};
+      },
+      read: () => storedSession,
+      refreshTokens,
+      tokenSchema: Tokens,
+      userSchema : User,
+      write: (_context, nextSession) => {
+        storedSession = nextSession;
+      }
+    });
+    const pendingRefresh = session.refresh(undefined);
+
+    await vi.waitFor(() => {
+      expect(refreshTokens).toHaveBeenCalledTimes(1);
+    });
+
+    await session.set(undefined, {
+      tokens: {
+        accessToken : "new-login-access-token",
+        refreshToken: "new-login-refresh-token"
+      },
+      user: {
+        id: "new-user"
+      }
+    });
+    refreshGate.resolve();
+
+    await expect(pendingRefresh).resolves.toBe("new-login-access-token");
+    expect(storedSession).toEqual({
+      tokens: {
+        accessToken : "new-login-access-token",
+        refreshToken: "new-login-refresh-token"
+      },
+      user: {
+        id: "new-user"
+      }
+    });
+  });
+
+  it("validates newer session state before accepting it during refresh", async () => {
+    let storedSession: TestSession = {
+      tokens: {
+        accessToken : "expired-validation-token",
+        refreshToken: "validation-refresh-token"
+      },
+      user: {
+        id: "old-user"
+      }
+    };
+    const refreshGate = createDeferred<void>();
+    const refreshTokens = vi.fn(async () => {
+      await refreshGate.promise;
+
+      return {
+        accessToken : "stale-validation-access-token",
+        refreshToken: "stale-validation-refresh-token"
+      };
+    });
+    const write = vi.fn((_context: void, nextSession: TestSession) => {
+      storedSession = nextSession;
+    });
+    const session = createTokenSession<void, TestUser, TestTokens>({
+      clear: () => {
+        storedSession = {};
+      },
+      read: () => storedSession,
+      refreshTokens,
+      tokenSchema: Tokens,
+      userSchema : User,
+      write
+    });
+    const pendingRefresh = session.refresh(undefined);
+
+    await vi.waitFor(() => {
+      expect(refreshTokens).toHaveBeenCalledTimes(1);
+    });
+
+    storedSession = {
+      tokens: {
+        accessToken : "new-invalid-access-token",
+        refreshToken: ""
+      },
+      user: {
+        id: "new-user"
+      }
+    };
+    refreshGate.resolve();
+
+    await expect(pendingRefresh).rejects.toMatchObject({
+      reason: "invalid_token"
+    } satisfies Partial<TokenSessionError>);
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it("validates a newer access token with the JWT schema during refresh", async () => {
+    const nowSeconds = 1_700_000_000;
+    let storedSession: TestSession = {
+      tokens: {
+        accessToken : createToken({ exp: nowSeconds + 60 }),
+        refreshToken: "jwt-validation-refresh-token"
+      },
+      user: {
+        id: "old-user"
+      }
+    };
+    const refreshGate = createDeferred<void>();
+    const refreshTokens = vi.fn(async () => {
+      await refreshGate.promise;
+
+      return {
+        accessToken : createToken({ exp: nowSeconds + 3_600 }),
+        refreshToken: "next-jwt-validation-refresh-token"
+      };
+    });
+    const write = vi.fn((_context: void, nextSession: TestSession) => {
+      storedSession = nextSession;
+    });
+    const session = createTokenSession<void, TestUser, TestTokens>({
+      clear: () => {
+        storedSession = {};
+      },
+      jwtSchema: Claims,
+      now      : () => nowSeconds * 1000,
+      read     : () => storedSession,
+      refreshTokens,
+      tokenSchema: Tokens,
+      userSchema : User,
+      write
+    });
+    const pendingRefresh = session.refresh(undefined);
+
+    await vi.waitFor(() => {
+      expect(refreshTokens).toHaveBeenCalledTimes(1);
+    });
+
+    storedSession = {
+      tokens: {
+        accessToken : "not-a-jwt",
+        refreshToken: "new-jwt-validation-refresh-token"
+      },
+      user: {
+        id: "new-user"
+      }
+    };
+    refreshGate.resolve();
+
+    await expect(pendingRefresh).rejects.toMatchObject({
+      reason: "invalid_token"
+    } satisfies Partial<TokenSessionError>);
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it("ignores a stale refresh failure after a newer login", async () => {
+    let storedSession: TestSession = {
+      tokens: {
+        accessToken : "expired-failure-token",
+        refreshToken: "old-failure-refresh-token"
+      },
+      user: {
+        id: "old-user"
+      }
+    };
+    const refreshGate = createDeferred<void>();
+    const refreshError = new Error("old refresh failed");
+    const refreshTokens = vi.fn(async () => {
+      await refreshGate.promise;
+      throw refreshError;
+    });
+    const session = createTokenSession<void, TestUser, TestTokens>({
+      clear: () => {
+        storedSession = {};
+      },
+      read: () => storedSession,
+      refreshTokens,
+      tokenSchema: Tokens,
+      userSchema : User,
+      write: (_context, nextSession) => {
+        storedSession = nextSession;
+      }
+    });
+    const pendingRefresh = session.refresh(undefined);
+
+    await vi.waitFor(() => {
+      expect(refreshTokens).toHaveBeenCalledTimes(1);
+    });
+
+    await session.set(undefined, {
+      tokens: {
+        accessToken : "new-failure-access-token",
+        refreshToken: "new-failure-refresh-token"
+      },
+      user: {
+        id: "new-user"
+      }
+    });
+    refreshGate.resolve();
+
+    await expect(pendingRefresh).resolves.toBe("new-failure-access-token");
+    expect(storedSession.user?.id).toBe("new-user");
+    expect(storedSession.tokens?.refreshToken).toBe("new-failure-refresh-token");
+  });
+
+  it("returns the current user when login changes during ensure refresh", async () => {
+    const nowSeconds = 1_700_000_000;
+    let storedSession: TestSession = {
+      tokens: {
+        accessToken : createToken({ exp: nowSeconds - 1 }),
+        refreshToken: "old-ensure-refresh-token"
+      },
+      user: {
+        id: "old-user"
+      }
+    };
+    const refreshGate = createDeferred<void>();
+    const refreshTokens = vi.fn(async () => {
+      await refreshGate.promise;
+
+      return {
+        accessToken : createToken({ exp: nowSeconds + 3_600 }),
+        refreshToken: "stale-ensure-refresh-token"
+      };
+    });
+    const session = createTokenSession<void, TestUser, TestTokens>({
+      clear: () => {
+        storedSession = {};
+      },
+      jwtSchema: Claims,
+      now      : () => nowSeconds * 1000,
+      read     : () => storedSession,
+      refreshTokens,
+      tokenSchema: Tokens,
+      userSchema : User,
+      write: (_context, nextSession) => {
+        storedSession = nextSession;
+      }
+    });
+    const pendingEnsure = session.ensure(undefined);
+
+    await vi.waitFor(() => {
+      expect(refreshTokens).toHaveBeenCalledTimes(1);
+    });
+
+    await session.set(undefined, {
+      tokens: {
+        accessToken : createToken({ exp: nowSeconds + 7_200 }),
+        refreshToken: "new-ensure-refresh-token"
+      },
+      user: {
+        id: "new-user"
+      }
+    });
+    refreshGate.resolve();
+
+    await expect(pendingEnsure).resolves.toEqual({
+      id: "new-user"
+    });
+    expect(storedSession.user).toEqual({
+      id: "new-user"
+    });
+  });
+
+  it("revalidates required tokens after login changes during ensure refresh", async () => {
+    const nowSeconds = 1_700_000_000;
+    let storedSession: TestSession = {
+      tokens: {
+        accessToken : createToken({ exp: nowSeconds - 1 }),
+        refreshToken: "old-required-refresh-token"
+      },
+      user: {
+        id: "old-user"
+      }
+    };
+    const refreshGate = createDeferred<void>();
+    const refreshTokens = vi.fn(async () => {
+      await refreshGate.promise;
+
+      return {
+        accessToken : createToken({ exp: nowSeconds + 3_600 }),
+        refreshToken: "stale-required-refresh-token"
+      };
+    });
+    const session = createTokenSession<void, TestUser, TestTokens>({
+      clear: () => {
+        storedSession = {};
+      },
+      jwtSchema: Claims,
+      now      : () => nowSeconds * 1000,
+      read     : () => storedSession,
+      refreshTokens,
+      tokenSchema: Tokens,
+      userSchema : User,
+      write: (_context, nextSession) => {
+        storedSession = nextSession;
+      }
+    });
+    const pendingEnsure = session.ensure(undefined);
+
+    await vi.waitFor(() => {
+      expect(refreshTokens).toHaveBeenCalledTimes(1);
+    });
+
+    storedSession = {
+      tokens: {
+        accessToken: createToken({ exp: nowSeconds + 7_200 })
+      },
+      user: {
+        id: "new-user"
+      }
+    };
+    refreshGate.resolve();
+
+    await expect(pendingEnsure).rejects.toMatchObject({
+      reason: "invalid_token"
+    } satisfies Partial<TokenSessionError>);
+    expect(storedSession.user?.id).toBe("new-user");
+  });
+
+  it("preserves the current user when it changes during refresh", async () => {
+    let storedSession: TestSession = {
+      tokens: {
+        accessToken : "expired-user-token",
+        refreshToken: "user-refresh-token"
+      },
+      user: {
+        id: "old-user"
+      }
+    };
+    const refreshGate = createDeferred<void>();
+    const refreshTokens = vi.fn(async () => {
+      await refreshGate.promise;
+
+      return {
+        accessToken : "fresh-user-token",
+        refreshToken: "next-user-refresh-token"
+      };
+    });
+    const session = createTokenSession<void, TestUser, TestTokens>({
+      clear: () => {
+        storedSession = {};
+      },
+      read: () => storedSession,
+      refreshTokens,
+      tokenSchema: Tokens,
+      userSchema : User,
+      write: (_context, nextSession) => {
+        storedSession = nextSession;
+      }
+    });
+    const pendingRefresh = session.refresh(undefined);
+
+    await vi.waitFor(() => {
+      expect(refreshTokens).toHaveBeenCalledTimes(1);
+    });
+
+    await session.updateUser(undefined, {
+      id: "current-user"
+    });
+    refreshGate.resolve();
+
+    await expect(pendingRefresh).resolves.toBe("fresh-user-token");
+    expect(storedSession.user).toEqual({
+      id: "current-user"
+    });
+  });
+
+  it("applies session schema transforms once per refresh boundary", async () => {
+    let userParseCount  = 0;
+    let tokenParseCount = 0;
+    const TransformUser = z.object({
+      id: z.string()
+    }).transform((user) => ({
+      ...user,
+      marker: `user-${++userParseCount}`
+    }));
+    const TransformTokens = z.object({
+      accessToken : z.string(),
+      refreshToken: z.string()
+    }).transform((tokens) => ({
+      ...tokens,
+      accessToken: `${tokens.accessToken}-${++tokenParseCount}`
+    }));
+    type TransformedUser = z.output<typeof TransformUser>;
+    type TransformedTokens = z.output<typeof TransformTokens>;
+    let storedSession = {
+      tokens: {
+        accessToken : "expired",
+        refreshToken: "refresh"
+      },
+      user: {
+        id: "user"
+      }
+    } as unknown as TokenSessionData<TransformedUser, TransformedTokens>;
+    const refreshTokens = vi.fn(async (
+      _refreshToken: string,
+      context: {
+        tokens: TransformedTokens;
+        user: TransformedUser;
+      }
+    ) => {
+      expect(context.tokens.accessToken).toBe("expired-1");
+      expect(context.user.marker).toBe("user-1");
+
+      return {
+        accessToken : "fresh",
+        refreshToken: "next-refresh"
+      } as TransformedTokens;
+    });
+    const session = createTokenSession<void, TransformedUser, TransformedTokens>({
+      clear: () => {
+        storedSession = {};
+      },
+      read: () => storedSession,
+      refreshTokens,
+      tokenSchema: TransformTokens,
+      userSchema : TransformUser,
+      write: (_context, nextSession) => {
+        storedSession = nextSession;
+      }
+    });
+
+    await expect(session.refresh(undefined)).resolves.toBe("fresh-2");
+    expect(storedSession).toEqual({
+      tokens: {
+        accessToken : "fresh-2",
+        refreshToken: "next-refresh"
+      },
+      user: {
+        id    : "user",
+        marker: "user-2"
+      }
+    });
+    expect(tokenParseCount).toBe(3);
+    expect(userParseCount).toBe(2);
   });
 
   it("dedupes concurrent refresh token rotation and writes next tokens to every request context", async () => {
@@ -764,6 +1274,331 @@ describe("session module", () => {
     unsubscribe();
   });
 
+  it("uses the React server session only for initial hydration", () => {
+    const storage = createMemoryStorage();
+    const storageEvents = createStorageEventHarness();
+
+    vi.stubGlobal("addEventListener", storageEvents.addEventListener);
+    vi.stubGlobal("removeEventListener", storageEvents.removeEventListener);
+
+    try {
+      const session = createReactTokenSession<TestUser, TestTokens>({
+        serverSession: {
+          tokens: {
+            accessToken: "server-token"
+          },
+          user: {
+            id: "server-user"
+          }
+        },
+        storage,
+        storageKey: "hydrated-session",
+        useRefreshToken: false
+      });
+      const listener = vi.fn();
+      const unsubscribe = session.subscribe(listener);
+
+      expect(session.get().user?.id).toBe("server-user");
+
+      storage.removeItem("hydrated-session");
+      storageEvents.dispatch({
+        key        : "hydrated-session",
+        storageArea: storage
+      });
+
+      expect(session.get()).toEqual({});
+
+      storage.setItem("hydrated-session", JSON.stringify({
+        tokens: {
+          accessToken: "tab-token"
+        },
+        user: {
+          id: "tab-user"
+        }
+      }));
+      storageEvents.dispatch({
+        key        : "hydrated-session",
+        storageArea: storage
+      });
+      listener.mockClear();
+      storage.removeItem("hydrated-session");
+      storageEvents.dispatch({
+        key        : null,
+        storageArea: storage
+      });
+
+      expect(session.get()).toEqual({});
+      expect(listener).toHaveBeenCalledTimes(1);
+
+      unsubscribe();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("keeps React set atomic when JSON serialization fails", async () => {
+    const storage = createMemoryStorage();
+    const session = createReactTokenSession<NestedUser, TestTokens>({
+      initialSession: {
+        tokens: {
+          accessToken: "initial-token"
+        },
+        user: {
+          id: "user-1",
+          profile: {
+            name: "initial"
+          }
+        }
+      },
+      storage,
+      storageKey: "cyclic-session",
+      useRefreshToken: false
+    });
+    const listener = vi.fn();
+    const unsubscribe = session.subscribe(listener);
+    const previousSnapshot = session.getSnapshot();
+    const profile: NestedUser["profile"] & { self?: unknown } = {
+      name: "cyclic"
+    };
+
+    profile.self = profile;
+
+    await expect(session.set({
+      tokens: {
+        accessToken: "next-token"
+      },
+      user: {
+        id: "user-2",
+        profile
+      }
+    })).rejects.toBeInstanceOf(TypeError);
+    expect(session.getSnapshot()).toBe(previousSnapshot);
+    expect(listener).not.toHaveBeenCalled();
+
+    unsubscribe();
+  });
+
+  it("keeps React set atomic when persistent storage write fails", async () => {
+    const baseStorage = createMemoryStorage();
+    const storage = {
+      ...baseStorage,
+      setItem: vi.fn(() => {
+        throw new Error("storage write failed");
+      })
+    };
+    const session = createReactTokenSession<TestUser, TestTokens>({
+      initialSession: {
+        tokens: {
+          accessToken: "initial-token"
+        },
+        user: {
+          id: "initial-user"
+        }
+      },
+      storage,
+      storageKey: "failed-write-session",
+      useRefreshToken: false
+    });
+    const listener = vi.fn();
+    const unsubscribe = session.subscribe(listener);
+    const previousSnapshot = session.getSnapshot();
+
+    await expect(session.set({
+      tokens: {
+        accessToken: "next-token"
+      },
+      user: {
+        id: "next-user"
+      }
+    })).rejects.toThrow("storage write failed");
+    expect(session.getSnapshot()).toBe(previousSnapshot);
+    expect(listener).not.toHaveBeenCalled();
+
+    unsubscribe();
+  });
+
+  it("keeps React clear atomic when persistent storage removal fails", async () => {
+    const baseStorage = createMemoryStorage();
+
+    baseStorage.setItem("failed-clear-session", JSON.stringify({
+      tokens: {
+        accessToken: "stored-token"
+      },
+      user: {
+        id: "stored-user"
+      }
+    }));
+
+    const storage = {
+      ...baseStorage,
+      removeItem: vi.fn(() => {
+        throw new Error("storage removal failed");
+      })
+    };
+    const session = createReactTokenSession<TestUser, TestTokens>({
+      storage,
+      storageKey: "failed-clear-session",
+      useRefreshToken: false
+    });
+    const listener = vi.fn();
+    const unsubscribe = session.subscribe(listener);
+    const previousSnapshot = session.getSnapshot();
+
+    await expect(session.clear()).rejects.toThrow("storage removal failed");
+    expect(session.getSnapshot()).toBe(previousSnapshot);
+    expect(listener).not.toHaveBeenCalled();
+
+    unsubscribe();
+  });
+
+  it("detaches React session state from nested set inputs", async () => {
+    const session = createReactTokenSession<NestedUser, TestTokens>({
+      storageKey: "detached-input-session",
+      useRefreshToken: false
+    });
+    const input = {
+      tokens: {
+        accessToken: "input-token"
+      },
+      user: {
+        id: "user-1",
+        profile: {
+          name: "before"
+        }
+      }
+    };
+
+    await session.set(input);
+    input.user.profile.name = "after";
+
+    expect(session.get().user?.profile.name).toBe("before");
+  });
+
+  it("exposes immutable React snapshots with stable update identity", async () => {
+    const session = createReactTokenSession<NestedUser, TestTokens>({
+      storageKey: "immutable-output-session",
+      useRefreshToken: false
+    });
+
+    await session.set({
+      tokens: {
+        accessToken: "snapshot-token"
+      },
+      user: {
+        id: "user-1",
+        profile: {
+          name: "before"
+        }
+      }
+    });
+
+    const snapshot = session.get();
+
+    expect(session.getSnapshot()).toBe(snapshot);
+    expect(session.get()).toBe(snapshot);
+    expect(() => {
+      if (snapshot.user) {
+        snapshot.user.profile.name = "after";
+      }
+    }).toThrow(TypeError);
+    expect(session.getSnapshot().user?.profile.name).toBe("before");
+    expect(session.getSnapshot()).toBe(snapshot);
+  });
+
+  it("rejects React snapshot containers with mutable internal slots", async () => {
+    const unsupportedValues: unknown[] = [
+      new Date("2026-01-01T00:00:00.000Z"),
+      new Map([["key", "value"]]),
+      new Set(["value"]),
+      new Uint8Array([1, 2, 3])
+    ];
+
+    for (const value of unsupportedValues) {
+      const session = createReactTokenSession<{
+        id: string;
+        value: unknown;
+      }, TestTokens>({
+        storageKey: "unsupported-snapshot-session",
+        useRefreshToken: false
+      });
+      const listener = vi.fn();
+      const unsubscribe = session.subscribe(listener);
+      const previousSnapshot = session.getSnapshot();
+
+      await expect(session.set({
+        tokens: {
+          accessToken: "unsupported-value-token"
+        },
+        user: {
+          id: "user-1",
+          value
+        }
+      })).rejects.toThrow(TypeError);
+      expect(session.getSnapshot()).toBe(previousSnapshot);
+      expect(listener).not.toHaveBeenCalled();
+
+      unsubscribe();
+    }
+  });
+
+  it("uses one filtered storage event handler per React controller", () => {
+    const storage = createMemoryStorage();
+    const otherStorage = createMemoryStorage();
+    const storageEvents = createStorageEventHarness();
+
+    vi.stubGlobal("addEventListener", storageEvents.addEventListener);
+    vi.stubGlobal("removeEventListener", storageEvents.removeEventListener);
+
+    try {
+      const session = createReactTokenSession<TestUser, TestTokens>({
+        storage,
+        storageKey: "shared-listener-session",
+        useRefreshToken: false
+      });
+      const listenerA = vi.fn();
+      const listenerB = vi.fn();
+      const unsubscribeA = session.subscribe(listenerA);
+      const unsubscribeB = session.subscribe(listenerB);
+
+      expect(storageEvents.addEventListener).toHaveBeenCalledTimes(1);
+
+      storageEvents.dispatch({
+        key        : "shared-listener-session",
+        storageArea: otherStorage
+      });
+      storageEvents.dispatch({
+        key        : "other-session",
+        storageArea: storage
+      });
+      expect(listenerA).not.toHaveBeenCalled();
+      expect(listenerB).not.toHaveBeenCalled();
+
+      storage.setItem("shared-listener-session", JSON.stringify({
+        tokens: {
+          accessToken: "updated-token"
+        },
+        user: {
+          id: "updated-user"
+        }
+      }));
+      storageEvents.dispatch({
+        key        : "shared-listener-session",
+        storageArea: storage
+      });
+
+      expect(listenerA).toHaveBeenCalledTimes(1);
+      expect(listenerB).toHaveBeenCalledTimes(1);
+      expect(session.get().user?.id).toBe("updated-user");
+
+      unsubscribeA();
+      expect(storageEvents.removeEventListener).not.toHaveBeenCalled();
+      unsubscribeB();
+      expect(storageEvents.removeEventListener).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("uses memory storage by default and with explicit memory storage", async () => {
     const localStorage = createMemoryStorage();
 
@@ -1034,6 +1869,32 @@ const createMemoryStorage = () => {
     setItem: (key: string, value: string) => {
       values.set(key, value);
     }
+  };
+};
+
+const createStorageEventHarness = () => {
+  const listeners = new Set<(event: unknown) => void>();
+  const addEventListener = vi.fn((
+    _type: "storage",
+    listener: (event: unknown) => void
+  ) => {
+    listeners.add(listener);
+  });
+  const removeEventListener = vi.fn((
+    _type: "storage",
+    listener: (event: unknown) => void
+  ) => {
+    listeners.delete(listener);
+  });
+
+  return {
+    addEventListener,
+    dispatch: (event: unknown) => {
+      for (const listener of listeners) {
+        listener(event);
+      }
+    },
+    removeEventListener
   };
 };
 
