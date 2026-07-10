@@ -2,12 +2,13 @@
 
 [한국어](./readme.kr.md)
 
-Dependency-free UTF-8, base64, hex, and byte conversion helpers for browser and Node runtimes.
+Dependency-free UTF-8, base64, base64url, hex, and byte conversion helpers for browser and Node runtimes
 
 ## Use this when
 
 - You need to convert text to bytes and back without bringing a larger encoding package.
 - You need base64 or hex helpers that accept both strings and byte-like inputs.
+- You need strict base64url bytes or text with the same validation in browser and Node runtimes
 - You want result-style UTF-8 decode failures for invalid byte sequences.
 
 ## Import
@@ -17,9 +18,17 @@ import {
   encoding,
   utf8,
   base64,
+  base64url,
   hex,
   toUint8Array
 } from "@maxxuxx/ts-utils/encoding";
+
+import {
+  decodeBase64Url,
+  decodeBase64UrlText,
+  encodeBase64Url,
+  isBase64Url
+} from "@maxxuxx/ts-utils/encoding/base64url";
 ```
 
 ## Core exports
@@ -28,6 +37,7 @@ import {
 |---|---|
 | `utf8`, `encodeUtf8`, `decodeUtf8`, `safeDecodeUtf8` | Text and UTF-8 byte helpers. |
 | `base64`, `encodeBase64`, `decodeBase64`, `base64ToUint8Array`, `uint8ArrayToBase64` | Base64 text and byte helpers. |
+| `base64url`, `encodeBase64Url`, `decodeBase64Url`, `decodeBase64UrlText`, `isBase64Url` | Strict base64url text, byte, and validation helpers |
 | `hex`, `encodeHex`, `decodeHex`, `hexToUint8Array`, `uint8ArrayToHex` | Hex text and byte helpers. |
 | `toUint8Array` | Normalizes `ArrayBuffer`, typed arrays, `DataView`, and byte arrays. |
 | `EncodingError` | Error wrapper used by safe UTF-8 decoding. |
@@ -42,6 +52,9 @@ const text = encoding.utf8.decode(bytes);
 const result = utf8.safeDecode([0xff], {
   fatal: true
 });
+
+const compact = base64url.encode("안녕");
+const decoded = base64url.decodeText(compact);
 ```
 
 ## Behavior notes
@@ -49,6 +62,8 @@ const result = utf8.safeDecode([0xff], {
 - String inputs are encoded as UTF-8 before base64 or hex conversion.
 - Use `toBytes` helpers when the caller needs raw bytes instead of decoded text.
 - Node uses `Buffer` when available; browser-like runtimes use `btoa` and `atob` for base64.
+- Base64url uses Web standard byte conversion and always emits unpadded output
+- Base64url text decoding uses fatal UTF-8 validation
 - `decodeUtf8` accepts standard `TextDecoder` options such as `fatal` and `ignoreBOM`.
 - `EncodingResult` aliases the shared `Result` contract from `@maxxuxx/ts-utils/result`
 
@@ -56,11 +71,14 @@ const result = utf8.safeDecode([0xff], {
 
 - `toUint8Array` rejects numeric arrays containing values outside 0 through 255.
 - `base64.toBytes` rejects non-base64 strings.
+- `base64url.decode` accepts unpadded input or canonical terminal padding
+- Base64url rejects invalid alphabet characters, misplaced or non-canonical padding, and impossible lengths
+- `base64url.decodeText` rejects decoded bytes that are not valid UTF-8
 - `hex.toBytes` requires an even number of hexadecimal characters and accepts an optional `0x` prefix.
 - `safeDecodeUtf8` returns `{ ok: false, error: EncodingError }` instead of throwing.
 
 ## Related modules
 
 - `@maxxuxx/ts-utils/json` when encoded payloads contain JSON text.
-- `@maxxuxx/ts-utils/jwt` for base64url JWT segment decoding.
+- `@maxxuxx/ts-utils/jwt` for strict base64url JWT segment decoding with optional schema validation
 - `@maxxuxx/ts-utils/result` for shared result factories and transformations

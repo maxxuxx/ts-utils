@@ -48,6 +48,10 @@ SvelteKit helpers can receive `getCookies` so callers can use `getSession()`, `e
 
 JWT parsing and expiration checks only run when `jwtSchema` is provided, so opaque access tokens are valid in access-token-only apps
 
+JWT schemas validate the strictly decoded payload before the original token is attached. Use the final refresh context claims when code needs the validated claims plus raw token
+
+Session JWT paths use `safeDecodeJwtWithSchema` so invalid base64url and UTF-8 fail before schema parsing in Node and browser-compatible runtimes
+
 Refresh results are parsed through `tokenSchema` and, when configured, `jwtSchema` before being written back to storage
 
 `refreshThresholdSeconds` refreshes only when a JWT is present, a refresh token exists, and `refreshTokens` is configured

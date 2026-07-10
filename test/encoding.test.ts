@@ -3,17 +3,22 @@ import { describe, expect, it } from "vitest";
 import {
   EncodingError,
   base64,
+  base64url,
   base64ToUint8Array,
   decodeBase64,
+  decodeBase64Url,
+  decodeBase64UrlText,
   decodeHex,
   decodeUtf8,
   encodeBase64,
+  encodeBase64Url,
   encodeHex,
   encodeUtf8,
   encoding,
   getUtf8ByteLength,
   hex,
   hexToUint8Array,
+  isBase64Url,
   safeDecodeUtf8,
   toUint8Array,
   utf8
@@ -61,6 +66,43 @@ describe("encoding module", () => {
     expect(base64.is(encoded)).toBe(true);
     expect(base64.is("not base64")).toBe(false);
     expect(() => base64.toBytes("not base64")).toThrow(RangeError);
+  });
+
+  it("converts UTF-8 text and bytes with unpadded base64url", () => {
+    const encodedText  = encodeBase64Url("안녕");
+    const encodedBytes = encodeBase64Url(new Uint8Array([0xfb, 0xff]));
+
+    expect(encodedText).toBe("7JWI64WV");
+    expect(decodeBase64UrlText(encodedText)).toBe("안녕");
+    expect(encodedBytes).toBe("-_8");
+    expect(Array.from(decodeBase64Url(encodedBytes))).toEqual([0xfb, 0xff]);
+    expect(decodeBase64UrlText("SGVsbG8")).toBe("Hello");
+    expect(base64url.decodeText(base64url.encode("hello"))).toBe("hello");
+    expect(encoding.base64url.is(encodedText)).toBe(true);
+  });
+
+  it("accepts canonical base64url padding", () => {
+    expect(isBase64Url("SGVsbG8=")).toBe(true);
+    expect(isBase64Url("YQ==")).toBe(true);
+    expect(decodeBase64UrlText("SGVsbG8=")).toBe("Hello");
+    expect(decodeBase64UrlText("YQ==")).toBe("a");
+  });
+
+  it("rejects invalid base64url alphabet, padding, and length", () => {
+    expect(isBase64Url("eyJvayI6dHJ1ZX0")).toBe(true);
+    expect(isBase64Url("abc$")).toBe(false);
+    expect(isBase64Url("ab=c")).toBe(false);
+    expect(isBase64Url("ab=")).toBe(false);
+    expect(isBase64Url("a")).toBe(false);
+    expect(() => decodeBase64Url("abc$")).toThrow(TypeError);
+    expect(() => decodeBase64Url("ab=c")).toThrow(TypeError);
+    expect(() => decodeBase64Url("ab=")).toThrow(TypeError);
+    expect(() => decodeBase64Url("a")).toThrow(TypeError);
+  });
+
+  it("fatally rejects invalid UTF-8 decoded from base64url", () => {
+    expect(Array.from(decodeBase64Url("_w"))).toEqual([0xff]);
+    expect(() => decodeBase64UrlText("_w")).toThrow(TypeError);
   });
 
   it("converts text and bytes with hex", () => {

@@ -131,6 +131,24 @@ describe("session module", () => {
     })).toBeNull();
   });
 
+  it("rejects non-base64url JWT segments before applying the JWT schema", () => {
+    const accessToken       = createToken({ exp: 1_700_003_600 });
+    const [header, payload] = accessToken.split(".");
+    const session = createTokenSession<void, TestUser, TestTokens, TestClaims>({
+      clear: () => undefined,
+      jwtSchema: Claims,
+      read: () => ({}),
+      tokenSchema: Tokens,
+      userSchema : User,
+      write: () => undefined
+    });
+
+    expect(session.parseTokens({
+      accessToken : `${header}.${payload}$.signature`,
+      refreshToken: "refresh-token"
+    })).toBeNull();
+  });
+
   it("requires refresh tokens when parsing tokens by default", () => {
     const session = createTokenSession<void, TestUser, TestTokens, TestClaims>({
       clear: () => undefined,

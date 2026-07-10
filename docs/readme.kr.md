@@ -43,6 +43,7 @@ import { createTokenSession } from "@maxxuxx/ts-utils/session";
 | [`@maxxuxx/ts-utils/promise`](./src/promise/readme.kr.md) | promise task timeout, retry, 병렬 실행, settle helper | [promise](./src/promise/readme.kr.md) |
 | [`@maxxuxx/ts-utils/json`](./src/json/readme.kr.md) | JSON parse/stringify, fallback, safe result, schema boundary helper | [json](./src/json/readme.kr.md) |
 | [`@maxxuxx/ts-utils/encoding`](./src/encoding/readme.kr.md) | UTF-8, base64, hex, byte 변환 helper | [encoding](./src/encoding/readme.kr.md) |
+| [`@maxxuxx/ts-utils/encoding/base64url`](../src/encoding/readme.kr.md) | browser와 Node에서 동일하게 검증하는 strict base64url text/byte helper | [encoding/base64url](../src/encoding/readme.kr.md) |
 | [`@maxxuxx/ts-utils/jwt`](./src/jwt/readme.kr.md) | JWT header/payload decode와 만료 판별 helper | [jwt](./src/jwt/readme.kr.md) |
 | [`@maxxuxx/ts-utils/env`](./src/env/readme.kr.md) | runtime env 값 읽기와 Zod schema helper | [env](./src/env/readme.kr.md) |
 | [`@maxxuxx/ts-utils/time`](./src/time/readme.kr.md) | client/server timestamp 기반 server time 추정 helper | [time](./src/time/readme.kr.md) |

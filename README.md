@@ -43,6 +43,7 @@ import { createTokenSession } from "@maxxuxx/ts-utils/session";
 | [`@maxxuxx/ts-utils/promise`](./src/promise/readme.md) | Timeout, retry, parallel, and settle helpers for promise tasks | [promise](./src/promise/readme.md) |
 | [`@maxxuxx/ts-utils/json`](./src/json/readme.md) | JSON parse, stringify, fallback, safe result, and schema boundary helpers | [json](./src/json/readme.md) |
 | [`@maxxuxx/ts-utils/encoding`](./src/encoding/readme.md) | UTF-8, base64, hex, and byte conversion helpers | [encoding](./src/encoding/readme.md) |
+| [`@maxxuxx/ts-utils/encoding/base64url`](./src/encoding/readme.md) | Strict browser and Node base64url text and byte helpers | [encoding/base64url](./src/encoding/readme.md) |
 | [`@maxxuxx/ts-utils/jwt`](./src/jwt/readme.md) | JWT header and payload readers with expiration checks | [jwt](./src/jwt/readme.md) |
 | [`@maxxuxx/ts-utils/env`](./src/env/readme.md) | Runtime environment readers and Zod schema helpers | [env](./src/env/readme.md) |
 | [`@maxxuxx/ts-utils/time`](./src/time/readme.md) | Client/server timestamp helpers for estimating server time | [time](./src/time/readme.md) |

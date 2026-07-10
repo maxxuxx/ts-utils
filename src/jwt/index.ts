@@ -1,3 +1,4 @@
+import { decodeBase64UrlText } from "../encoding/base64url.js";
 import { err, ok, type Result } from "../result/index.js";
 
 /** Represents jwt object */
@@ -20,10 +21,15 @@ export type JwtPayload = JwtObject & {
 };
 
 /** Represents jwt payload with token */
-export type JwtPayloadWithToken<TPayload extends JwtPayload = JwtPayload> =
+export type JwtPayloadWithToken<TPayload extends object = JwtPayload> =
   TPayload & {
     token: string;
   };
+
+/** Schema contract used to validate decoded jwt values */
+export type JwtSchema<TValue extends object> = Readonly<{
+  parse: (value: unknown) => TValue;
+}>;
 
 /** Represents jwt clock input */
 export type JwtClockInput = Date | number;
@@ -40,18 +46,6 @@ export type JwtExpirationInput = JwtExpirationOptions | number;
 /** Result returned by jwt */
 export type JwtResult<TData, TError = unknown> = Result<TData, TError>;
 
-type BufferLike = {
-  toString: (encoding?: string) => string;
-};
-
-type BufferConstructorLike = {
-  from: (value: string, encoding?: string) => BufferLike;
-};
-
-type JwtGlobal = typeof globalThis & {
-  Buffer?: BufferConstructorLike;
-};
-
 /** Error raised for jwt decode failures */
 export class JwtDecodeError extends Error {
   readonly cause: unknown;
@@ -66,20 +60,47 @@ export class JwtDecodeError extends Error {
 
 // Decode helpers
 /** Decodes jwt */
-export const decodeJwt = <TPayload extends JwtPayload = JwtPayload>(
+export const decodeJwt = (
   token: string
-): JwtPayloadWithToken<TPayload> | null => {
-  const result = safeDecodeJwt<TPayload>(token);
+): JwtPayloadWithToken | null => {
+  const result = safeDecodeJwt(token);
 
   return result.ok ? result.data : null;
 };
 
 /** Safely decodes jwt */
-export const safeDecodeJwt = <TPayload extends JwtPayload = JwtPayload>(
+export const safeDecodeJwt = (
   token: string | null | undefined
+): JwtResult<JwtPayloadWithToken, JwtDecodeError> => {
+  try {
+    const payload = decodeJwtSegment(getJwtSegment(token, 1)) as JwtPayload;
+
+    return ok({
+      ...payload,
+      token: readJwtToken(token)
+    });
+  } catch (error) {
+    return err(new JwtDecodeError(error));
+  }
+};
+
+/** Decodes and validates jwt payload claims with a schema */
+export const decodeJwtWithSchema = <TPayload extends object>(
+  token: string,
+  schema: JwtSchema<TPayload>
+): JwtPayloadWithToken<TPayload> | null => {
+  const result = safeDecodeJwtWithSchema(token, schema);
+
+  return result.ok ? result.data : null;
+};
+
+/** Safely decodes and validates jwt payload claims with a schema */
+export const safeDecodeJwtWithSchema = <TPayload extends object>(
+  token: string | null | undefined,
+  schema: JwtSchema<TPayload>
 ): JwtResult<JwtPayloadWithToken<TPayload>, JwtDecodeError> => {
   try {
-    const payload = decodeJwtSegment<TPayload>(getJwtSegment(token, 1));
+    const payload = schema.parse(decodeJwtSegment(getJwtSegment(token, 1)));
 
     return ok({
       ...payload,
@@ -91,20 +112,42 @@ export const safeDecodeJwt = <TPayload extends JwtPayload = JwtPayload>(
 };
 
 /** Decodes jwt header */
-export const decodeJwtHeader = <THeader extends JwtHeader = JwtHeader>(
+export const decodeJwtHeader = (
   token: string
-): THeader | null => {
-  const result = safeDecodeJwtHeader<THeader>(token);
+): JwtHeader | null => {
+  const result = safeDecodeJwtHeader(token);
 
   return result.ok ? result.data : null;
 };
 
 /** Safely decodes jwt header */
-export const safeDecodeJwtHeader = <THeader extends JwtHeader = JwtHeader>(
+export const safeDecodeJwtHeader = (
   token: string | null | undefined
+): JwtResult<JwtHeader, JwtDecodeError> => {
+  try {
+    return ok(decodeJwtSegment(getJwtSegment(token, 0)) as JwtHeader);
+  } catch (error) {
+    return err(new JwtDecodeError(error));
+  }
+};
+
+/** Decodes and validates a jwt header with a schema */
+export const decodeJwtHeaderWithSchema = <THeader extends object>(
+  token: string,
+  schema: JwtSchema<THeader>
+): THeader | null => {
+  const result = safeDecodeJwtHeaderWithSchema(token, schema);
+
+  return result.ok ? result.data : null;
+};
+
+/** Safely decodes and validates a jwt header with a schema */
+export const safeDecodeJwtHeaderWithSchema = <THeader extends object>(
+  token: string | null | undefined,
+  schema: JwtSchema<THeader>
 ): JwtResult<THeader, JwtDecodeError> => {
   try {
-    return ok(decodeJwtSegment<THeader>(getJwtSegment(token, 0)));
+    return ok(schema.parse(decodeJwtSegment(getJwtSegment(token, 0))));
   } catch (error) {
     return err(new JwtDecodeError(error));
   }
@@ -149,43 +192,15 @@ const getJwtSegment = (
   return parts[index] ?? "";
 };
 
-const decodeJwtSegment = <TValue extends JwtObject>(segment: string): TValue => {
-  const value = JSON.parse(decodeBase64Url(segment)) as unknown;
+const decodeJwtSegment = (segment: string): JwtObject => {
+  const value = JSON.parse(decodeBase64UrlText(segment)) as unknown;
 
   if (!isJwtObject(value)) {
     throw new TypeError("JWT segment must decode to an object");
   }
 
-  return value as TValue;
+  return value;
 };
-
-const decodeBase64Url = (value: string): string => {
-  const base64 = normalizeBase64Url(value);
-  const buffer = getBuffer();
-
-  if (buffer) {
-    return buffer.from(base64, "base64").toString("utf8");
-  }
-
-  return decodeURIComponent(
-    Array.from(atob(base64), (char) => (
-      `%${char.charCodeAt(0).toString(16).padStart(2, "0")}`
-    )).join("")
-  );
-};
-
-const normalizeBase64Url = (value: string): string => {
-  const normalized = value
-    .replace(/-/gu, "+")
-    .replace(/_/gu, "/");
-  const paddingLength = (4 - normalized.length % 4) % 4;
-
-  return `${normalized}${"=".repeat(paddingLength)}`;
-};
-
-const getBuffer = (): BufferConstructorLike | undefined => (
-  (globalThis as JwtGlobal).Buffer
-);
 
 const isJwtObject = (value: unknown): value is JwtObject => (
   typeof value === "object" && value !== null && !Array.isArray(value)
@@ -217,9 +232,13 @@ const resolveWithinMs = (options: JwtExpirationOptions): number => {
 
 /** Grouped helpers for the jwt module */
 export const jwt = Object.freeze({
-  decode      : decodeJwt,
-  decodeHeader: decodeJwtHeader,
-  isExpired   : isJwtExpired,
-  safeDecode  : safeDecodeJwt,
-  safeHeader  : safeDecodeJwtHeader
+  decode                : decodeJwt,
+  decodeHeader          : decodeJwtHeader,
+  decodeHeaderWithSchema: decodeJwtHeaderWithSchema,
+  decodeWithSchema      : decodeJwtWithSchema,
+  isExpired             : isJwtExpired,
+  safeDecode            : safeDecodeJwt,
+  safeDecodeWithSchema  : safeDecodeJwtWithSchema,
+  safeHeader            : safeDecodeJwtHeader,
+  safeHeaderWithSchema  : safeDecodeJwtHeaderWithSchema
 });

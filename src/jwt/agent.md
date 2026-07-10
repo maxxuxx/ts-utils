@@ -16,6 +16,7 @@ Provide named exports plus the grouped `jwt` namespace
 
 ```ts
 const claims = jwt.decode(token);
+const typedClaims = jwt.decodeWithSchema(token, claimsSchema);
 const header = jwt.decodeHeader(token);
 const shouldRefresh = jwt.isExpired(token, 30);
 ```
@@ -28,9 +29,13 @@ This module only decodes JWT segments. Do not add signature verification, issuer
 
 `decodeJwt` returns payload claims with the original `token` attached so app auth code can keep the raw bearer token beside parsed claims
 
-`decodeJwt` and `decodeJwtHeader` return `null` on failure. Use `safeDecodeJwt` and `safeDecodeJwtHeader` when callers need an error object
+`decodeJwt` and `decodeJwtHeader` expose only the built-in JWT payload and header types and return `null` on failure. Do not add caller-selected generics to schema-free decoders
 
-JWT `exp`, `iat`, and app-specific claims are not required by the decoder. App auth modules should validate required claims after decoding
+Custom claim and header typing requires `JwtSchema<TValue>` through the `WithSchema` functions. Schema parsing runs after strict segment decoding and failures are wrapped in `JwtDecodeError` by safe functions
+
+Delegate every JWT segment decode to `encoding/base64url` so Node and browser-compatible paths reject invalid alphabet, padding, lengths, and UTF-8 identically
+
+JWT `exp` and `iat` are not required by schema-free decoding. App auth modules should use schema-backed functions when required claims need runtime validation and custom typing
 
 `isJwtExpired(token, seconds)` treats a token as expired when it is already expired or will expire within the provided number of seconds. Use this for pre-refresh decisions
 

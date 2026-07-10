@@ -67,6 +67,8 @@ const user = await session.ensure(undefined);
 
 - `useRefreshToken` defaults to `true`. Set it to `false` for access-token-only APIs.
 - JWT parsing and expiration checks run only when `jwtSchema` is provided.
+- `jwtSchema` validates strictly decoded payload claims before the original token is attached
+- Invalid base64url or UTF-8 fails before `jwtSchema` parsing
 - Without `jwtSchema`, opaque access tokens are allowed.
 - `parseTokens` validates login or refresh response tokens before storing them.
 

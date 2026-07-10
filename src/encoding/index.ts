@@ -1,4 +1,13 @@
+import { base64url } from "./base64url.js";
 import { err, ok, type Result } from "../result/index.js";
+
+export {
+  base64url,
+  decodeBase64Url,
+  decodeBase64UrlText,
+  encodeBase64Url,
+  isBase64Url
+} from "./base64url.js";
 
 /** Binary input accepted by encoding helpers */
 export type EncodingBytes = ArrayBufferLike | ArrayBufferView | readonly number[];
@@ -269,6 +278,7 @@ export const hex = Object.freeze({
 /** Grouped helpers for the encoding module */
 export const encoding = Object.freeze({
   base64,
+  base64url,
   hex,
   toBytes: toUint8Array,
   utf8

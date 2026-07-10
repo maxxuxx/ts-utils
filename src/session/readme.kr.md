@@ -67,6 +67,8 @@ const user = await session.ensure(undefined);
 
 - `useRefreshToken`의 기본값은 `true`입니다. access-token-only API는 `false`로 설정합니다.
 - `jwtSchema`가 있을 때만 JWT parsing과 expiration check가 실행됩니다.
+- `jwtSchema`는 원본 token이 붙기 전의 strict decoded payload claim을 검증합니다
+- invalid base64url 또는 UTF-8은 `jwtSchema` parsing 전에 실패합니다
 - `jwtSchema`가 없으면 opaque access token을 허용합니다.
 - `parseTokens`는 login 또는 refresh response token을 저장 전에 검증합니다.
 

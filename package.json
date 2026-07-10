@@ -76,6 +76,10 @@
       "types": "./dist/encoding/index.d.ts",
       "import": "./dist/encoding/index.js"
     },
+    "./encoding/base64url": {
+      "types": "./dist/encoding/base64url.d.ts",
+      "import": "./dist/encoding/base64url.js"
+    },
     "./jwt": {
       "types": "./dist/jwt/index.d.ts",
       "import": "./dist/jwt/index.js"

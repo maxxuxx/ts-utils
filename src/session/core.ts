@@ -1,5 +1,5 @@
 import {
-  safeDecodeJwt,
+  safeDecodeJwtWithSchema,
   type JwtPayload,
   type JwtPayloadWithToken
 } from "../jwt/index.js";
@@ -77,26 +77,21 @@ export const createTokenSession = <
   };
 
   const readClaims = (accessToken: string): JwtPayloadWithToken<TClaims> | null => {
-    if (!options.jwtSchema) {
+    const schema = options.jwtSchema;
+
+    if (!schema) {
       return null;
     }
 
-    const decoded = safeDecodeJwt<TClaims>(accessToken);
+    const decoded = safeDecodeJwtWithSchema(accessToken, {
+      parse: (value) => parseSchema(value, schema, "invalid_token")
+    });
 
     if (!decoded.ok) {
       throw createSessionError("invalid_token", decoded.error);
     }
 
-    const claims = parseSchema(
-      decoded.data,
-      options.jwtSchema,
-      "invalid_token"
-    );
-
-    return {
-      ...claims,
-      token: accessToken
-    };
+    return decoded.data;
   };
 
   const refresh = async (context: TContext): Promise<string> => {
@@ -362,13 +357,11 @@ const hasValidClaims = <TClaims extends JwtPayload>(
     return true;
   }
 
-  const decoded = safeDecodeJwt<TClaims>(accessToken);
+  const decoded = safeDecodeJwtWithSchema(accessToken, {
+    parse: (value) => parseSchema(value, schema, "invalid_token")
+  });
 
-  if (!decoded.ok) {
-    return false;
-  }
-
-  return schema.safeParse(decoded.data).success;
+  return decoded.ok;
 };
 
 // Token helpers
