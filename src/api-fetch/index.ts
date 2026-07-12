@@ -15,6 +15,7 @@ export {
   getApiErrorCode,
   getApiMessage
 } from "./errors.js";
+export type { ApiAuthErrorCause } from "./errors.js";
 export {
   createApiLoggerHooks,
   formatApiLogEvent

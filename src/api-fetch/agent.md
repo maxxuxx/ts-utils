@@ -68,6 +68,10 @@ If the validated response body has a `data` property plus `code` or `message`, t
 
 `select` returns a custom value instead of the default `{ code, message?, response }` result and disables the automatic envelope unwrap for that call
 
+Schema-free calls expose an `unknown` response payload. Public method and endpoint overloads must require runtime `bodySchema`, `responseSchema`, `params`, or `select` fields whenever their corresponding generic contract is selected
+
+Do not let manually constructed `ApiEndpoint` values claim a non-default `TResult` without a runtime `select` function
+
 `errorFallback.code` fills a missing server code while `errorFallback.message` is the configured safe error message because upstream messages are always ignored
 
 Endpoint definitions use `endpoint.get("/users/:id", { params, responseSchema })` so route declarations read like HTTP routes
@@ -78,9 +82,11 @@ Auth only requires `getAccessToken`, optional `refresh`, optional `clear`, and o
 
 The default token header is `Authorization: Bearer <accessToken>`
 
-Auth headers are attached only to relative requests, the resolved `baseURL` origin, and explicit `allowedOrigins`
+Auth headers are attached only to relative requests, the client-level `baseURL` origin, and explicit `allowedOrigins`
 
-Public error contexts remove query strings and fragments from both `context.path` and `context.url`
+A request-level `baseURL` resolves the URL but never expands the implicit auth trust boundary. Strip merged `Authorization` and `Proxy-Authorization` headers from every untrusted request, including client, endpoint, and request header sources
+
+Public error contexts remove URL userinfo, query strings, and fragments from both `context.path` and `context.url`
 
 HTTP, parse, and validation errors must not retain raw response bodies, response objects, headers, parse text, or validation input bodies
 
@@ -92,7 +98,11 @@ Refresh retry happens once after `401` or `419` by default
 
 Missing refresh callbacks, non-replayable auth requests, refresh throw, empty refresh results, and a second auth response clear the session on a best-effort basis and throw `ApiAuthError`
 
-Concurrent refresh calls are deduped per fetcher instance through a shared refresh promise
+Concurrent refresh calls are deduped per fetcher and failed access-token value. Re-read and normalize the current access token after refresh so a newer login generation wins over stale results
+
+Each caller races its refresh wait against its own signal without cancelling shared work. Only abort errors created from that observed caller signal may escape as `ApiAbortError`
+
+Refresh and access-token callbacks must produce non-empty control-character-free strings. Auth callback failures use the sanitized `AUTH_CALLBACK_FAILURE` cause descriptor; internal HTTP auth failures use a cloned `HTTP_FAILURE` descriptor without retaining messages, bodies, headers, or callback-owned objects
 
 The SvelteKit adapter separates shared refresh result creation from cookie-context persistence through `refresh` and `applyRefresh`
 

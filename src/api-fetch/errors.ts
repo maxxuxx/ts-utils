@@ -11,6 +11,10 @@ const sanitizeContext = (context: ApiRequestContext): ApiRequestContext => ({
   url   : redactApiUrl(context.url)
 });
 
+const AUTH_CALLBACK_FAILURE = Object.freeze({
+  type: "AUTH_CALLBACK_FAILURE" as const
+});
+
 // HTTP errors
 /** Error raised for api http failures */
 export class ApiHttpError extends Error {
@@ -154,9 +158,18 @@ export class ApiResponseSizeError extends Error {
 }
 
 // Auth errors
+/** Sanitized cause retained by terminal API authentication errors */
+export type ApiAuthErrorCause =
+  | Readonly<{
+    context: ApiRequestContext;
+    status : number;
+    type   : "HTTP_FAILURE";
+  }>
+  | Readonly<{ type: "AUTH_CALLBACK_FAILURE" }>;
+
 /** Error raised for api auth failures */
 export class ApiAuthError extends Error {
-  readonly cause: unknown;
+  readonly cause: ApiAuthErrorCause | undefined;
   readonly context: ApiRequestContext | undefined;
 
   constructor(
@@ -167,7 +180,23 @@ export class ApiAuthError extends Error {
     super(message);
 
     this.name    = "ApiAuthError";
-    this.cause   = cause;
+    this.cause   = sanitizeAuthCause(cause);
     this.context = context ? sanitizeContext(context) : undefined;
   }
 }
+
+const sanitizeAuthCause = (cause: unknown): ApiAuthErrorCause | undefined => {
+  if (cause === undefined) {
+    return undefined;
+  }
+
+  if (cause instanceof ApiHttpError) {
+    return Object.freeze({
+      context: Object.freeze(sanitizeContext(cause.context)),
+      status : cause.status,
+      type   : "HTTP_FAILURE" as const
+    });
+  }
+
+  return AUTH_CALLBACK_FAILURE;
+};

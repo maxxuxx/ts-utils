@@ -46,6 +46,7 @@ import type {
   ApiRetryContext,
   ApiServerTimeOptions,
   ApiTimedRequestContext,
+  ApiTokenHeaderFormatter,
   FetchLike,
   OptionalSchema,
   SchemaOutput
@@ -54,6 +55,7 @@ import type { ResolvedRetryOptions } from "./retry.js";
 
 const AUTH_REFRESH_STATUS_CODES = [401, 419] as const;
 const DEFAULT_SERVER_TIME_HEADER = "Date";
+const MISSING_ACCESS_TOKEN = Symbol("missing-access-token");
 
 type ResolvedApiFetcherOptions = Omit<ApiFetcherOptions, "serverTime"> & {
   serverTime?: ApiServerTimeOptions;
@@ -64,6 +66,16 @@ type RequestExecutionState = {
   parsedBody     ?: ParsedRequestBody;
   retriesUsed   : number;
 };
+
+class AuthCallbackFailure extends Error {
+  constructor() {
+    super("Auth callback failed");
+
+    this.name = "AuthCallbackFailure";
+  }
+}
+
+class AuthWaitAbortError extends ApiAbortError {}
 
 // Client factory
 /** Creates api fetcher */
@@ -81,36 +93,56 @@ export const createApiFetcher = (
     hooks: clientHooks,
     serverTime
   };
-  let refreshPromise: Promise<string | null | undefined> | null = null;
+  const refreshPromises = new Map<
+    string | typeof MISSING_ACCESS_TOKEN,
+    Promise<unknown>
+  >();
 
   const refreshOnce = async (
-    error: unknown
-  ): Promise<string | null | undefined> => {
+    error: unknown,
+    failedAccessToken: string | null | undefined
+  ): Promise<unknown> => {
     if (!options.auth?.refresh) {
       return null;
     }
 
-    if (!refreshPromise) {
-      refreshPromise = Promise.resolve(options.auth.refresh(error))
-        .finally(() => {
-          refreshPromise = null;
-        });
+    const refreshKey = failedAccessToken ?? MISSING_ACCESS_TOKEN;
+    const activeRefresh = refreshPromises.get(refreshKey);
+
+    if (activeRefresh) {
+      return activeRefresh;
     }
+
+    const refreshPromise = Promise.resolve()
+      .then(() => options.auth?.refresh?.(error));
+
+    refreshPromises.set(refreshKey, refreshPromise);
+    refreshPromise.then(
+      () => refreshPromises.delete(refreshKey),
+      () => refreshPromises.delete(refreshKey)
+    );
 
     return refreshPromise;
   };
 
-  const request: ApiRequest = async <
+  const request = (async <
     TBodySchema extends OptionalSchema = undefined,
     TResponseSchema extends OptionalSchema = undefined,
     TResult = ApiResponse<ApiResponsePayload<SchemaOutput<TResponseSchema>>>
   >(
     method: ApiMethod,
     path: string,
-    requestOptions: ApiRequestOptions<TBodySchema, TResponseSchema, TResult> = {}
+    requestOptions: ApiRequestOptions<TBodySchema, TResponseSchema, TResult> = (
+      {} as ApiRequestOptions<TBodySchema, TResponseSchema, TResult>
+    )
   ): Promise<TResult> => {
-    const baseURL     = requestOptions.baseURL ?? options.baseURL;
-    const resolvedURL = buildApiUrl(path, baseURL);
+    const baseURL       = requestOptions.baseURL ?? options.baseURL;
+    const resolvedURL   = buildApiUrl(path, baseURL);
+    const trustedOrigin = isTrustedRequestOrigin(
+      resolvedURL,
+      options.baseURL,
+      options.allowedOrigins
+    );
     const authContext = {
       method,
       path: redactApiUrl(path),
@@ -118,7 +150,7 @@ export const createApiFetcher = (
     };
     const authEnabled = requestOptions.auth !== false
       && options.auth !== undefined
-      && isTrustedRequestOrigin(resolvedURL, baseURL, options.allowedOrigins);
+      && trustedOrigin;
     const executionState: RequestExecutionState = {
       networkAttempt: 0,
       retriesUsed   : 0
@@ -133,11 +165,28 @@ export const createApiFetcher = (
         fetchImpl,
         undefined,
         false,
+        trustedOrigin,
         executionState
       );
     }
 
-    const accessToken = await options.auth?.getAccessToken();
+    let accessToken: string | null | undefined;
+
+    try {
+      accessToken = await options.auth?.getAccessToken();
+    } catch (error) {
+      return throwAuthCallbackError(options.auth, authContext);
+    }
+
+    const initialTokenResult = readUsableAccessToken(accessToken);
+
+    if (!initialTokenResult.ok && !initialTokenResult.absent) {
+      return throwAuthCallbackError(options.auth, authContext);
+    }
+
+    if (initialTokenResult.ok) {
+      accessToken = initialTokenResult.token;
+    }
 
     try {
       return await sendRequest(
@@ -148,10 +197,23 @@ export const createApiFetcher = (
         fetchImpl,
         accessToken ?? undefined,
         true,
+        trustedOrigin,
         executionState
       );
     } catch (error) {
-      if (!isAuthFailure(error, options)) {
+      if (error instanceof AuthCallbackFailure) {
+        return throwAuthCallbackError(options.auth, authContext);
+      }
+
+      let authFailure: boolean;
+
+      try {
+        authFailure = isAuthFailure(error, options);
+      } catch (classificationError) {
+        return throwAuthCallbackError(options.auth, authContext);
+      }
+
+      if (!authFailure) {
         throw error;
       }
 
@@ -159,16 +221,68 @@ export const createApiFetcher = (
         return throwAuthError(options.auth, error, authContext);
       }
 
-      let nextAccessToken: string | null | undefined;
+      let refreshedAccessToken: unknown;
+      let refreshError: unknown;
 
       try {
-        nextAccessToken = await refreshOnce(error);
-      } catch (refreshError) {
-        return throwAuthError(options.auth, refreshError, authContext);
+        refreshedAccessToken = await waitForSignal(
+          refreshOnce(error, accessToken),
+          requestOptions.signal,
+          authContext
+        );
+      } catch (nextRefreshError) {
+        if (
+          nextRefreshError instanceof AuthWaitAbortError
+          && requestOptions.signal?.aborted
+        ) {
+          throw nextRefreshError;
+        }
+
+        refreshError = nextRefreshError;
       }
 
-      if (!nextAccessToken) {
-        return throwAuthError(options.auth, error, authContext);
+      let currentAccessToken: unknown;
+
+      try {
+        currentAccessToken = await waitForSignal(
+          Promise.resolve().then(() => options.auth?.getAccessToken()),
+          requestOptions.signal,
+          authContext
+        );
+      } catch (currentTokenError) {
+        if (
+          currentTokenError instanceof AuthWaitAbortError
+          && requestOptions.signal?.aborted
+        ) {
+          throw currentTokenError;
+        }
+
+        return throwAuthCallbackError(options.auth, authContext);
+      }
+
+      const currentTokenResult = readUsableAccessToken(currentAccessToken);
+
+      if (!currentTokenResult.ok && !currentTokenResult.absent) {
+        return throwAuthCallbackError(options.auth, authContext);
+      }
+
+      const normalizedCurrentAccessToken = currentTokenResult.ok
+        ? currentTokenResult.token
+        : currentAccessToken;
+      const generationChanged = normalizedCurrentAccessToken !== accessToken;
+
+      if (refreshError !== undefined && !generationChanged) {
+        return throwAuthCallbackError(options.auth, authContext);
+      }
+
+      const retryTokenResult = readUsableAccessToken(
+        generationChanged ? normalizedCurrentAccessToken : refreshedAccessToken
+      );
+
+      if (!retryTokenResult.ok) {
+        return retryTokenResult.absent
+          ? throwAuthError(options.auth, error, authContext)
+          : throwAuthCallbackError(options.auth, authContext);
       }
 
       try {
@@ -178,19 +292,32 @@ export const createApiFetcher = (
           requestOptions,
           clientOptions,
           fetchImpl,
-          nextAccessToken,
+          retryTokenResult.token,
           true,
+          trustedOrigin,
           executionState
         );
       } catch (retryError) {
-        if (!isAuthFailure(retryError, options)) {
+        if (retryError instanceof AuthCallbackFailure) {
+          return throwAuthCallbackError(options.auth, authContext);
+        }
+
+        let retryAuthFailure: boolean;
+
+        try {
+          retryAuthFailure = isAuthFailure(retryError, options);
+        } catch (classificationError) {
+          return throwAuthCallbackError(options.auth, authContext);
+        }
+
+        if (!retryAuthFailure) {
           throw retryError;
         }
 
         return throwAuthError(options.auth, retryError, authContext);
       }
     }
-  };
+  }) as ApiRequest;
 
   return Object.freeze({
     call: (apiEndpoint: AnyApiEndpoint, ...args: any[]) => (
@@ -213,7 +340,13 @@ const createMethod = (
 ) => (
   path: string,
   options?: ApiRequestOptions
-) => request(method, path, options);
+) => (
+  request as unknown as (
+    method: ApiMethod,
+    path: string,
+    options?: ApiRequestOptions
+  ) => Promise<unknown>
+)(method, path, options);
 
 // Request execution
 const sendRequest = async <
@@ -228,6 +361,7 @@ const sendRequest = async <
   fetchImpl: FetchLike,
   accessToken: string | undefined,
   authEnabled: boolean,
+  trustedOrigin: boolean,
   executionState: RequestExecutionState
 ): Promise<TResult> => {
   const {
@@ -263,11 +397,18 @@ const sendRequest = async <
   );
   const bodyReplayable = isRequestBodyReplayable(options);
   let parsedBody       = await getRequestBody(options, context, executionState);
+  const mergedHeaders = mergeHeaders(clientOptions.headers, headers);
+
+  if (!trustedOrigin) {
+    mergedHeaders?.delete("Authorization");
+    mergedHeaders?.delete("Proxy-Authorization");
+  }
+
   const headersInit = buildHeaders(
-    mergeHeaders(clientOptions.headers, headers),
+    mergedHeaders,
     accessToken,
     parsedBody.isJsonBody,
-    clientOptions.auth?.formatTokenHeader
+    createSafeTokenHeaderFormatter(clientOptions.auth?.formatTokenHeader)
   );
 
   await callRequestHooks(clientOptions.hooks?.onRequest, hooks?.onRequest, context);
@@ -560,6 +701,106 @@ const throwAuthError = async (
   }
 
   throw new ApiAuthError("API authentication failed", cause, context);
+};
+
+const throwAuthCallbackError = (
+  auth: ApiAuthOptions | undefined,
+  context: ApiRequestContext
+): Promise<never> => throwAuthError(
+  auth,
+  { type: "AUTH_CALLBACK_FAILURE" },
+  context
+);
+
+type AccessTokenResult =
+  | Readonly<{ ok: true; token: string }>
+  | Readonly<{
+    absent: boolean;
+    error : TypeError;
+    ok    : false;
+  }>;
+
+const readUsableAccessToken = (value: unknown): AccessTokenResult => {
+  if (value === null || value === undefined) {
+    return {
+      absent: true,
+      error : new TypeError("Auth callback did not return an access token"),
+      ok    : false
+    };
+  }
+
+  if (
+    typeof value !== "string"
+    || value.trim() === ""
+    || /[\u0000-\u001f\u007f]/.test(value)
+  ) {
+    return {
+      absent: false,
+      error : new TypeError("Auth callback returned an unusable access token"),
+      ok    : false
+    };
+  }
+
+  return {
+    ok   : true,
+    token: value.trim()
+  };
+};
+
+const createSafeTokenHeaderFormatter = (
+  formatter: ApiTokenHeaderFormatter | undefined
+): ApiTokenHeaderFormatter | undefined => {
+  if (!formatter) {
+    return undefined;
+  }
+
+  return (accessToken) => {
+    try {
+      const headers = formatter(accessToken);
+
+      return headers === null || headers === undefined
+        ? headers
+        : new Headers(headers);
+    } catch {
+      throw new AuthCallbackFailure();
+    }
+  };
+};
+
+const waitForSignal = <TValue>(
+  promise: Promise<TValue>,
+  signal: AbortSignal | null | undefined,
+  context: ApiRequestContext
+): Promise<TValue> => {
+  if (!signal) {
+    return promise;
+  }
+
+  if (signal.aborted) {
+    return Promise.reject(new AuthWaitAbortError(signal.reason, context));
+  }
+
+  return new Promise<TValue>((resolve, reject) => {
+    const cleanup = (): void => {
+      signal.removeEventListener("abort", onAbort);
+    };
+    const onAbort = (): void => {
+      cleanup();
+      reject(new AuthWaitAbortError(signal.reason, context));
+    };
+
+    signal.addEventListener("abort", onAbort, { once: true });
+    promise.then(
+      (value) => {
+        cleanup();
+        resolve(value);
+      },
+      (error: unknown) => {
+        cleanup();
+        reject(error);
+      }
+    );
+  });
 };
 
 // Server time helpers

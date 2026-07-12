@@ -33,6 +33,10 @@ This module only decodes JWT segments. Do not add signature verification, issuer
 
 Custom claim and header typing requires `JwtSchema<TValue>` through the `WithSchema` functions. Schema parsing runs after strict segment decoding and failures are wrapped in `JwtDecodeError` by safe functions
 
+`JwtSchema` output must be a plain record at both the type and runtime boundaries. Reject arrays, `Date`, class instances, `null`, and any other non-plain prototype; accept normal objects and null-prototype records
+
+The attached `token` field is reserved and always contains the original JWT string. Keep `JwtPayloadWithToken<T>` defined with `Omit<T, "token"> & { token: string }` so schema collisions remain type-safe
+
 Delegate every JWT segment decode to `encoding/base64url` so Node and browser-compatible paths reject invalid alphabet, padding, lengths, and UTF-8 identically
 
 JWT `exp` and `iat` are not required by schema-free decoding. App auth modules should use schema-backed functions when required claims need runtime validation and custom typing

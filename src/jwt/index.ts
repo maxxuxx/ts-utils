@@ -21,13 +21,13 @@ export type JwtPayload = JwtObject & {
 };
 
 /** Represents jwt payload with token */
-export type JwtPayloadWithToken<TPayload extends object = JwtPayload> =
-  TPayload & {
+export type JwtPayloadWithToken<TPayload extends JwtObject = JwtPayload> =
+  Omit<TPayload, "token"> & {
     token: string;
   };
 
 /** Schema contract used to validate decoded jwt values */
-export type JwtSchema<TValue extends object> = Readonly<{
+export type JwtSchema<TValue extends JwtObject> = Readonly<{
   parse: (value: unknown) => TValue;
 }>;
 
@@ -85,7 +85,7 @@ export const safeDecodeJwt = (
 };
 
 /** Decodes and validates jwt payload claims with a schema */
-export const decodeJwtWithSchema = <TPayload extends object>(
+export const decodeJwtWithSchema = <TPayload extends JwtObject>(
   token: string,
   schema: JwtSchema<TPayload>
 ): JwtPayloadWithToken<TPayload> | null => {
@@ -95,12 +95,14 @@ export const decodeJwtWithSchema = <TPayload extends object>(
 };
 
 /** Safely decodes and validates jwt payload claims with a schema */
-export const safeDecodeJwtWithSchema = <TPayload extends object>(
+export const safeDecodeJwtWithSchema = <TPayload extends JwtObject>(
   token: string | null | undefined,
   schema: JwtSchema<TPayload>
 ): JwtResult<JwtPayloadWithToken<TPayload>, JwtDecodeError> => {
   try {
-    const payload = schema.parse(decodeJwtSegment(getJwtSegment(token, 1)));
+    const payload = readPlainJwtObject(
+      schema.parse(decodeJwtSegment(getJwtSegment(token, 1)))
+    );
 
     return ok({
       ...payload,
@@ -132,7 +134,7 @@ export const safeDecodeJwtHeader = (
 };
 
 /** Decodes and validates a jwt header with a schema */
-export const decodeJwtHeaderWithSchema = <THeader extends object>(
+export const decodeJwtHeaderWithSchema = <THeader extends JwtObject>(
   token: string,
   schema: JwtSchema<THeader>
 ): THeader | null => {
@@ -142,12 +144,14 @@ export const decodeJwtHeaderWithSchema = <THeader extends object>(
 };
 
 /** Safely decodes and validates a jwt header with a schema */
-export const safeDecodeJwtHeaderWithSchema = <THeader extends object>(
+export const safeDecodeJwtHeaderWithSchema = <THeader extends JwtObject>(
   token: string | null | undefined,
   schema: JwtSchema<THeader>
 ): JwtResult<THeader, JwtDecodeError> => {
   try {
-    return ok(schema.parse(decodeJwtSegment(getJwtSegment(token, 0))));
+    return ok(readPlainJwtObject(
+      schema.parse(decodeJwtSegment(getJwtSegment(token, 0)))
+    ));
   } catch (error) {
     return err(new JwtDecodeError(error));
   }
@@ -195,16 +199,30 @@ const getJwtSegment = (
 const decodeJwtSegment = (segment: string): JwtObject => {
   const value = JSON.parse(decodeBase64UrlText(segment)) as unknown;
 
-  if (!isJwtObject(value)) {
+  if (!isPlainJwtObject(value)) {
     throw new TypeError("JWT segment must decode to an object");
   }
 
   return value;
 };
 
-const isJwtObject = (value: unknown): value is JwtObject => (
-  typeof value === "object" && value !== null && !Array.isArray(value)
-);
+const readPlainJwtObject = <TValue extends JwtObject>(value: TValue): TValue => {
+  if (!isPlainJwtObject(value)) {
+    throw new TypeError("JWT schema must return a plain record");
+  }
+
+  return value;
+};
+
+const isPlainJwtObject = (value: unknown): value is JwtObject => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+
+  const prototype = Object.getPrototypeOf(value) as unknown;
+
+  return prototype === Object.prototype || prototype === null;
+};
 
 const isNumericDate = (value: unknown): value is number => (
   typeof value === "number" && Number.isFinite(value)

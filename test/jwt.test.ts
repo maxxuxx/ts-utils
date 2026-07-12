@@ -168,6 +168,71 @@ describe("jwt module", () => {
     } | null>();
   });
 
+  it("reserves the attached token field when a payload schema returns a collision", () => {
+    const token = createToken({
+      role : "admin",
+      token: "claim-token"
+    });
+    const collisionSchema = {
+      parse(value: unknown) {
+        const record = readRecord(value);
+
+        return {
+          role : String(record.role),
+          token: 123
+        };
+      }
+    } satisfies JwtSchema<{
+      role : string;
+      token: number;
+    }>;
+    const claims = decodeJwtWithSchema(token, collisionSchema);
+
+    expect(claims).toEqual({
+      role : "admin",
+      token
+    });
+    expectTypeOf(claims).toEqualTypeOf<JwtPayloadWithToken<{
+      role : string;
+      token: number;
+    }> | null>();
+    expectTypeOf(claims?.token).toEqualTypeOf<string | undefined>();
+  });
+
+  it.each([
+    ["null", null],
+    ["array", ["header"]],
+    ["Date", new Date(0)],
+    ["class instance", new (class SchemaOutput {
+      readonly role = "admin";
+    })()]
+  ])("rejects non-plain %s payload and header schema outputs", (_label, output) => {
+    const token = createToken({ role: "admin" });
+    const schema = {
+      parse: () => output
+    } as unknown as JwtSchema<Record<string, unknown>>;
+
+    expect(decodeJwtWithSchema(token, schema)).toBeNull();
+    expect(decodeJwtHeaderWithSchema(token, schema)).toBeNull();
+    expect(safeDecodeJwtWithSchema(token, schema).ok).toBe(false);
+    expect(safeDecodeJwtHeaderWithSchema(token, schema).ok).toBe(false);
+  });
+
+  it("restricts JWT schema output contracts to record types", () => {
+    if (false) {
+      // @ts-expect-error payload schemas cannot produce arrays
+      type ArraySchema = JwtSchema<string[]>;
+      // @ts-expect-error payload schemas cannot produce Date instances
+      type DateSchema = JwtSchema<Date>;
+      // @ts-expect-error payload schemas cannot produce null
+      type NullSchema = JwtSchema<null>;
+
+      expectTypeOf<ArraySchema>();
+      expectTypeOf<DateSchema>();
+      expectTypeOf<NullSchema>();
+    }
+  });
+
   it("returns schema validation failures through safe JWT results", () => {
     const token         = createToken({ role: 1 }, { typ: "JWT" });
     const payloadResult = safeDecodeJwtWithSchema(token, roleSchema);

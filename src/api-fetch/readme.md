@@ -169,22 +169,29 @@ Set `dedupeRefresh: false` only when `refresh` directly updates its cookie conte
 - `rawBody` and `rawBodyFactory` are mutually exclusive, and one-shot `ReadableStream` bodies are not retried
 - `maxResponseBytes` rejects oversized declared or streamed response bodies before parsing
 - `responseSchema` validates the parsed response body and throws `ApiValidationError` for invalid responses.
+- Without `responseSchema`, the default `response` payload is `unknown`; use a runtime `select` callback when a custom result type is needed without a schema
+- Explicit body, response, params, and endpoint result generics cannot replace their runtime `bodySchema`, `responseSchema`, `params`, or `select` contracts
 - The default result shape is `{ code, message?, response }`. Response envelopes with `data` are unwrapped when possible.
 - `serverTime: true` creates an internal clock exposed as `api.serverTime`; `serverTime.clock` records into a caller-owned clock.
 - Client-level hooks run before request-level hooks. Logging is implemented as hooks, so custom hooks can be composed with logging.
 
 ## Edge cases
 
-- Auth refresh is attempted for 401 and 419 by default and is deduped while a refresh is in flight.
+- Auth refresh is attempted for 401 and 419 by default and shares one in-flight refresh per failed access-token value
+- A login generation using a different current access token does not join or retry with an older refresh result
+- Every caller observes its own abort signal while waiting for shared refresh work; aborting one caller does not cancel the shared refresh
+- Refresh results must be non-empty, control-character-free strings; unusable values enter terminal auth handling without a retry
 - SvelteKit adapter dedupe requires `applyRefresh`; failed or empty shared results are not retained
 - A shared typed SvelteKit namespace handle uses one in-flight runner, so the same stable key shares work without cache configuration
 - A SvelteKit `applyRefresh` failure clears only that request's cookie context through terminal auth handling
-- Auth is sent only to relative requests, the `baseURL` origin, and explicit `allowedOrigins`
+- Auth is sent only to relative requests, the client `baseURL` origin, and explicit `allowedOrigins`; a request-level `baseURL` is never an implicit trust anchor
+- Untrusted requests remove merged `Authorization` and `Proxy-Authorization` headers from client, endpoint, and request configuration
 - Auth responses without refresh, non-replayable auth requests, and exhausted refresh clear the session best effort and throw `ApiAuthError`
 - Retries default to GET, one shared request budget, `Retry-After` support, fixed delay, and no jitter; configure write methods explicitly
 - Observed caller abort throws `ApiAbortError`; deadline expiry throws `ApiTimeoutError`; retry delay always observes the caller signal
 - Custom fetch implementations must reject or otherwise observe the caller signal during active work
-- HTTP errors may retain a server code but never retain raw bodies, responses, headers, parse text, validation inputs, query strings, fragments, or upstream messages
+- HTTP errors may retain a server code but never retain raw bodies, responses, headers, parse text, validation inputs, URL userinfo, query strings, fragments, or upstream messages
+- `ApiAuthError.cause` is a sanitized `HTTP_FAILURE` or `AUTH_CALLBACK_FAILURE` descriptor and never retains an auth callback error object or message
 - `errorFallback.message` is the configured safe HTTP error message, not an upstream-message fallback; upstream messages are always ignored
 - Without a configured safe message, HTTP errors use the generic request failure
 - `handleApiRoute` preserves `ApiHttpError.code` and resolves `codeMessages`, `statusMessages`, `responseMessage`, then `API request failed`

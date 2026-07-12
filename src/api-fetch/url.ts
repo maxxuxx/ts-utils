@@ -29,6 +29,12 @@ export const buildApiUrl = (
 
 /** Removes query and fragment data from an API URL used in public contexts */
 export const redactApiUrl = (url: string): string => {
+  const absoluteUrl = redactAbsoluteUrl(url);
+
+  if (absoluteUrl !== undefined) {
+    return absoluteUrl;
+  }
+
   const queryIndex    = url.indexOf("?");
   const fragmentIndex = url.indexOf("#");
   const indexes       = [queryIndex, fragmentIndex].filter((index) => index >= 0);
@@ -36,13 +42,43 @@ export const redactApiUrl = (url: string): string => {
   return indexes.length === 0 ? url : url.slice(0, Math.min(...indexes));
 };
 
+const redactAbsoluteUrl = (value: string): string | undefined => {
+  const normalized = value.trimStart();
+  const isAbsolute = /^https?:\/\//i.test(normalized);
+  const isNetwork  = /^[\\/]{2}/.test(normalized);
+
+  if (!isAbsolute && !isNetwork) {
+    return undefined;
+  }
+
+  try {
+    const url = new URL(
+      isNetwork ? normalized.replaceAll("\\", "/") : normalized,
+      isNetwork ? "https://redaction.invalid" : undefined
+    );
+
+    url.username = "";
+    url.password = "";
+    url.search   = "";
+    url.hash     = "";
+
+    return isNetwork
+      ? `//${url.host}${url.pathname}`
+      : url.toString();
+  } catch {
+    return undefined;
+  }
+};
+
 const appendQueryToPath = (path: string, query?: QueryParams): string => {
   if (!query) {
     return path;
   }
 
-  const [pathWithoutHash = "", hash = ""] = path.split("#", 2);
-  const searchParams                  = new URLSearchParams();
+  const hashIndex       = path.indexOf("#");
+  const pathWithoutHash = hashIndex >= 0 ? path.slice(0, hashIndex) : path;
+  const hashPart        = hashIndex >= 0 ? path.slice(hashIndex) : "";
+  const searchParams    = new URLSearchParams();
 
   appendQuery(searchParams, query);
 
@@ -53,8 +89,6 @@ const appendQueryToPath = (path: string, query?: QueryParams): string => {
   }
 
   const separator = pathWithoutHash.includes("?") ? "&" : "?";
-  const hashPart  = hash ? `#${hash}` : "";
-
   return `${pathWithoutHash}${separator}${queryString}${hashPart}`;
 };
 

@@ -69,7 +69,9 @@ if (claims && !jwt.isExpired(token, {
 - `decodeJwt` returns `null` for malformed tokens or non-object payloads.
 - `safeDecodeJwt` returns `{ ok, data }` or `{ ok, error: JwtDecodeError }`.
 - Schema-free decoders expose built-in JWT types only; custom claims and headers require a schema
-- Schema-backed decoders accept any structural schema with `parse(value: unknown)`
+- Schema-backed decoders accept structural schemas with `parse(value: unknown)` whose output is a plain record; arrays, `Date`, class instances, and `null` are rejected
+- The attached `token` key is reserved: a schema-returned `token` claim is replaced by the original JWT string and `JwtPayloadWithToken<T>` types that field as `string`
+- Prefer Zod object outputs or object type aliases for schema output types; interfaces must explicitly extend `JwtObject` when they are used as `JwtSchema` parameters
 - Header and payload segments use strict base64url and fatal UTF-8 decoding in every runtime
 - `isJwtExpired` treats malformed tokens and missing/non-numeric `exp` claims as expired.
 - `JwtResult` aliases the shared `Result` contract from `@maxxuxx/ts-utils/result`

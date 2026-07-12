@@ -69,7 +69,9 @@ if (claims && !jwt.isExpired(token, {
 - `decodeJwt`는 malformed token 또는 object가 아닌 payload에서 `null`을 반환합니다.
 - `safeDecodeJwt`는 `{ ok, data }` 또는 `{ ok, error: JwtDecodeError }`를 반환합니다.
 - schema-free decoder는 built-in JWT type만 노출하며 custom claim/header는 schema가 필요합니다
-- schema-backed decoder는 `parse(value: unknown)`을 가진 structural schema를 받습니다
+- schema-backed decoder는 output이 plain record인 `parse(value: unknown)` structural schema를 받으며 array, `Date`, class instance, `null`은 거부합니다
+- 붙이는 `token` key는 reserved field이므로 schema가 반환한 `token` claim 대신 원본 JWT string을 사용하고 `JwtPayloadWithToken<T>`에서도 `string`으로 typing합니다
+- schema output type에는 Zod object output이나 object type alias를 권장하며 interface를 `JwtSchema` parameter로 사용하려면 `JwtObject`를 명시적으로 extends합니다
 - header와 payload segment는 모든 runtime에서 strict base64url과 fatal UTF-8 decode를 사용합니다
 - `isJwtExpired`는 malformed token과 missing/non-numeric `exp`를 expired로 봅니다.
 - `JwtResult`는 `@maxxuxx/ts-utils/result`의 공통 `Result` contract alias입니다

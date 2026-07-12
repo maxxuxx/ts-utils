@@ -11,6 +11,7 @@ import type {
   ApiHeadersInit,
   ApiRequest,
   ApiRequestContext,
+  ApiRequestOptions,
   EndpointCallInput,
   EndpointFactory,
   EndpointHeaders,
@@ -37,7 +38,12 @@ export const createEndpointFactory = <TMethod extends ApiMethod>(
       TBodySchema,
       TResponseSchema,
       TResult
-    > = {}
+    > = ({} as ApiEndpointOptions<
+      TParamsSchema,
+      TBodySchema,
+      TResponseSchema,
+      TResult
+    >)
   ): ApiEndpoint<TParamsSchema, TBodySchema, TResponseSchema, TResult> => Object.freeze({
     method,
     options: Object.freeze(options),
@@ -82,7 +88,11 @@ export const executeEndpoint = async <TEndpoint extends AnyApiEndpoint>(
   const params = parseEndpointParams(apiEndpoint, rawParams, context);
   const path   = buildEndpointPath(apiEndpoint.path, params);
 
-  return request(apiEndpoint.method, path, {
+  return (request as unknown as (
+    method: ApiMethod,
+    path: string,
+    options: ApiRequestOptions<any, any, any>
+  ) => Promise<unknown>)(apiEndpoint.method, path, {
     ...callOptions,
     auth         : callOptions.auth ?? apiEndpoint.options.auth,
     errorFallback: mergeErrorFallback(

@@ -217,7 +217,47 @@ The same rule applies to `decodeJwtHeaderWithSchema` and `safeDecodeJwtHeaderWit
 
 JWT segments now use strict base64url and fatal UTF-8 decoding
 
+Schema-backed JWT decoders now require schemas to return plain records; arrays, `Date`, class instances, and `null` fail through the normal decode failure shape
+
+The attached `token` field is reserved and always contains the original JWT string, even when a payload schema returns its own `token` claim
+
+Use Zod object outputs or object type aliases for `JwtSchema<T>`; an interface must explicitly extend `JwtObject`
+
 Invalid alphabet, misplaced or non-canonical padding, impossible lengths, and invalid UTF-8 return the normal null or `JwtDecodeError` failure shape
+
+## API response types require a schema or selector
+
+Schema-free API methods and endpoints now expose the default response payload as `unknown`
+
+Caller-selected output generics can no longer assert a parsed result without a runtime `responseSchema` or `select`
+
+### Before
+
+```ts
+type User = {
+  id: number;
+};
+
+const result = await api.get<ApiResponse<User>>("/users/1");
+```
+
+### After
+
+```ts
+const UserSchema = z.object({
+  id: z.number()
+});
+
+const validated = await api.get("/users/1", {
+  responseSchema: UserSchema
+});
+
+const selected = await api.get("/health", {
+  select: (data) => isHealthPayload(data)
+});
+```
+
+Explicit schema generics also require their matching runtime `bodySchema`, `responseSchema`, or endpoint `params` field, and a custom endpoint result requires `select`
 
 ## SvelteKit refresh sharing applies results per cookie context
 
@@ -321,6 +361,14 @@ Keep `allowedOrigins` narrow and use normalized URL origins without path, query,
 
 Origin classification also normalizes network-path and backslash URL forms before deciding whether auth is trusted
 
+Only the client-level `baseURL` is an implicit trusted origin. A request-level `baseURL` that resolves to another origin must also appear in `allowedOrigins`
+
+Untrusted requests remove merged `Authorization` and `Proxy-Authorization` headers even when those headers came from client, endpoint, or request configuration
+
+Refresh sharing is keyed by the failed access-token value. After refresh, the client re-reads the current token so a newer login generation wins, and each caller can abort its own wait without cancelling shared work
+
+Refresh results must be non-empty, control-character-free strings; invalid runtime values clear best effort and throw `ApiAuthError` without a retry
+
 ## API errors are normalized and redacted
 
 Public API errors no longer retain raw response bodies, response objects, headers, parse text, validation inputs, upstream messages, query strings, or fragments
@@ -364,7 +412,11 @@ try {
 }
 ```
 
-`context.url` is query-free and fragment-free
+`context.url` and `context.path` are URL-userinfo-free, query-free, and fragment-free
+
+`ApiAuthError.cause` is now a sanitized `HTTP_FAILURE` or `AUTH_CALLBACK_FAILURE` descriptor instead of the original error object
+
+Do not read auth callback messages, bodies, or headers from the terminal error; record intentionally safe diagnostics inside application-owned callbacks or hooks before throwing
 
 Route conversion resolves explicit code and status mappings before the configured safe fallback and never uses an upstream message implicitly
 

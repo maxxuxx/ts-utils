@@ -180,16 +180,53 @@ export type RawBodyFactory = (
 ) => MaybePromise<RequestInit["body"] | undefined>;
 
 // Request options
+type ApiDefaultResponse<TResponseSchema extends OptionalSchema> =
+  ApiResponse<ApiResponsePayload<SchemaOutput<TResponseSchema>>>;
+
+type ApiIsAny<TValue> = 0 extends (1 & TValue) ? true : false;
+
+type ApiSchemaProperty<
+  TKey extends PropertyKey,
+  TSchema extends OptionalSchema
+> = ApiIsAny<TSchema> extends true
+  ? { [TProperty in TKey]?: TSchema }
+  : TSchema extends z.ZodType
+    ? { [TProperty in TKey]-?: TSchema }
+    : { [TProperty in TKey]?: undefined };
+
+type ApiTypesEqual<TLeft, TRight> =
+  (<TValue>() => TValue extends TLeft ? 1 : 2) extends
+  (<TValue>() => TValue extends TRight ? 1 : 2)
+    ? (<TValue>() => TValue extends TRight ? 1 : 2) extends
+      (<TValue>() => TValue extends TLeft ? 1 : 2)
+        ? true
+        : false
+    : false;
+
+type ApiSelectionProperty<
+  TResponseSchema extends OptionalSchema,
+  TResult
+> = ApiIsAny<TResult> extends true
+  ? {
+    select?: (data: SchemaOutput<TResponseSchema>, response: Response) => TResult;
+  }
+  : ApiTypesEqual<TResult, ApiDefaultResponse<TResponseSchema>> extends true
+    ? {
+      select?: (data: SchemaOutput<TResponseSchema>, response: Response) => TResult;
+    }
+    : {
+      select: (data: SchemaOutput<TResponseSchema>, response: Response) => TResult;
+    };
+
 /** Options for api request */
 export type ApiRequestOptions<
   TBodySchema extends OptionalSchema = undefined,
   TResponseSchema extends OptionalSchema = undefined,
-  TResult = ApiResponse<ApiResponsePayload<SchemaOutput<TResponseSchema>>>
+  TResult = ApiDefaultResponse<TResponseSchema>
 > = Omit<RequestInit, "body" | "headers" | "method"> & {
   auth         ?: boolean;
   baseURL      ?: string;
   body         ?: SchemaInput<TBodySchema>;
-  bodySchema   ?: TBodySchema;
   errorFallback?: ApiErrorFallback;
   headers      ?: ApiHeadersInit;
   hooks            ?: ApiHooks;
@@ -197,16 +234,16 @@ export type ApiRequestOptions<
   query            ?: QueryParams;
   rawBody          ?: RequestInit["body"];
   rawBodyFactory   ?: RawBodyFactory;
-  responseSchema   ?: TResponseSchema;
   retry            ?: ApiRetry;
-  select           ?: (data: SchemaOutput<TResponseSchema>, response: Response) => TResult;
   timeout          ?: number;
-};
+} & ApiSchemaProperty<"bodySchema", TBodySchema>
+  & ApiSchemaProperty<"responseSchema", TResponseSchema>
+  & ApiSelectionProperty<TResponseSchema, TResult>;
 
 /** Options for api read */
 export type ApiReadOptions<
   TResponseSchema extends OptionalSchema = undefined,
-  TResult = ApiResponse<ApiResponsePayload<SchemaOutput<TResponseSchema>>>
+  TResult = ApiDefaultResponse<TResponseSchema>
 > = Omit<
   ApiRequestOptions<undefined, TResponseSchema, TResult>,
   "body" | "bodySchema" | "rawBody" | "rawBodyFactory"
@@ -216,21 +253,45 @@ export type ApiReadOptions<
 export type ApiWriteOptions<
   TBodySchema extends OptionalSchema = undefined,
   TResponseSchema extends OptionalSchema = undefined,
-  TResult = ApiResponse<ApiResponsePayload<SchemaOutput<TResponseSchema>>>
+  TResult = ApiDefaultResponse<TResponseSchema>
 > = ApiRequestOptions<TBodySchema, TResponseSchema, TResult>;
 
 /** Callable read method signature for GET and DELETE requests */
 export type ApiReadMethod = {
-  <TResponseSchema extends z.ZodType, TResult = ApiResponse<ApiResponsePayload<SchemaOutput<TResponseSchema>>>>(
+  <
+    TResponseSchema extends z.ZodType,
+    TResult
+  >(
     path: string,
     options: ApiReadOptions<TResponseSchema, TResult> & {
       responseSchema: TResponseSchema;
+      select: (data: SchemaOutput<TResponseSchema>, response: Response) => TResult;
     }
   ): Promise<TResult>;
-  <TData = ApiResponse<unknown>>(
+  <TResponseSchema extends z.ZodType>(
     path: string,
-    options?: ApiReadOptions<undefined, TData>
-  ): Promise<TData>;
+    options: ApiReadOptions<
+      TResponseSchema,
+      ApiDefaultResponse<TResponseSchema>
+    > & {
+      responseSchema: TResponseSchema;
+      select?: undefined;
+    }
+  ): Promise<ApiDefaultResponse<TResponseSchema>>;
+  <TResult>(
+    path: string,
+    options: ApiReadOptions<undefined, TResult> & {
+      responseSchema?: undefined;
+      select: (data: unknown, response: Response) => TResult;
+    }
+  ): Promise<TResult>;
+  (
+    path: string,
+    options?: ApiReadOptions<undefined, ApiDefaultResponse<undefined>> & {
+      responseSchema?: undefined;
+      select?: undefined;
+    }
+  ): Promise<ApiDefaultResponse<undefined>>;
 };
 
 /** Callable write method signature for POST, PUT, and PATCH requests */
@@ -238,20 +299,65 @@ export type ApiWriteMethod = {
   <
     TBodySchema extends OptionalSchema = undefined,
     TResponseSchema extends z.ZodType = z.ZodType,
-    TResult = ApiResponse<ApiResponsePayload<SchemaOutput<TResponseSchema>>>
+    TResult = ApiDefaultResponse<TResponseSchema>
   >(
     path: string,
     options: ApiWriteOptions<TBodySchema, TResponseSchema, TResult> & {
+      bodySchema?: TBodySchema;
       responseSchema: TResponseSchema;
+      select: (data: SchemaOutput<TResponseSchema>, response: Response) => TResult;
     }
   ): Promise<TResult>;
   <
-    TData = ApiResponse<unknown>,
-    TBodySchema extends OptionalSchema = undefined
+    TBodySchema extends OptionalSchema = undefined,
+    TResponseSchema extends z.ZodType = z.ZodType
   >(
     path: string,
-    options?: ApiWriteOptions<TBodySchema, undefined, TData>
-  ): Promise<TData>;
+    options: ApiWriteOptions<
+      TBodySchema,
+      TResponseSchema,
+      ApiDefaultResponse<TResponseSchema>
+    > & {
+      bodySchema?: TBodySchema;
+      responseSchema: TResponseSchema;
+      select?: undefined;
+    }
+  ): Promise<ApiDefaultResponse<TResponseSchema>>;
+  <
+    TBodySchema extends OptionalSchema = undefined,
+    TResult = unknown
+  >(
+    path: string,
+    options: ApiWriteOptions<TBodySchema, undefined, TResult> & {
+      bodySchema?: TBodySchema;
+      responseSchema?: undefined;
+      select: (data: unknown, response: Response) => TResult;
+    }
+  ): Promise<TResult>;
+  <TBodySchema extends z.ZodType>(
+    path: string,
+    options: ApiWriteOptions<
+      TBodySchema,
+      undefined,
+      ApiDefaultResponse<undefined>
+    > & {
+      bodySchema: TBodySchema;
+      responseSchema?: undefined;
+      select?: undefined;
+    }
+  ): Promise<ApiDefaultResponse<undefined>>;
+  (
+    path: string,
+    options?: ApiWriteOptions<
+      undefined,
+      undefined,
+      ApiDefaultResponse<undefined>
+    > & {
+      bodySchema?: undefined;
+      responseSchema?: undefined;
+      select?: undefined;
+    }
+  ): Promise<ApiDefaultResponse<undefined>>;
 };
 
 /** Callable API request function shared by read and write methods */
@@ -259,22 +365,70 @@ export type ApiRequest = {
   <
     TBodySchema extends OptionalSchema = undefined,
     TResponseSchema extends z.ZodType = z.ZodType,
-    TResult = ApiResponse<ApiResponsePayload<SchemaOutput<TResponseSchema>>>
+    TResult = ApiDefaultResponse<TResponseSchema>
   >(
     method: ApiMethod,
     path: string,
     options: ApiRequestOptions<TBodySchema, TResponseSchema, TResult> & {
+      bodySchema?: TBodySchema;
       responseSchema: TResponseSchema;
+      select: (data: SchemaOutput<TResponseSchema>, response: Response) => TResult;
     }
   ): Promise<TResult>;
   <
-    TData = ApiResponse<unknown>,
-    TBodySchema extends OptionalSchema = undefined
+    TBodySchema extends OptionalSchema = undefined,
+    TResponseSchema extends z.ZodType = z.ZodType
   >(
     method: ApiMethod,
     path: string,
-    options?: ApiRequestOptions<TBodySchema, undefined, TData>
-  ): Promise<TData>;
+    options: ApiRequestOptions<
+      TBodySchema,
+      TResponseSchema,
+      ApiDefaultResponse<TResponseSchema>
+    > & {
+      bodySchema?: TBodySchema;
+      responseSchema: TResponseSchema;
+      select?: undefined;
+    }
+  ): Promise<ApiDefaultResponse<TResponseSchema>>;
+  <
+    TBodySchema extends OptionalSchema = undefined,
+    TResult = ApiDefaultResponse<undefined>
+  >(
+    method: ApiMethod,
+    path: string,
+    options: ApiRequestOptions<TBodySchema, undefined, TResult> & {
+      bodySchema?: TBodySchema;
+      responseSchema?: undefined;
+      select: (data: unknown, response: Response) => TResult;
+    }
+  ): Promise<TResult>;
+  <TBodySchema extends z.ZodType>(
+    method: ApiMethod,
+    path: string,
+    options: ApiRequestOptions<
+      TBodySchema,
+      undefined,
+      ApiDefaultResponse<undefined>
+    > & {
+      bodySchema: TBodySchema;
+      responseSchema?: undefined;
+      select?: undefined;
+    }
+  ): Promise<ApiDefaultResponse<undefined>>;
+  (
+    method: ApiMethod,
+    path: string,
+    options?: ApiRequestOptions<
+      undefined,
+      undefined,
+      ApiDefaultResponse<undefined>
+    > & {
+      bodySchema?: undefined;
+      responseSchema?: undefined;
+      select?: undefined;
+    }
+  ): Promise<ApiDefaultResponse<undefined>>;
 };
 
 /** Options for api fetcher */
@@ -310,6 +464,20 @@ export type ApiFetcher = Readonly<{
 }>;
 
 // Endpoint types
+declare const apiEndpointType: unique symbol;
+
+type ApiEndpointTypeState<
+  TParamsSchema extends OptionalSchema,
+  TBodySchema extends OptionalSchema,
+  TResponseSchema extends OptionalSchema,
+  TResult
+> = Readonly<{
+  bodySchema    : TBodySchema;
+  paramsSchema  : TParamsSchema;
+  responseSchema: TResponseSchema;
+  result        : TResult;
+}>;
+
 /** Represents endpoint params */
 export type EndpointParams<TParamsSchema extends OptionalSchema> =
   TParamsSchema extends z.ZodType ? z.output<TParamsSchema> : undefined;
@@ -329,28 +497,33 @@ export type ApiEndpointOptions<
   TParamsSchema extends OptionalSchema = undefined,
   TBodySchema extends OptionalSchema = undefined,
   TResponseSchema extends OptionalSchema = undefined,
-  TResult = ApiResponse<ApiResponsePayload<SchemaOutput<TResponseSchema>>>
+  TResult = ApiDefaultResponse<TResponseSchema>
 > = Readonly<{
   auth         ?: boolean;
-  bodySchema       ?: TBodySchema;
   errorFallback    ?: ApiErrorFallback;
   headers          ?: EndpointHeaders<TParamsSchema>;
   maxResponseBytes?: number;
-  params           ?: TParamsSchema;
   query            ?: EndpointQuery<TParamsSchema>;
-  responseSchema   ?: TResponseSchema;
   retry            ?: ApiRetry;
-  select           ?: (data: SchemaOutput<TResponseSchema>, response: Response) => TResult;
   timeout          ?: number;
-}>;
+} & ApiSchemaProperty<"params", TParamsSchema>
+  & ApiSchemaProperty<"bodySchema", TBodySchema>
+  & ApiSchemaProperty<"responseSchema", TResponseSchema>
+  & ApiSelectionProperty<TResponseSchema, TResult>>;
 
 /** Represents api endpoint */
 export type ApiEndpoint<
   TParamsSchema extends OptionalSchema = OptionalSchema,
   TBodySchema extends OptionalSchema = OptionalSchema,
   TResponseSchema extends OptionalSchema = OptionalSchema,
-  TResult = ApiResponse<ApiResponsePayload<SchemaOutput<TResponseSchema>>>
+  TResult = ApiDefaultResponse<TResponseSchema>
 > = Readonly<{
+  [apiEndpointType]?: ApiEndpointTypeState<
+    TParamsSchema,
+    TBodySchema,
+    TResponseSchema,
+    TResult
+  >;
   method : ApiMethod;
   options: ApiEndpointOptions<
     TParamsSchema,
@@ -370,7 +543,7 @@ export type EndpointFactory<TMethod extends ApiMethod> = {
     const TParamsSchema extends OptionalSchema = undefined,
     const TBodySchema extends OptionalSchema = undefined,
     const TResponseSchema extends z.ZodType = z.ZodType,
-    TResult = ApiResponse<ApiResponsePayload<SchemaOutput<TResponseSchema>>>
+    TResult = ApiDefaultResponse<TResponseSchema>
   >(
     path: string,
     options: ApiEndpointOptions<
@@ -378,21 +551,91 @@ export type EndpointFactory<TMethod extends ApiMethod> = {
       TBodySchema,
       TResponseSchema,
       TResult
-    > & { responseSchema: TResponseSchema }
+    > & {
+      bodySchema?: TBodySchema;
+      params?: TParamsSchema;
+      responseSchema: TResponseSchema;
+      select: (data: SchemaOutput<TResponseSchema>, response: Response) => TResult;
+    }
   ): ApiEndpoint<TParamsSchema, TBodySchema, TResponseSchema, TResult>;
   <
     const TParamsSchema extends OptionalSchema = undefined,
     const TBodySchema extends OptionalSchema = undefined,
-    TResult = ApiResponse<unknown>
+    const TResponseSchema extends z.ZodType = z.ZodType
   >(
     path: string,
-    options?: ApiEndpointOptions<
+    options: ApiEndpointOptions<
+      TParamsSchema,
+      TBodySchema,
+      TResponseSchema,
+      ApiDefaultResponse<TResponseSchema>
+    > & {
+      bodySchema?: TBodySchema;
+      params?: TParamsSchema;
+      responseSchema: TResponseSchema;
+      select?: undefined;
+    }
+  ): ApiEndpoint<
+    TParamsSchema,
+    TBodySchema,
+    TResponseSchema,
+    ApiDefaultResponse<TResponseSchema>
+  >;
+  <
+    const TParamsSchema extends OptionalSchema = undefined,
+    const TBodySchema extends OptionalSchema = undefined,
+    const TResponseSchema extends undefined = undefined,
+    TResult = unknown
+  >(
+    path: string,
+    options: ApiEndpointOptions<
+      TParamsSchema,
+      TBodySchema,
+      TResponseSchema,
+      TResult
+    > & {
+      bodySchema?: TBodySchema;
+      params?: TParamsSchema;
+      responseSchema?: undefined;
+      select: (data: unknown, response: Response) => TResult;
+    }
+  ): ApiEndpoint<TParamsSchema, TBodySchema, TResponseSchema, TResult>;
+  <
+    const TParamsSchema extends OptionalSchema = undefined,
+    const TBodySchema extends OptionalSchema = undefined
+  >(
+    path: string,
+    options: ApiEndpointOptions<
       TParamsSchema,
       TBodySchema,
       undefined,
-      TResult
+      ApiDefaultResponse<undefined>
+    > & {
+      bodySchema?: TBodySchema;
+      params?: TParamsSchema;
+      responseSchema?: undefined;
+      select?: undefined;
+    }
+  ): ApiEndpoint<
+    TParamsSchema,
+    TBodySchema,
+    undefined,
+    ApiDefaultResponse<undefined>
+  >;
+  (
+    path: string,
+    options?: ApiEndpointOptions<
+      undefined,
+      undefined,
+      undefined,
+      ApiDefaultResponse<undefined>
     >
-  ): ApiEndpoint<TParamsSchema, TBodySchema, undefined, TResult>;
+  ): ApiEndpoint<
+    undefined,
+    undefined,
+    undefined,
+    ApiDefaultResponse<undefined>
+  >;
   method: TMethod;
 };
 
@@ -424,7 +667,12 @@ export type EndpointCallInput<
 
 /** Argument tuple required to call an endpoint */
 export type EndpointCallArgs<TEndpoint extends AnyApiEndpoint> =
-  TEndpoint extends ApiEndpoint<infer TParamsSchema, infer TBodySchema, any, any>
+  NonNullable<TEndpoint[typeof apiEndpointType]> extends ApiEndpointTypeState<
+    infer TParamsSchema,
+    infer TBodySchema,
+    any,
+    any
+  >
     ? TParamsSchema extends z.ZodType
       ? [input: EndpointCallInput<TParamsSchema, TBodySchema>]
       : TBodySchema extends z.ZodType
@@ -434,6 +682,4 @@ export type EndpointCallArgs<TEndpoint extends AnyApiEndpoint> =
 
 /** Result returned by endpoint */
 export type EndpointResult<TEndpoint extends AnyApiEndpoint> =
-  TEndpoint extends ApiEndpoint<any, any, any, infer TResult>
-    ? TResult
-    : never;
+  NonNullable<TEndpoint[typeof apiEndpointType]>["result"];

