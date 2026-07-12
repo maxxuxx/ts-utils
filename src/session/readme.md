@@ -120,7 +120,8 @@ Persistent writes prepare and serialize the next snapshot before storage mutatio
 
 - When refresh tokens are required, missing refresh tokens cause `invalid_token`.
 - Expired JWTs trigger refresh when `refreshTokens` is configured; otherwise they cause `expired`.
-- Concurrent refresh calls with the same refresh token are deduped within one controller by default
+- Concurrent refresh calls with the same raw access-token and refresh-token pair are deduped within one controller by default
+- A newer login with a different access token starts a new refresh generation even when it reuses the same refresh token
 - Separate controllers keep independent refresh state even when their refresh-token strings match
 - Every context waiting on one core refresh writes the validated result to its own store
 - A pending refresh rechecks the current raw token identity before writing

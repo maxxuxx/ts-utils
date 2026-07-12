@@ -159,7 +159,7 @@ const createTokenSessionController = <
     }
 
     const claims = readClaims(accessToken);
-    const refreshContext = {
+    const refreshContext       = {
       claims,
       context,
       refreshToken,
@@ -167,7 +167,8 @@ const createTokenSessionController = <
       tokens,
       user
     };
-    const executeRefresh = async (): Promise<TTokens> => {
+    const refreshGenerationKey = createRefreshGenerationKey(tokenIdentity);
+    const executeRefresh       = async (): Promise<TTokens> => {
       const nextTokens      = parseTokens(await refreshTokens(refreshToken, refreshContext));
       const nextAccessToken = readAccessToken(nextTokens);
 
@@ -185,7 +186,7 @@ const createTokenSessionController = <
       nextTokens = options.dedupeRefresh === false
         ? await executeRefresh()
         : await refreshSingleFlight.run(
-          refreshToken,
+          refreshGenerationKey,
           executeRefresh
         );
     } catch (error) {
@@ -579,6 +580,13 @@ const hasSameTokenIdentity = (
   first.accessToken === second.accessToken
   && first.refreshToken === second.refreshToken
 );
+
+const createRefreshGenerationKey = (
+  identity: TokenIdentity
+): string => JSON.stringify([
+  identity.accessToken,
+  identity.refreshToken
+]);
 
 const readString = (value: unknown): string | undefined => (
   typeof value === "string" ? value : undefined

@@ -102,7 +102,7 @@ Use one stable handle from `createSvelteKitRefreshNamespace<TRefresh>()` plus a 
 
 Typed SvelteKit refresh sharing is in-flight only and uses one flight per handle regardless of caller configuration; do not add adapter success-result caching or cache-based flight partitions
 
-The namespace handle is invariant in `TRefresh`, so incompatible refresh result contracts cannot share it. Keep the handle stable outside fetcher construction and keep shared runners in the handle-keyed `WeakMap`
+The namespace handle uses an explicit `in out TRefresh` variance annotation plus its opaque brand, so incompatible refresh result contracts cannot share it even when a consumer disables `strictFunctionTypes`. Keep the handle stable outside fetcher construction and keep shared runners in the handle-keyed `WeakMap`
 
 Without a namespace handle, SvelteKit single-flight state belongs to the created adapter and must not collide with unrelated fetchers that happen to use the same token string
 

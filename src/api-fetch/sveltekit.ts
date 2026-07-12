@@ -17,10 +17,10 @@ declare const SVELTEKIT_REFRESH_NAMESPACE_RESULT: unique symbol;
 const sharedRefreshFlights = new WeakMap<object, unknown>();
 
 /** Opaque shared refresh namespace bound to one refresh result contract */
-export type SvelteKitRefreshNamespace<TRefresh> = Readonly<{
+export type SvelteKitRefreshNamespace<in out TRefresh> = {
   readonly [SVELTEKIT_REFRESH_NAMESPACE_RESULT]:
     (result: TRefresh) => TRefresh;
-}>;
+};
 
 type SvelteKitApiAuthBaseOptions<TCookies> = Readonly<{
   clear               ?: (cookies: TCookies) => MaybePromise<void>;

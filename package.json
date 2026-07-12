@@ -139,7 +139,8 @@
     "prepare": "npm run build",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json && npm run typecheck:variance",
+    "typecheck:variance": "tsc --noEmit -p test/fixtures/tsconfig.sveltekit-refresh-namespace-variance.json"
   },
   "dependencies": {
     "zod": "^4.4.3"

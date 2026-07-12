@@ -78,7 +78,7 @@ Attach the handler before the first authoritative storage catch-up read so delet
 
 `refreshThresholdSeconds` refreshes only when a JWT is present, a refresh token exists, and `refreshTokens` is configured
 
-Core refresh single-flight state belongs to each controller so unrelated controllers never share results only because their refresh-token strings match
+Core refresh single-flight state belongs to each controller and keys work by the exact raw access-token and refresh-token pair so a newer login that reuses a refresh token starts a new generation
 
 Every core refresh participant writes the shared validated token result into its own storage context
 

@@ -997,6 +997,95 @@ describe("session module", () => {
     });
   });
 
+  it("isolates refresh flights when a newer login reuses the refresh token", async () => {
+    let storedSession: TestSession = {
+      tokens: {
+        accessToken : "generation-a-access",
+        refreshToken: "shared-generation-refresh"
+      },
+      user: {
+        id: "generation-a-user"
+      }
+    };
+    const generationAGate = createDeferred<void>();
+    const read            = vi.fn(() => storedSession);
+    const refreshTokens   = vi.fn(async (
+      _refreshToken: string,
+      context: {
+        tokens: TestTokens;
+      }
+    ) => {
+      if (context.tokens.accessToken === "generation-a-access") {
+        await generationAGate.promise;
+
+        return {
+          accessToken : "generation-a-fresh",
+          refreshToken: "shared-generation-refresh"
+        };
+      }
+
+      return {
+        accessToken : "generation-b-fresh",
+        refreshToken: "shared-generation-refresh"
+      };
+    });
+    const session = createTokenSession<void, TestUser, TestTokens>({
+      clear: () => {
+        storedSession = {};
+      },
+      read,
+      refreshTokens,
+      tokenSchema: Tokens,
+      userSchema : User,
+      write: (_context, nextSession) => {
+        storedSession = nextSession;
+      }
+    });
+    const refreshA = session.refresh(undefined);
+
+    await vi.waitFor(() => {
+      expect(refreshTokens).toHaveBeenCalledTimes(1);
+    });
+
+    await session.set(undefined, {
+      tokens: {
+        accessToken : "generation-b-access",
+        refreshToken: "shared-generation-refresh"
+      },
+      user: {
+        id: "generation-b-user"
+      }
+    });
+
+    const refreshB = session.refresh(undefined);
+
+    await vi.waitFor(() => {
+      expect(read).toHaveBeenCalledTimes(2);
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const refreshCallsBeforeRelease = refreshTokens.mock.calls.length;
+
+    generationAGate.resolve();
+
+    await expect(Promise.all([refreshA, refreshB])).resolves.toEqual([
+      "generation-b-fresh",
+      "generation-b-fresh"
+    ]);
+    expect(refreshCallsBeforeRelease).toBe(2);
+    expect(refreshTokens).toHaveBeenCalledTimes(2);
+    expect(storedSession).toEqual({
+      tokens: {
+        accessToken : "generation-b-fresh",
+        refreshToken: "shared-generation-refresh"
+      },
+      user: {
+        id: "generation-b-user"
+      }
+    });
+  });
+
   it("applies session schema transforms once per refresh boundary", async () => {
     let userParseCount  = 0;
     let tokenParseCount = 0;
