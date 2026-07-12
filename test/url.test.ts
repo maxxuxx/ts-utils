@@ -50,6 +50,9 @@ describe("url module", () => {
     expect(appendQuery("/users#list", {
       page: 1
     })).toBe("/users?page=1#list");
+    expect(appendQuery("/x#one#two", {
+      a: 1
+    })).toBe("/x?a=1#one#two");
     expect(appendQuery("/users?sort=recent", [
       ["page", 2]
     ])).toBe("/users?sort=recent&page=2");

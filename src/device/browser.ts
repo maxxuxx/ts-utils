@@ -94,7 +94,7 @@ export const createBrowserDeviceUuid = (
   ].join("-");
 };
 
-/** Creates cookie device uuid store */
+/** Creates a cookie device UUID store and rejects insecure SameSite=None options */
 export const createCookieDeviceUuidStore = (
   options: CookieDeviceUuidStoreOptions = {}
 ): CookieDeviceUuidStore => {
@@ -108,6 +108,10 @@ export const createCookieDeviceUuidStore = (
 
   if (!document) {
     throw new Error("Browser document is not available");
+  }
+
+  if (sameSite === "None" && !secure) {
+    throw new TypeError("SameSite=None requires secure cookies");
   }
 
   return {

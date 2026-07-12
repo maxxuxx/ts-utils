@@ -48,13 +48,14 @@ const day = to.dateString(input.createdAt, "yyyy-mm-dd");
 
 - `toNumber` accepts finite numbers, numeric strings, booleans, safe bigint values, and valid dates.
 - `toText` returns valid dates as ISO strings.
-- `toDate` clones `Date` instances before returning them.
+- `toDate` clones valid `Date` instances and validates the final constructed date
 - `toFlagBoolean` accepts common strings such as `true`, `false`, `yes`, `no`, `on`, `off`, `1`, and `0`.
 
 ## Edge cases
 
 - The default number fallback is `0`; the default text fallback is an empty string.
-- Invalid dates return the provided fallback or `undefined`.
+- Invalid dates, including finite numbers outside the JavaScript Date range, return the provided fallback or `undefined`
+- A provided date fallback is returned unchanged
 - `isRecord` accepts object literals and null-prototype objects, and rejects arrays, dates, functions, and `null`.
 - Use `parser` or `env` when invalid input should be reported instead of quietly normalized.
 

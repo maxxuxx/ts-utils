@@ -45,6 +45,10 @@ format.
 Browser UUIDs are temporary application cookies and should not be treated as
 hardware identifiers.
 
+Browser cookie stores reject `SameSite=None` unless `secure` is true so callers cannot create a browser-rejected cookie configuration
+
+`DeviceUuidParseError` remains implemented in `node-shared.ts` and is publicly exported by the aggregate and Node entries without pulling Node built-ins into the aggregate graph
+
 Environment detection is conservative: a document means browser path, a Node
 process means Node path, and anything else throws.
 

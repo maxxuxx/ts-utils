@@ -116,6 +116,16 @@ const assertFiniteMs = (value: unknown, name: string): number => {
   return value;
 };
 
+const assertTimestampMs = (value: unknown, name: string): number => {
+  const timeMs = assertFiniteMs(value, name);
+
+  if (Number.isNaN(new Date(timeMs).getTime())) {
+    throw new RangeError(`${name} must be within the JavaScript Date range`);
+  }
+
+  return timeMs;
+};
+
 const hasJson = (value: unknown): value is FetchResponseLike & { json: () => Promise<unknown> } => (
   typeof value === "object"
   && value !== null
@@ -154,21 +164,33 @@ const normalizeMaxSamples = (value: number | undefined): number => (
     : DEFAULT_MAX_SAMPLES
 );
 
-/** Calculates time offset */
+/** Calculates an offset from ordered timestamps with a non-negative round trip */
 export const calculateTimeOffset = ({
   clientSendTimeMs,
   serverReceiveTimeMs,
   serverTransmitTimeMs,
   clientReceiveTimeMs
 }: TimeSyncTimestamps): TimeOffset => {
-  assertFiniteMs(clientSendTimeMs, "clientSendTimeMs");
-  assertFiniteMs(serverReceiveTimeMs, "serverReceiveTimeMs");
-  assertFiniteMs(serverTransmitTimeMs, "serverTransmitTimeMs");
-  assertFiniteMs(clientReceiveTimeMs, "clientReceiveTimeMs");
+  assertTimestampMs(clientSendTimeMs, "clientSendTimeMs");
+  assertTimestampMs(serverReceiveTimeMs, "serverReceiveTimeMs");
+  assertTimestampMs(serverTransmitTimeMs, "serverTransmitTimeMs");
+  assertTimestampMs(clientReceiveTimeMs, "clientReceiveTimeMs");
+
+  if (clientReceiveTimeMs < clientSendTimeMs) {
+    throw new RangeError("clientReceiveTimeMs must not precede clientSendTimeMs");
+  }
+
+  if (serverTransmitTimeMs < serverReceiveTimeMs) {
+    throw new RangeError("serverTransmitTimeMs must not precede serverReceiveTimeMs");
+  }
 
   const serverProcessingMs = serverTransmitTimeMs - serverReceiveTimeMs;
   const roundTripMs = (clientReceiveTimeMs - clientSendTimeMs) - serverProcessingMs;
   const offsetMs = ((serverReceiveTimeMs - clientSendTimeMs) + (serverTransmitTimeMs - clientReceiveTimeMs)) / 2;
+
+  if (roundTripMs < 0) {
+    throw new RangeError("roundTripMs must not be negative");
+  }
 
   return {
     clientSendTimeMs,
@@ -228,15 +250,15 @@ export const pickBestTimeSyncSample = (
   return best;
 };
 
-/** Creates clock snapshot */
+/** Creates a clock snapshot when the derived server timestamp is Date-compatible */
 export const createClockSnapshot = (
   offsetMs: number,
   localTimeMs = Date.now()
 ): ClockSnapshot => {
   assertFiniteMs(offsetMs, "offsetMs");
-  assertFiniteMs(localTimeMs, "localTimeMs");
+  assertTimestampMs(localTimeMs, "localTimeMs");
 
-  const serverTimeMs = localTimeMs + offsetMs;
+  const serverTimeMs = assertTimestampMs(localTimeMs + offsetMs, "serverTimeMs");
 
   return {
     offsetMs,
@@ -356,15 +378,18 @@ export const setServerTimeHeader = (
   return timeMs;
 };
 
-/** Converts local ms to server ms */
+/** Converts local ms to a Date-compatible server timestamp */
 export const localMsToServerMs = (
   localTimeMs: number,
   offsetMs: number
-): number => (
-  assertFiniteMs(localTimeMs, "localTimeMs") + assertFiniteMs(offsetMs, "offsetMs")
-);
+): number => {
+  const localTimestampMs = assertTimestampMs(localTimeMs, "localTimeMs");
+  const offset            = assertFiniteMs(offsetMs, "offsetMs");
 
-/** Converts local ms to server date */
+  return assertTimestampMs(localTimestampMs + offset, "serverTimeMs");
+};
+
+/** Converts local ms to a valid server Date */
 export const localMsToServerDate = (
   localTimeMs: number,
   offsetMs: number
@@ -372,11 +397,11 @@ export const localMsToServerDate = (
   new Date(localMsToServerMs(localTimeMs, offsetMs))
 );
 
-/** Creates server time payload */
+/** Creates a server time payload from a Date-compatible timestamp */
 export const createServerTimePayload = (
   nowMs = Date.now()
 ): ServerTimePayload => {
-  const serverTimeMs = assertFiniteMs(nowMs, "nowMs");
+  const serverTimeMs = assertTimestampMs(nowMs, "nowMs");
 
   return {
     serverTimeMs,

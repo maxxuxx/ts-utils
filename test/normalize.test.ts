@@ -39,9 +39,14 @@ describe("normalize module", () => {
     expect(date).toEqual(source);
     expect(date).not.toBe(source);
     expect(toDate("not a date")).toBeUndefined();
+    expect(toDate(Number.MAX_VALUE)).toBeUndefined();
+    const fallback = new Date(0);
+
+    expect(toDate(Number.MAX_VALUE, fallback)).toBe(fallback);
     expect(toDateString(new Date(2026, 4, 20, 12, 34, 56))).toBe("2026-05-20");
     expect(toDateString(new Date(2026, 4, 20, 12, 34, 56), "yyyy.mm.dd HH:MM")).toBe("2026.05.20 12:34");
     expect(toDateString("invalid", "yyyy-mm-dd", "n/a")).toBe("n/a");
+    expect(toDateString(Number.MAX_VALUE, "yyyy-mm-dd", "invalid")).toBe("invalid");
     expect(to.dateString(source, "yyyy-mm-dd")).toBe("2026-05-20");
   });
 

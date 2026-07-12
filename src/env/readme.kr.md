@@ -55,12 +55,16 @@ const config = env.parse(Config, {
 - source를 넘기지 않으면 `globalThis.process?.env`를 읽고 없으면 빈 객체를 사용합니다.
 - `envSchema.string()`은 기본적으로 trim하고 blank 값을 거부합니다.
 - `envSchema.boolean()`은 `1`, `true`, `yes`, `on`과 대응 false 값을 처리합니다.
+- number와 boolean getter는 injected raw value를 문자열로 바꾸기 전에 parse합니다
+- raw boolean, number, bigint 의미는 해당 schema helper와 같습니다
+- string getter와 `envSchema.string()`은 text 기반 동작을 유지합니다
 - `normalizeEnvSource`는 `undefined`만 제거하고 `null`은 schema 검증을 위해 보존합니다.
 
 ## 주의할 점
 
 - `requireEnv`는 `allowEmpty`가 true가 아니면 빈 문자열을 거부합니다.
 - getter helper에서 invalid number 또는 boolean은 fallback을 반환합니다.
+- safe integer 범위를 벗어난 bigint는 invalid number이며 fallback 또는 `undefined`를 반환합니다
 - `envSchema.json(schema)`는 invalid JSON text를 그대로 두어 schema validation이 실패하게 합니다.
 - object와 array는 schema helper가 처리하지 않는 한 string getter에서 변환되지 않습니다.
 

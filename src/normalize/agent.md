@@ -33,6 +33,8 @@ Normalizers return predictable fallback values instead of throwing
 
 `toDate` returns a cloned date so callers cannot mutate the original input by accident
 
+`toDate` validates every constructed `Date`, including finite numbers outside the JavaScript Date range, and returns the caller-provided fallback unchanged for invalid values
+
 `toDateString` uses lightweight token replacement and no date library
 
 `toFlagBoolean` keeps backend DTO mapping ergonomic by accepting a custom true value

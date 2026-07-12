@@ -45,7 +45,9 @@ describe("format module", () => {
   it("formats phone numbers", () => {
     expect(formatPhoneNumber("01012345678")).toBe("010-1234-5678");
     expect(formatPhoneNumber("0212345678")).toBe("02-1234-5678");
+    expect(formatPhoneNumber("0311234567")).toBe("031-123-4567");
     expect(formatPhoneNumber("15881234")).toBe("1588-1234");
+    expect(formatPhoneNumber("99999999999")).toBe("99999999999");
     expect(format.phoneNumber("555", {
       fallback: "invalid"
     })).toBe("invalid");

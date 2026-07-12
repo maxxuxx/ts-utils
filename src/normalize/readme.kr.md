@@ -48,13 +48,14 @@ const day = to.dateString(input.createdAt, "yyyy-mm-dd");
 
 - `toNumber`는 finite number, numeric string, boolean, safe bigint, valid date를 받습니다.
 - `toText`는 valid date를 ISO string으로 반환합니다.
-- `toDate`는 `Date` instance를 clone해서 반환합니다.
+- `toDate`는 valid `Date` instance를 clone하고 최종 생성된 date를 검증합니다
 - `toFlagBoolean`은 `true`, `false`, `yes`, `no`, `on`, `off`, `1`, `0` 같은 문자열을 처리합니다.
 
 ## 주의할 점
 
 - 기본 number fallback은 `0`, 기본 text fallback은 빈 문자열입니다.
-- invalid date는 fallback 또는 `undefined`를 반환합니다.
+- JavaScript Date 범위 밖의 finite number를 포함한 invalid date는 fallback 또는 `undefined`를 반환합니다
+- 전달한 date fallback은 그대로 반환합니다
 - `isRecord`는 object literal과 null-prototype object를 허용하고 array, date, function, `null`은 거부합니다.
 - invalid input을 조용히 보정하지 말고 보고해야 하면 `parser` 또는 `env`를 사용합니다.
 

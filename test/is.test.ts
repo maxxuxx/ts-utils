@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 
 import {
   hasOwn,
@@ -7,6 +7,7 @@ import {
   isDefined,
   isEmpty,
   isFiniteNumber,
+  isFalsy,
   isInteger,
   isNil,
   isNonEmptyArray,
@@ -20,6 +21,16 @@ import {
   isValidDate
 } from "../src/is/index.js";
 
+const keepTruthyBigInt = (value: 0n | 1n): 1n | undefined => {
+  if (isFalsy(value)) {
+    return undefined;
+  }
+
+  expectTypeOf(value).toEqualTypeOf<1n>();
+
+  return value;
+};
+
 describe("is module", () => {
   it("checks primitive values", () => {
     expect(isString("hello")).toBe(true);
@@ -32,6 +43,7 @@ describe("is module", () => {
     expect(isNil(null)).toBe(true);
     expect(isNil(undefined)).toBe(true);
     expect(isPrimitive(Symbol("key"))).toBe(true);
+    expect(isPrimitive(Number.NaN)).toBe(true);
   });
 
   it("narrows defined values", () => {
@@ -85,6 +97,9 @@ describe("is module", () => {
     expect(isEmpty({ id: 1 })).toBe(false);
     expect(is.truthy("value")).toBe(true);
     expect(is.falsy(0)).toBe(true);
+    expect(isFalsy(0n)).toBe(true);
+    expect(keepTruthyBigInt(0n)).toBeUndefined();
+    expect(keepTruthyBigInt(1n)).toBe(1n);
   });
 
   it("checks promise-like values", () => {

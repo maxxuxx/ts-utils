@@ -26,6 +26,7 @@ export type ValueUnitFormatOptions = NumberFormatOptions & Readonly<{
 
 // 기본 로케일/통화 단위는 한국(ko-KR, "원")에 맞춰져 있으며 options로 모두 변경 가능
 const DEFAULT_LOCALE = "ko-KR";
+const KOREAN_PHONE_PREFIX_PATTERN = /^(?:01[016789]|0(?:3[1-3]|4[1-4]|5[1-5]|6[1-4]|70|80))/u;
 
 /** Formats number */
 export const formatNumber = (
@@ -75,7 +76,7 @@ export const formatDate = (
   fallback = ""
 ): string => toDateString(value, format, fallback);
 
-/** Formats a Korean phone number (02/0Xn/010/15XX-19XX); returns fallback for other formats */
+/** Formats a recognized Korean phone number or returns unknown 10/11-digit prefixes as normalized digits */
 export const formatPhoneNumber = (
   value: unknown,
   options: PhoneNumberFormatOptions = {}
@@ -97,6 +98,13 @@ export const formatPhoneNumber = (
     if (digits.length === 10) {
       return `02-${digits.slice(2, 6)}-${digits.slice(6)}`;
     }
+  }
+
+  if (
+    (digits.length === 10 || digits.length === 11)
+    && !KOREAN_PHONE_PREFIX_PATTERN.test(digits)
+  ) {
+    return digits;
   }
 
   if (digits.length === 10) {

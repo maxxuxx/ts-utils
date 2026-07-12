@@ -8,7 +8,7 @@ Small Web `Response` helpers for JSON bodies and common message responses.
 
 - Route handlers should return standard Web `Response` objects without framework-specific helpers.
 - You need a tiny convention for JSON `{ message }` error responses.
-- Server adapters need default helpers for 400, 401, and 502 responses.
+- Server adapters need default helpers for common 204, 400, 401, 403, 404, 409, 422, and 502 responses
 
 ## Import
 
@@ -17,8 +17,13 @@ import {
   httpResponse,
   jsonResponse,
   messageResponse,
+  noContent,
   badRequest,
   unauthorized,
+  forbidden,
+  notFound,
+  conflict,
+  unprocessableEntity,
   badGateway
 } from "@maxxuxx/ts-utils/http-response";
 ```
@@ -29,8 +34,11 @@ import {
 |---|---|
 | `jsonResponse` | Returns `Response.json(body, init)`. |
 | `messageResponse` | Returns `{ message }` JSON with an explicit status. |
+| `noContent` | Returns an empty 204 response |
 | `badRequest` | Returns a 400 message response. |
 | `unauthorized` | Returns a 401 message response. |
+| `forbidden`, `notFound` | Return 403 and 404 message responses |
+| `conflict`, `unprocessableEntity` | Return 409 and 422 message responses |
 | `badGateway` | Returns a 502 message response. |
 | `httpResponse` | Namespace containing the same helpers. |
 
@@ -54,7 +62,9 @@ return jsonResponse({
 
 ## Edge cases
 
-- Only 400, 401, and 502 status shortcuts are included. Use `messageResponse` for other status codes.
+- Common 400, 401, 403, 404, 409, 422, and 502 shortcuts return `{ message }` JSON
+- `noContent` returns status 204 with an empty body
+- Use `messageResponse` for other status codes
 - `jsonResponse` does not validate the body shape.
 - Use `api-fetch` route helpers when converting typed API client errors.
 

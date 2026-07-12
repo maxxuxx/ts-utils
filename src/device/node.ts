@@ -15,6 +15,7 @@ import type {
 const execFileAsync = promisify(execFile);
 
 export {
+  DeviceUuidParseError,
   getNodeDeviceUuidCommands,
   normalizeDeviceUuid,
   parseNodeDeviceUuidOutput

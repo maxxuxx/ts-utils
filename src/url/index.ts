@@ -106,7 +106,7 @@ export const toSearchParams = (query?: UrlQueryParams): URLSearchParams => {
   return searchParams;
 };
 
-/** Appends query */
+/** Appends query parameters before the complete hash fragment */
 export const appendQuery = (
   path: string,
   query?: UrlQueryParams
@@ -118,9 +118,10 @@ export const appendQuery = (
     return path;
   }
 
-  const [pathWithoutHash = "", hash = ""] = path.split("#", 2);
+  const hashIndex = path.indexOf("#");
+  const pathWithoutHash = hashIndex === -1 ? path : path.slice(0, hashIndex);
   const separator = pathWithoutHash.includes("?") ? "&" : "?";
-  const hashPart = hash ? `#${hash}` : "";
+  const hashPart = hashIndex === -1 ? "" : path.slice(hashIndex);
 
   return `${pathWithoutHash}${separator}${queryString}${hashPart}`;
 };

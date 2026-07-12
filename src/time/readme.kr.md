@@ -67,6 +67,7 @@ setServerTimeHeader(response.headers, {
 
 - offset 공식은 `((serverReceive - clientSend) + (serverTransmit - clientReceive)) / 2`입니다.
 - `roundTripMs`는 server processing time을 제외합니다.
+- client receive는 client send보다 앞설 수 없고 server transmit은 server receive보다 앞설 수 없으며 round trip은 음수가 될 수 없습니다
 - `createServerClock`은 sample이 기록되기 전까지 `undefined` snapshot을 반환합니다.
 - `setServerTimeHeader`는 기존 header, clock, `Date.now()` 순서로 server time을 선택합니다.
 - `fetchServerTimeSample`은 fetch-like function을 받으며 DOM fetch type에 의존하지 않습니다.
@@ -74,7 +75,9 @@ setServerTimeHeader(response.headers, {
 
 ## 주의할 점
 
-- 모든 timestamp input은 finite number여야 합니다.
+- synchronization과 Date-producing timestamp input은 JavaScript Date 범위 안의 finite number여야 합니다
+- 해당 helper에서 non-finite input은 `TypeError`, 잘못된 순서와 음수 round trip, 범위 초과, 잘못된 파생 timestamp는 `RangeError`를 throw합니다
+- clock snapshot과 local-to-server 변환은 반환 전에 최종 server timestamp를 검증합니다
 - `ok: false`인 fetch-like response는 status와 status text를 포함한 error를 throw합니다.
 - `pickBestTimeSyncSample([])`은 `undefined`를 반환합니다.
 - `createClockSnapshot`은 live clock function이 아니라 snapshot object를 반환합니다.

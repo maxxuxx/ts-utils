@@ -48,7 +48,7 @@ const href = buildUrl("https://api.example.com/api", path, {
 
 - `joinPath` drops `null`, `undefined`, and empty string parts.
 - `toSearchParams` skips `null` and `undefined` but preserves `""`, `0`, and `false`.
-- `appendQuery` inserts query strings before hash fragments.
+- `appendQuery` inserts query strings before the first `#` and preserves the complete fragment after it
 - `buildUrl` appends relative paths to the existing base path instead of replacing it.
 
 ## Edge cases
@@ -56,6 +56,7 @@ const href = buildUrl("https://api.example.com/api", path, {
 - `isAbsoluteUrl` checks URL strings with a scheme such as `https://`.
 - `isExternalUrl` also treats protocol-relative values such as `//example.com` as external.
 - Array query values are appended as repeated query keys.
+- Additional `#` characters inside a fragment are preserved
 - This module is for web and API URLs. Use Node's `node:path` module for filesystem paths.
 
 ## Related modules

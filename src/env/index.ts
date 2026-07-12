@@ -87,11 +87,15 @@ const toEnvText = (value: unknown): string | undefined => {
   return undefined;
 };
 
-const readEnvValue = (key: string, source?: EnvSource): string | undefined => {
+const readRawEnvValue = (key: string, source?: EnvSource): unknown => {
   const envSource = source ?? getDefaultEnvSource();
 
-  return toEnvText(envSource[key]);
+  return envSource[key];
 };
+
+const readEnvValue = (key: string, source?: EnvSource): string | undefined => (
+  toEnvText(readRawEnvValue(key, source))
+);
 
 const parseBooleanValue = (value: unknown): boolean | undefined => {
   if (typeof value === "boolean") {
@@ -173,28 +177,28 @@ export const requireEnv = (key: string, options: EnvRequireOptions = {}): string
   return value;
 };
 
-/** Returns env number */
+/** Parses an injected raw env value as a safe number */
 export function getEnvNumber(key: string, options: EnvNumberOptions & { fallback: number }): number;
 
-/** Returns env number */
+/** Parses an injected raw env value as a safe number */
 export function getEnvNumber(key: string, options?: EnvNumberOptions): number | undefined;
 
-/** Returns env number */
+/** Parses an injected raw env value as a safe number */
 export function getEnvNumber(key: string, options: EnvNumberOptions = {}): number | undefined {
-  const numberValue = parseNumberValue(readEnvValue(key, options.source));
+  const numberValue = parseNumberValue(readRawEnvValue(key, options.source));
 
   return numberValue ?? options.fallback;
 }
 
-/** Returns env boolean */
+/** Parses an injected raw env value as an explicit boolean-like value */
 export function getEnvBoolean(key: string, options: EnvBooleanOptions & { fallback: boolean }): boolean;
 
-/** Returns env boolean */
+/** Parses an injected raw env value as an explicit boolean-like value */
 export function getEnvBoolean(key: string, options?: EnvBooleanOptions): boolean | undefined;
 
-/** Returns env boolean */
+/** Parses an injected raw env value as an explicit boolean-like value */
 export function getEnvBoolean(key: string, options: EnvBooleanOptions = {}): boolean | undefined {
-  const booleanValue = parseBooleanValue(readEnvValue(key, options.source));
+  const booleanValue = parseBooleanValue(readRawEnvValue(key, options.source));
 
   return booleanValue ?? options.fallback;
 }

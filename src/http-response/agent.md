@@ -18,13 +18,15 @@ import { badRequest, jsonResponse, unauthorized } from "@maxxuxx/ts-utils/http-r
 
 Primary response vocabulary should stay small and direct
 
-`jsonResponse`, `messageResponse`, `badRequest`, `unauthorized`, and `badGateway`
+`jsonResponse`, `messageResponse`, `noContent`, `badRequest`, `unauthorized`, `forbidden`, `notFound`, `conflict`, `unprocessableEntity`, and `badGateway`
 
 ## Design decisions
 
 The module uses the platform `Response` API directly
 
 Status helpers accept caller-provided messages and only use English default messages when the caller omits one
+
+`noContent` returns status 204 with no body or JSON content type
 
 Keep product copy, localization, auth policy, and app-specific error mapping in the consuming app
 

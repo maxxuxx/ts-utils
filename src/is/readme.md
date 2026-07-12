@@ -50,6 +50,7 @@ if (isNonEmptyArray(items)) {
 ## Behavior notes
 
 - `isNumber` excludes `NaN`; use `isFiniteNumber` when `Infinity` must also be rejected.
+- `isPrimitive` accepts every JavaScript number primitive, including `NaN`
 - `isObject` accepts arrays and class instances because JavaScript treats them as objects.
 - `isPlainObject` accepts object literals and null-prototype objects only.
 - `isRecord` is currently the same plain-object check typed as `Record<string, unknown>`.
@@ -57,7 +58,7 @@ if (isNonEmptyArray(items)) {
 ## Edge cases
 
 - `isEmpty` treats `null`, `undefined`, empty strings, arrays, maps, sets, and plain objects as empty.
-- `isTruthy` and `isFalsy` follow JavaScript truthiness.
+- `isTruthy` and `isFalsy` follow JavaScript truthiness, including falsy `0n`
 - These helpers do not validate nested object shapes. Use `parser` or Zod schemas for that.
 - `isURL` checks `value instanceof URL`, not whether a string is a valid URL.
 

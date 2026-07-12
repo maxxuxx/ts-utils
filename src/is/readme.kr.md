@@ -50,6 +50,7 @@ if (isNonEmptyArray(items)) {
 ## 동작 메모
 
 - `isNumber`는 `NaN`을 제외합니다. `Infinity`까지 제외하려면 `isFiniteNumber`를 사용합니다.
+- `isPrimitive`는 `NaN`을 포함한 모든 JavaScript number primitive를 허용합니다
 - `isObject`는 JavaScript 기준에 따라 배열과 class instance도 object로 봅니다.
 - `isPlainObject`는 object literal과 null-prototype object만 허용합니다.
 - `isRecord`는 현재 plain-object check를 `Record<string, unknown>`으로 type narrowing합니다.
@@ -57,7 +58,7 @@ if (isNonEmptyArray(items)) {
 ## 주의할 점
 
 - `isEmpty`는 `null`, `undefined`, 빈 문자열, 빈 array/map/set/plain object를 empty로 봅니다.
-- `isTruthy`, `isFalsy`는 JavaScript truthiness를 따릅니다.
+- `isTruthy`, `isFalsy`는 falsy `0n`을 포함한 JavaScript truthiness를 따릅니다
 - nested object shape 검증은 하지 않습니다. 그 경우 `parser` 또는 Zod schema를 사용합니다.
 - `isURL`은 string parse가 아니라 `value instanceof URL`을 검사합니다.
 

@@ -44,6 +44,8 @@ Boolean coercion accepts the same common true and false tokens used by `env` and
 
 `parser.id` accepts positive integer values and coerces string input
 
+Numeric coercing presets accept only string or number input and reject booleans, bigint values, null, arrays, and objects instead of relying on broad JavaScript number coercion
+
 `parser.email` and `parser.uuid` use the top-level Zod 4 format APIs (`z.email()`, `z.uuid()`); email trims and lowercases first and then validates through `pipe`
 
 Keep module docs updated whenever parser behavior, exports, or internal file layout changes

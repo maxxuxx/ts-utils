@@ -55,12 +55,16 @@ const config = env.parse(Config, {
 - Without an explicit source, helpers read `globalThis.process?.env` and fall back to an empty object.
 - `envSchema.string()` trims and rejects blank values by default.
 - `envSchema.boolean()` accepts values such as `1`, `true`, `yes`, and `on`, and false-like equivalents.
+- Number and boolean getters parse injected raw values before any string conversion
+- Raw boolean, number, and bigint semantics match the corresponding schema helpers
+- String getters and `envSchema.string()` remain text based
 - `normalizeEnvSource` removes only `undefined` values; `null` is preserved for schema validation.
 
 ## Edge cases
 
 - `requireEnv` rejects blank strings unless `allowEmpty` is true.
 - Invalid numbers and booleans return the provided fallback from getter helpers.
+- Unsafe bigint values are invalid number inputs and use the provided fallback or `undefined`
 - `envSchema.json(schema)` leaves invalid JSON text unchanged so the provided schema can report validation failure.
 - Objects and arrays are not converted by string getters unless schema helpers handle them.
 

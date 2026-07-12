@@ -37,6 +37,8 @@ Do not wrap or replace Node's `node:path`
 
 `appendQuery` and `toSearchParams` must preserve `""`, `0`, and `false`, but skip `null` and `undefined`
 
+`appendQuery` splits at the first `#` and preserves the complete remaining fragment, including additional `#` characters
+
 `buildUrl` should join relative paths onto the base path instead of treating a leading slash as host root replacement
 
 Keep module docs updated whenever URL behavior, exports, or internal file layout changes

@@ -33,6 +33,10 @@ All guards must be dependency free
 
 `isNumber` should reject `NaN`
 
+`isPrimitive` follows JavaScript primitive categories, so every number value including `NaN` is primitive even though `isNumber(NaN)` is false
+
+Truthy and falsy guard types must include bigint zero semantics alongside their runtime `Boolean` checks
+
 Use `isFiniteNumber` when `Infinity` must also be rejected
 
 `isObject` follows JavaScript object semantics and accepts arrays, dates, maps, sets, and class instances

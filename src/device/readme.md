@@ -15,7 +15,7 @@ Device UUID helpers for browser-like renderers and Node main processes, with run
 ```ts
 import { getDeviceUuid } from "@maxxuxx/ts-utils/device";
 import { getBrowserDeviceUuid } from "@maxxuxx/ts-utils/device/browser";
-import { getNodeDeviceUuid } from "@maxxuxx/ts-utils/device/node";
+import { DeviceUuidParseError, getNodeDeviceUuid } from "@maxxuxx/ts-utils/device/node";
 ```
 
 ## Core exports
@@ -28,6 +28,7 @@ import { getNodeDeviceUuid } from "@maxxuxx/ts-utils/device/node";
 | `getNodeDeviceUuid` | Runs platform commands and returns a normalized machine UUID. |
 | `parseNodeDeviceUuidOutput`, `normalizeDeviceUuid` | Parse UUID or machine-id command output into canonical UUID text. |
 | `getNodeDeviceUuidCommands` | Returns the platform command list for tests or custom executors. |
+| `DeviceUuidParseError` | Describes successful command output that did not contain a parseable UUID |
 
 ## Basic example
 
@@ -55,8 +56,10 @@ const detectedId = await getDeviceUuid();
 ## Edge cases
 
 - `createCookieDeviceUuidStore` throws when no browser document is available.
+- `SameSite=None` requires `secure: true`; insecure combinations throw during store creation
 - Invalid existing cookie values are replaced with a new UUID.
 - Node lookup throws `AggregateError` after every candidate command fails or returns unparsable output.
+- `DeviceUuidParseError` is available from both `device` and `device/node`
 - Unsupported Node platforms throw before command execution.
 
 ## Related modules

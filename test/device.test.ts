@@ -3,11 +3,13 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import {
+  DeviceUuidParseError,
   createCookieDeviceUuidStore,
   getBrowserDeviceUuid,
   getNodeDeviceUuid,
   parseNodeDeviceUuidOutput
 } from "../src/device/index.js";
+import { DeviceUuidParseError as NodeDeviceUuidParseError } from "../src/device/node.js";
 import type {
   BrowserCryptoLike,
   BrowserDocumentLike,
@@ -68,6 +70,11 @@ describe("device module", () => {
     );
 
     expect(source).not.toMatch(/from\s+["']\.\/node\.js["']/u);
+  });
+
+  it("exports DeviceUuidParseError from aggregate and Node entries", () => {
+    expect(DeviceUuidParseError).toBeTypeOf("function");
+    expect(NodeDeviceUuidParseError).toBe(DeviceUuidParseError);
   });
 
   it("parses darwin ioreg UUID output", () => {
@@ -181,5 +188,18 @@ describe("device module", () => {
 
     expect(result).toBe(uuid);
     expect(document.cookie).toContain(`device_uuid=${uuid}`);
+  });
+
+  it("rejects SameSite None cookies without Secure", () => {
+    expect(() => createCookieDeviceUuidStore({
+      document: createDocument(),
+      sameSite: "None",
+      secure  : false
+    })).toThrow();
+    expect(() => createCookieDeviceUuidStore({
+      document: createDocument(),
+      sameSite: "None",
+      secure  : true
+    })).not.toThrow();
   });
 });

@@ -4,6 +4,7 @@ export {
   getBrowserDeviceUuid
 } from "./browser.js";
 export {
+  DeviceUuidParseError,
   getNodeDeviceUuidCommands,
   normalizeDeviceUuid,
   parseNodeDeviceUuidOutput

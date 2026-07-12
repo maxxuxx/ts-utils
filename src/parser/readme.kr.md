@@ -51,12 +51,14 @@ if (User.is(payload)) {
 
 - strict preset은 값을 변환하지 않고 검증합니다.
 - `parser.page`는 기본값이 `1`이고 `parser.limit`은 기본값이 `20`, 최대값이 `100`입니다.
-- `parser.id`는 positive integer로 coerce합니다.
+- `parser.id`는 string 또는 number input을 positive integer로 변환합니다
+- numeric coercing preset은 string과 number만 변환하며 boolean 같은 다른 JavaScript-coercible value는 거부합니다
 - `parser.coerce.boolean`은 helper가 처리하는 명시적 boolean-like 값만 허용합니다.
 
 ## 주의할 점
 
 - coercing number, integer, page, limit 흐름에서는 빈 문자열이 `undefined`로 전처리됩니다.
+- `id`, `page`, `limit`, `coerce.number`, `coerce.integer`는 boolean input을 허용하지 않습니다
 - `createParser(...).optional()` 같은 method는 새 parser wrapper를 반환합니다.
 - 입력 source가 environment variable이고 JSON env parsing이 필요하면 `env`를 사용합니다.
 - 복잡한 cross-field validation은 직접 Zod schema를 작성하는 것이 좋습니다.

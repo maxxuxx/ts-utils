@@ -15,7 +15,7 @@ browser-like renderer와 Node main process에서 device UUID를 읽거나 생성
 ```ts
 import { getDeviceUuid } from "@maxxuxx/ts-utils/device";
 import { getBrowserDeviceUuid } from "@maxxuxx/ts-utils/device/browser";
-import { getNodeDeviceUuid } from "@maxxuxx/ts-utils/device/node";
+import { DeviceUuidParseError, getNodeDeviceUuid } from "@maxxuxx/ts-utils/device/node";
 ```
 
 ## 주요 export
@@ -28,6 +28,7 @@ import { getNodeDeviceUuid } from "@maxxuxx/ts-utils/device/node";
 | `getNodeDeviceUuid` | platform command를 실행해서 machine UUID를 정규화합니다. |
 | `parseNodeDeviceUuidOutput`, `normalizeDeviceUuid` | command output 또는 machine-id를 UUID로 변환합니다. |
 | `getNodeDeviceUuidCommands` | 테스트나 custom executor용 platform command 목록을 반환합니다. |
+| `DeviceUuidParseError` | command는 성공했지만 UUID를 parse할 수 없는 output을 설명합니다 |
 
 ## 기본 예제
 
@@ -55,8 +56,10 @@ const detectedId = await getDeviceUuid();
 ## 주의할 점
 
 - `createCookieDeviceUuidStore`는 browser document가 없으면 throw합니다.
+- `SameSite=None`은 `secure: true`가 필요하며 insecure 조합은 store 생성 시 throw합니다
 - 기존 cookie 값이 UUID가 아니면 새 UUID로 교체합니다.
 - Node lookup은 모든 command가 실패하거나 parse 실패하면 `AggregateError`를 throw합니다.
+- `DeviceUuidParseError`는 `device`와 `device/node` 양쪽에서 사용할 수 있습니다
 - 지원하지 않는 Node platform은 command 실행 전에 실패합니다.
 
 ## 관련 모듈

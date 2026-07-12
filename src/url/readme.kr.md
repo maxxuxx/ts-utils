@@ -48,7 +48,7 @@ const href = buildUrl("https://api.example.com/api", path, {
 
 - `joinPath`는 `null`, `undefined`, 빈 문자열 segment를 제외합니다.
 - `toSearchParams`는 `null`, `undefined`를 제외하고 `""`, `0`, `false`는 보존합니다.
-- `appendQuery`는 hash fragment 앞에 query string을 추가합니다.
+- `appendQuery`는 첫 `#` 앞에 query string을 추가하고 뒤의 전체 fragment를 보존합니다
 - `buildUrl`은 relative path를 base path에 붙이며 base path를 대체하지 않습니다.
 
 ## 주의할 점
@@ -56,6 +56,7 @@ const href = buildUrl("https://api.example.com/api", path, {
 - `isAbsoluteUrl`은 `https://`처럼 scheme이 있는 URL string을 확인합니다.
 - `isExternalUrl`은 `//example.com` 같은 protocol-relative 값도 external로 봅니다.
 - array query value는 같은 key를 반복 append합니다.
+- fragment 안의 추가 `#` 문자도 그대로 보존합니다
 - 이 모듈은 web/API URL용입니다. filesystem path는 Node `node:path` module을 사용합니다.
 
 ## 관련 모듈

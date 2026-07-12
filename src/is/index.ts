@@ -73,11 +73,11 @@ export const isDefined = <TValue>(value: TValue): value is NonNullable<TValue> =
   !isNil(value)
 );
 
-/** Checks whether a value is primitive */
+/** Checks whether a value is a JavaScript primitive, including NaN */
 export const isPrimitive = (value: unknown): value is Primitive => (
   isNil(value)
   || isString(value)
-  || isNumber(value)
+  || typeof value === "number"
   || isBoolean(value)
   || isBigInt(value)
   || isSymbol(value)
@@ -214,13 +214,13 @@ export const isEmpty = (value: unknown): boolean => {
   return false;
 };
 
-/** Checks whether a value is truthy */
-export const isTruthy = <TValue>(value: TValue): value is Exclude<TValue, false | 0 | "" | null | undefined> => (
+/** Checks whether a value is truthy under JavaScript semantics */
+export const isTruthy = <TValue>(value: TValue): value is Exclude<TValue, false | 0 | 0n | "" | null | undefined> => (
   Boolean(value)
 );
 
-/** Checks whether a value is falsy */
-export const isFalsy = (value: unknown): value is false | 0 | "" | null | undefined => (
+/** Checks whether a value is falsy under JavaScript semantics, including 0n */
+export const isFalsy = (value: unknown): value is false | 0 | 0n | "" | null | undefined => (
   !value
 );
 

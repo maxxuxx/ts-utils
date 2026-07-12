@@ -67,6 +67,7 @@ setServerTimeHeader(response.headers, {
 
 - Offset formula is `((serverReceive - clientSend) + (serverTransmit - clientReceive)) / 2`.
 - `roundTripMs` subtracts server processing time.
+- Client receive cannot precede client send, server transmit cannot precede server receive, and round trip cannot be negative
 - `createServerClock` returns `undefined` snapshots until at least one sample is recorded.
 - `setServerTimeHeader` resolves time from an existing header, then a clock, then `Date.now()`.
 - `fetchServerTimeSample` accepts a fetch-like function and does not depend on DOM fetch types.
@@ -74,7 +75,9 @@ setServerTimeHeader(response.headers, {
 
 ## Edge cases
 
-- All timestamp inputs must be finite numbers.
+- Synchronization and Date-producing timestamp inputs must be finite numbers within the JavaScript Date range
+- In those helpers, non-finite inputs throw `TypeError`; invalid ordering, negative round trips, out-of-range values, and invalid derived timestamps throw `RangeError`
+- Clock snapshots and local-to-server conversions validate the final server timestamp before returning
 - Failed fetch-like responses with `ok: false` throw an error containing status and status text.
 - `pickBestTimeSyncSample([])` returns `undefined`.
 - `createClockSnapshot` returns a snapshot object, not a live clock function.

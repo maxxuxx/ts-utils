@@ -26,6 +26,10 @@ Do not use `z.coerce.boolean()` for env flags because `"false"` would become `tr
 
 Keep individual getters small and predictable. Missing values return the fallback or `undefined`; required values throw `EnvMissingError`.
 
+Number and boolean getters parse injected raw values before text conversion so their semantics match the schema helpers and unsafe bigint values remain rejected
+
+String getters and string schemas remain text based and may stringify primitive raw values
+
 Keep this module free of DOM type references.
 ## Public documentation
 

@@ -61,6 +61,34 @@ describe("env module", () => {
     expect(env.boolean("DEBUG_FALSE", { source })).toBe(false);
   });
 
+  it("rejects unsafe injected bigint numbers before string conversion", () => {
+    const source = {
+      COUNT: 9_007_199_254_740_993n,
+      PORT : 4_000n
+    };
+
+    expect(getEnvNumber("PORT", { source })).toBe(4_000);
+    expect(getEnvNumber("COUNT", { source })).toBeUndefined();
+    expect(getEnvNumber("COUNT", { fallback: 3_000, source })).toBe(3_000);
+    expect(getEnv("COUNT", { source })).toBe("9007199254740993");
+  });
+
+  it("keeps injected raw boolean values aligned with schema parsing", () => {
+    const source = {
+      BIGINT     : 2n,
+      BIGINT_ZERO: 0n,
+      NUMBER     : 2,
+      RAW_FALSE  : false,
+      RAW_TRUE   : true
+    };
+
+    expect(getEnvBoolean("NUMBER", { source })).toBe(true);
+    expect(getEnvBoolean("BIGINT", { source })).toBe(true);
+    expect(getEnvBoolean("BIGINT_ZERO", { source })).toBe(false);
+    expect(getEnvBoolean("RAW_TRUE", { source })).toBe(true);
+    expect(getEnvBoolean("RAW_FALSE", { source })).toBe(false);
+  });
+
   it("parses typed environment config with schema helpers", () => {
     const Config = z.object({
       API_URL: envSchema.string(),

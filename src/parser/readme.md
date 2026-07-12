@@ -51,12 +51,14 @@ if (User.is(payload)) {
 
 - Strict presets validate without conversion.
 - `parser.page` defaults to `1`; `parser.limit` defaults to `20` and caps at `100`.
-- `parser.id` coerces to a positive integer.
+- `parser.id` converts string or number input to a positive integer
+- Numeric coercing presets convert only strings and numbers; booleans and other JavaScript-coercible values are rejected
 - `parser.coerce.boolean` only accepts explicit boolean-like values from the helper conversion.
 
 ## Edge cases
 
 - Empty strings become `undefined` for the coercing number, integer, page, and limit flows that use that preprocess.
+- Boolean input is not accepted by `id`, `page`, `limit`, `coerce.number`, or `coerce.integer`
 - `createParser(...).optional()` and similar methods return new parser wrappers.
 - Use `env` when the input source is environment variables and JSON env parsing is needed.
 - Use direct Zod schemas for complex cross-field validation.

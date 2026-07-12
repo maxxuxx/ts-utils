@@ -32,6 +32,27 @@ describe("time", () => {
     expect(result.serverProcessingMs).toBe(10);
   });
 
+  it("rejects inconsistent timestamp ordering and negative round trips", () => {
+    expect(() => calculateTimeOffset({
+      clientSendTimeMs    : 1_000,
+      serverReceiveTimeMs : 1_100,
+      serverTransmitTimeMs: 1_090,
+      clientReceiveTimeMs : 1_200
+    })).toThrow(RangeError);
+    expect(() => calculateTimeOffset({
+      clientSendTimeMs    : 1_100,
+      serverReceiveTimeMs : 1_000,
+      serverTransmitTimeMs: 1_010,
+      clientReceiveTimeMs : 1_090
+    })).toThrow(RangeError);
+    expect(() => calculateTimeOffset({
+      clientSendTimeMs    : 1_000,
+      serverReceiveTimeMs : 1_100,
+      serverTransmitTimeMs: 1_120,
+      clientReceiveTimeMs : 1_010
+    })).toThrow(RangeError);
+  });
+
   it("builds a time sync sample from client and server timestamps", () => {
     const sample = createTimeSyncSample({
       clientSendTimeMs    : 2_000,
@@ -94,6 +115,10 @@ describe("time", () => {
     });
     expect(localMsToServerMs(20_000, -500)).toBe(19_500);
     expect(localMsToServerDate(20_000, -500)).toEqual(new Date(19_500));
+    expect(() => createClockSnapshot(Number.MAX_VALUE, Number.MAX_VALUE)).toThrow(RangeError);
+    expect(() => createClockSnapshot(1, 8_640_000_000_000_000)).toThrow(RangeError);
+    expect(() => localMsToServerMs(8_640_000_000_000_000, 1)).toThrow(RangeError);
+    expect(() => localMsToServerDate(8_640_000_000_000_000, 1)).toThrow(RangeError);
   });
 
   it("parses HTTP date headers into millisecond timestamps", () => {
@@ -272,5 +297,6 @@ describe("time", () => {
       serverTransmitTimeMs: 1_234,
       iso                 : new Date(1_234).toISOString()
     });
+    expect(() => createServerTimePayload(Number.MAX_VALUE)).toThrow(RangeError);
   });
 });

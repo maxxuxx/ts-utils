@@ -1,9 +1,14 @@
 import {
   badGateway,
   badRequest,
+  conflict,
+  forbidden,
   httpResponse,
   jsonResponse,
   messageResponse,
+  noContent,
+  notFound,
+  unprocessableEntity,
   unauthorized
 } from "../src/http-response/index.js";
 import { describe, expect, it } from "vitest";
@@ -57,6 +62,33 @@ describe("http-response module", () => {
     expect(response.status).toBe(401);
   });
 
+  it("creates exact common status responses", async () => {
+    const forbiddenResponse           = forbidden();
+    const notFoundResponse            = notFound();
+    const conflictResponse            = conflict();
+    const unprocessableEntityResponse = unprocessableEntity();
+    const noContentResponse           = noContent();
+
+    expect(forbiddenResponse.status).toBe(403);
+    await expect(forbiddenResponse.json()).resolves.toEqual({
+      message: "Forbidden"
+    });
+    expect(notFoundResponse.status).toBe(404);
+    await expect(notFoundResponse.json()).resolves.toEqual({
+      message: "Not Found"
+    });
+    expect(conflictResponse.status).toBe(409);
+    await expect(conflictResponse.json()).resolves.toEqual({
+      message: "Conflict"
+    });
+    expect(unprocessableEntityResponse.status).toBe(422);
+    await expect(unprocessableEntityResponse.json()).resolves.toEqual({
+      message: "Unprocessable Entity"
+    });
+    expect(noContentResponse.status).toBe(204);
+    await expect(noContentResponse.text()).resolves.toBe("");
+  });
+
   it("provides namespace style helpers", async () => {
     const response = httpResponse.badRequest("Invalid payload");
 
@@ -64,5 +96,13 @@ describe("http-response module", () => {
       message: "Invalid payload"
     });
     expect(response.status).toBe(400);
+
+    const conflictResponse = httpResponse.conflict("Already exists");
+
+    await expect(conflictResponse.json()).resolves.toEqual({
+      message: "Already exists"
+    });
+    expect(conflictResponse.status).toBe(409);
+    expect(httpResponse.noContent().status).toBe(204);
   });
 });

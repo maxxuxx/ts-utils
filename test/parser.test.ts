@@ -48,11 +48,16 @@ describe("parser", () => {
   it("parses common project values", () => {
     expect(parser.id.parse("10")).toBe(10);
     expect(parser.id.safeParse("0").success).toBe(false);
+    expect(parser.id.safeParse(true).success).toBe(false);
     expect(parser.page.parse(undefined)).toBe(1);
     expect(parser.page.parse("2")).toBe(2);
     expect(parser.page.parse("")).toBe(1);
+    expect(parser.page.safeParse(true).success).toBe(false);
     expect(parser.limit.parse(undefined)).toBe(20);
     expect(parser.limit.safeParse("101").success).toBe(false);
+    expect(parser.limit.safeParse(true).success).toBe(false);
+    expect(parser.coerce.number.safeParse(true).success).toBe(false);
+    expect(parser.coerce.integer.safeParse(false).success).toBe(false);
     expect(parser.nonEmptyString.parse(" haru ")).toBe("haru");
     expect(parser.email.parse(" HARU@example.com ")).toBe("haru@example.com");
   });

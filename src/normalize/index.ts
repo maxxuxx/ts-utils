@@ -1,6 +1,8 @@
 /** Represents plain record */
 export type PlainRecord = Record<string, unknown>;
 
+const isValidDate = (value: Date): boolean => Number.isFinite(value.getTime());
+
 /** Checks whether a value is not empty string */
 export const isNotEmptyString = (value: unknown): value is string => (
   typeof value === "string" && value.trim().length > 0
@@ -75,22 +77,24 @@ export const toText = (value: unknown, fallback = ""): string => {
   }
 };
 
-/** Converts a value to date */
+/** Converts a value to a valid Date clone or returns the provided fallback */
 export const toDate = (value: unknown, fallback?: Date): Date | undefined => {
   if (value instanceof Date) {
     const time = value.getTime();
 
-    return Number.isNaN(time) ? fallback : new Date(time);
+    return isValidDate(value) ? new Date(time) : fallback;
   }
 
   if (typeof value === "number" && Number.isFinite(value)) {
-    return new Date(value);
+    const date = new Date(value);
+
+    return isValidDate(date) ? date : fallback;
   }
 
   if (typeof value === "string" && value.trim().length > 0) {
     const date = new Date(value);
 
-    return Number.isNaN(date.getTime()) ? fallback : date;
+    return isValidDate(date) ? date : fallback;
   }
 
   return fallback;
@@ -98,7 +102,7 @@ export const toDate = (value: unknown, fallback?: Date): Date | undefined => {
 
 const padDatePart = (value: number): string => String(value).padStart(2, "0");
 
-/** Converts a value to date string */
+/** Formats a valid date-like value or returns the provided fallback */
 export const toDateString = (
   value: unknown,
   format = "yyyy-mm-dd",
