@@ -231,11 +231,11 @@ export const createApiFetcher = (
           authContext
         );
       } catch (nextRefreshError) {
-        if (
-          nextRefreshError instanceof AuthWaitAbortError
-          && requestOptions.signal?.aborted
-        ) {
-          throw nextRefreshError;
+        if (requestOptions.signal?.aborted) {
+          throw new AuthWaitAbortError(
+            requestOptions.signal.reason,
+            authContext
+          );
         }
 
         refreshError = nextRefreshError;
@@ -250,11 +250,11 @@ export const createApiFetcher = (
           authContext
         );
       } catch (currentTokenError) {
-        if (
-          currentTokenError instanceof AuthWaitAbortError
-          && requestOptions.signal?.aborted
-        ) {
-          throw currentTokenError;
+        if (requestOptions.signal?.aborted) {
+          throw new AuthWaitAbortError(
+            requestOptions.signal.reason,
+            authContext
+          );
         }
 
         return throwAuthCallbackError(options.auth, authContext);

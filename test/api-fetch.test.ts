@@ -1001,6 +1001,40 @@ describe("api-fetch", () => {
     expect(JSON.stringify(error)).not.toContain("abort-query-secret");
   });
 
+  it("rebuilds observed caller aborts instead of exposing callback-owned errors", async () => {
+    const controller = new AbortController();
+    const callbackError = new ApiAbortError(
+      { secret: "callback-abort-secret" },
+      {
+        method: "GET",
+        path  : "/callback",
+        url   : "/callback"
+      }
+    );
+    const api = createApiFetcher({
+      fetch: async () => jsonResponse({ message: "expired" }, 401),
+      auth : {
+        getAccessToken: () => "expired",
+        refresh       : async () => {
+          controller.abort("caller cancelled");
+
+          throw callbackError;
+        }
+      }
+    });
+    const error = await api.get("/private", {
+      signal: controller.signal
+    }).catch((reason: unknown) => reason);
+
+    expect(error).toBeInstanceOf(ApiAbortError);
+    expect(error).not.toBe(callbackError);
+    expect(error).toMatchObject({
+      cause: "caller cancelled",
+      name : "ApiAbortError"
+    });
+    expect(JSON.stringify(error)).not.toContain("callback-abort-secret");
+  });
+
   it("normalizes auth refreshes that return no access token", async () => {
     const clear = vi.fn(async () => undefined);
     const api = createApiFetcher({
