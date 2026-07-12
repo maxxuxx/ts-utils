@@ -1,13 +1,13 @@
 import { access, readFile } from "node:fs/promises";
-import { spawnSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { spawnNpmSync } from "./npm-runner.mjs";
 
 // Paths and process helpers
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const packageRoot     = resolve(scriptDirectory, "..");
 const packagePath     = resolve(packageRoot, "package.json");
-const npmCommand      = process.platform === "win32" ? "npm.cmd" : "npm";
 
 const fail = (message, cause) => {
   const details = cause instanceof Error
@@ -20,13 +20,13 @@ const fail = (message, cause) => {
 };
 
 const runBuild = () => {
-  const result = spawnSync(npmCommand, ["run", "build"], {
+  const result = spawnNpmSync(["run", "build"], {
     cwd  : packageRoot,
     stdio: "inherit"
   });
 
   if (result.error) {
-    fail(`could not start \`${npmCommand} run build\``, result.error);
+    fail("could not start `npm run build`", result.error);
   }
 
   if (result.status !== 0) {

@@ -11,6 +11,7 @@ const packageManifest = (): {
   exports?: Record<string, {
     import?: string;
   }>;
+  files?: string[];
   scripts?: Record<string, string>;
 } => JSON.parse(readFileSync(packagePath, "utf8"));
 
@@ -157,9 +158,17 @@ describe("source documentation", () => {
     const packageJson = packageManifest();
 
     expect(packageJson.scripts).toMatchObject({
+      "check:publish-version": "node scripts/check-publish-version.mjs",
+      "clean"                : "node scripts/clean.mjs",
       "verify:exports": "node scripts/verify-exports.mjs",
       "verify:pack"   : "node scripts/verify-pack.mjs"
     });
+    expect(packageJson.files).toEqual(expect.arrayContaining([
+      "scripts/*.mjs"
+    ]));
+    expect(existsSync(join(process.cwd(), "scripts", "check-publish-version.mjs"))).toBe(true);
+    expect(existsSync(join(process.cwd(), "scripts", "clean.mjs"))).toBe(true);
+    expect(existsSync(join(process.cwd(), "scripts", "npm-runner.mjs"))).toBe(true);
     expect(existsSync(join(process.cwd(), "scripts", "verify-exports.mjs"))).toBe(true);
     expect(existsSync(join(process.cwd(), "scripts", "verify-pack.mjs"))).toBe(true);
   });
@@ -202,7 +211,7 @@ describe("source documentation", () => {
     );
 
     expect(publishWorkflow).not.toContain("Skip existing version");
-    expect(publishWorkflow).toContain("already exists");
-    expect(publishWorkflow).toContain("process.exit(1)");
+    expect(publishWorkflow).toContain("run: npm run check:publish-version");
+    expect(publishWorkflow).not.toContain("node --input-type=module");
   });
 });

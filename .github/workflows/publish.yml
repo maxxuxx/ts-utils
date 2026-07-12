@@ -50,40 +50,7 @@ jobs:
         run: npm audit
 
       - name: Check published version
-        run: |
-          node --input-type=module <<'NODE'
-          import { readFileSync } from "node:fs";
-          import { spawnSync } from "node:child_process";
-
-          const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
-          const specifier   = `${packageJson.name}@${packageJson.version}`;
-          const npmCommand  = process.platform === "win32" ? "npm.cmd" : "npm";
-          const result = spawnSync(
-            npmCommand,
-            ["view", specifier, "version", "--json"],
-            { encoding: "utf8" }
-          );
-
-          if (result.error) {
-            console.error(`[publish] registry lookup failed for ${specifier}`, result.error);
-            process.exit(1);
-          }
-
-          if (result.status === 0) {
-            console.error(`[publish] ${specifier} already exists`);
-            process.exit(1);
-          }
-
-          const registryOutput = `${result.stdout}\n${result.stderr}`;
-
-          if (!/\bE404\b/u.test(registryOutput)) {
-            console.error(`[publish] registry lookup failed for ${specifier}`);
-            console.error(registryOutput.trim());
-            process.exit(result.status ?? 1);
-          }
-
-          console.log(`[publish] ${specifier} is available`);
-          NODE
+        run: npm run check:publish-version
 
       - name: Publish to npm
         run: npm publish --access public

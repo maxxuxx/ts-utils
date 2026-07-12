@@ -27,6 +27,7 @@
     "src/**/readme.kr.md",
     "docs/readme.kr.md",
     "docs/migration-0.8.md",
+    "scripts/*.mjs",
     "README.md",
     "LICENSE"
   ],
@@ -136,7 +137,8 @@
   "main": "./dist/index.js",
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "clean": "rm -rf dist",
+    "check:publish-version": "node scripts/check-publish-version.mjs",
+    "clean": "node scripts/clean.mjs",
     "lint": "npm run typecheck",
     "prepack": "npm run clean",
     "prepare": "npm run build",

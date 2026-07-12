@@ -1,13 +1,13 @@
 import { readFile } from "node:fs/promises";
-import { spawnSync } from "node:child_process";
 import { dirname, posix, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { spawnNpmSync } from "./npm-runner.mjs";
 
 // Paths and process helpers
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const packageRoot     = resolve(scriptDirectory, "..");
 const packagePath     = resolve(packageRoot, "package.json");
-const npmCommand      = process.platform === "win32" ? "npm.cmd" : "npm";
 
 const fail = (message, details = "") => {
   const suffix = details.length > 0 ? `\n${details}` : "";
@@ -20,14 +20,14 @@ const normalizePackPath = (path) => (
 );
 
 const runDryPack = () => {
-  const result = spawnSync(npmCommand, ["pack", "--dry-run", "--json"], {
+  const result = spawnNpmSync(["pack", "--dry-run", "--json"], {
     cwd      : packageRoot,
     encoding : "utf8",
     maxBuffer: 10 * 1024 * 1024
   });
 
   if (result.error) {
-    fail(`could not start \`${npmCommand} pack --dry-run --json\``, result.error.message);
+    fail("could not start `npm pack --dry-run --json`", result.error.message);
   }
 
   if (result.status !== 0) {
@@ -87,6 +87,20 @@ const collectTargets = (target) => {
   return Object.values(target).flatMap(collectTargets);
 };
 
+const collectLocalScriptTargets = (scripts) => (
+  Object.entries(scripts ?? {}).flatMap(([name, command]) => {
+    if (typeof command !== "string") {
+      return [];
+    }
+
+    const match = /^node (scripts\/[a-z\d-]+\.mjs)$/iu.exec(command.trim());
+
+    return match?.[1]
+      ? [{ name, path: normalizePackPath(match[1]) }]
+      : [];
+  })
+);
+
 const readMarkdownTargets = (markdown) => (
   [...markdown.matchAll(/\[[^\]]*\]\(([^)]+)\)/gu)]
     .map((match) => match[1]?.trim() ?? "")
@@ -141,6 +155,18 @@ const verify = async () => {
 
   if (electronPaths.length > 0) {
     fail("Electron paths must not be packed", electronPaths.join("\n"));
+  }
+
+  const missingScriptTargets = collectLocalScriptTargets(manifest.scripts)
+    .filter(({ path }) => !packedFiles.has(path))
+    .map(({ name, path }) => `${name}: ${path}`)
+    .sort();
+
+  if (missingScriptTargets.length > 0) {
+    fail(
+      "package scripts reference files missing from the package",
+      missingScriptTargets.join("\n")
+    );
   }
 
   const exportTargets = [...new Set(
