@@ -4,9 +4,14 @@ import type {
   ApiRequestOptions,
   EndpointFactory
 } from "../../src/api-fetch/types.js";
+import type { z } from "zod";
 
 declare const api: ApiFetcher;
 declare const getEndpoint: EndpointFactory<"GET">;
+declare const numberResponseSchema: z.ZodType<
+  { value: number },
+  { value: number }
+>;
 
 const methodResult: Promise<boolean> = api.get("/method-select", {
   responseSchema: undefined,
@@ -26,6 +31,11 @@ const omittedEndpoint = getEndpoint("/endpoint-select-omitted", {
   select: (data) => typeof data === "object" && data !== null
 });
 const omittedEndpointResult: Promise<boolean> = api.call(omittedEndpoint);
+const schemaSelectedEndpoint = getEndpoint("/endpoint-schema-select", {
+  responseSchema: numberResponseSchema,
+  select        : (data) => data.value
+});
+const schemaEndpointResult: Promise<number> = api.call(schemaSelectedEndpoint);
 
 const structuralEndpoint = {
   method : "GET",
@@ -53,4 +63,5 @@ void omittedEndpointResult;
 void omittedMethodSchemas;
 void omittedOptions;
 void options;
+void schemaEndpointResult;
 void structuralResult;

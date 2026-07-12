@@ -223,6 +223,8 @@ The attached `token` field is reserved and always contains the original JWT stri
 
 Use Zod object outputs, object type aliases, or ordinary interfaces for `JwtSchema<T>`; interfaces do not need to extend `JwtObject` or declare a string index signature
 
+Core, React, and SvelteKit `TokenSession` claim generics also accept ordinary interfaces without a string index signature; expiration logic reads `exp` only when its runtime value is a finite number, and schema-backed JWT inputs still require plain records
+
 Invalid alphabet, misplaced or non-canonical padding, impossible lengths, and invalid UTF-8 return the normal null or `JwtDecodeError` failure shape
 
 ## API response types require a schema or selector
@@ -262,6 +264,8 @@ Explicit schema generics also require their matching runtime `bodySchema`, `resp
 Endpoint call arguments and results are inferred structurally from `options.params`, `bodySchema`, `responseSchema`, and `select`, so object literals declared with `satisfies ApiEndpoint` no longer depend on an internal phantom property
 
 Schema-free selectors and explicit `undefined` schemas now compile with `strictNullChecks: false`
+
+With `strictNullChecks: false`, endpoint factories that combine `responseSchema` and `select` still preserve the selector return type in `api.call`
 
 ## SvelteKit refresh sharing applies results per cookie context
 
@@ -326,9 +330,13 @@ Create the namespace handle outside fetcher construction and reuse it only where
 
 The namespace type uses explicit `in out` variance, so consumers need a TypeScript compiler that supports explicit variance annotations
 
-Set `dedupeRefresh: false` only when `refresh` directly updates its own cookie context and returns the next access token
+`dedupeRefresh: false` now disables single-flight sharing only. It no longer enables side-effectful direct refresh
+
+Every refresh configuration must return a refresh result and provide `applyRefresh`, and JavaScript callers that omit it receive an immediate `TypeError`
 
 Before applying a shared result, the adapter re-reads the token captured for that participant. If a newer login is present, it returns the current token without calling stale `applyRefresh`
+
+The same generation check applies when dedupe is disabled, so a slow non-deduped result cannot overwrite a newer login
 
 `applyRefresh` and `clear` receive the expected access token as an additional final argument for compare-and-set implementations; existing callbacks may ignore it
 
@@ -379,6 +387,12 @@ Access tokens are resolved after body preparation and request hooks, immediately
 
 Explicit `Authorization` or `Proxy-Authorization` headers retain precedence and opt that request out of configured token lookup. Their 401/419 does not refresh or clear the bearer session
 
+When configured auth generates any header, including custom `X-API-Key` shapes, the request forces `redirect: "manual"`. Both cross-origin and same-origin 3xx responses enter the normal `ApiHttpError` path instead of allowing native fetch to forward generated credentials
+
+Custom fetch implementations must honor that forced manual redirect mode
+
+Explicit request auth remains caller-owned and keeps normal `RequestInit.redirect` behavior. Set `redirect: "manual"` explicitly when those credentials must not follow a redirect
+
 Refresh sharing is keyed by the failed access-token value. After refresh, the client re-reads the current token so a newer login generation wins, and each caller can abort its own wait without cancelling shared work
 
 Refresh and access-token results must be non-empty, control-character-free, HTTP-header-safe strings; invalid runtime values throw a sanitized `ApiAuthError` without fetching or retrying. Hierarchical URL userinfo redaction also covers HTTP, FTP, WebSocket, backslash, and omitted-separator forms accepted by the URL parser
@@ -391,11 +405,15 @@ Core `refresh(error, expectedAccessToken)` receives the failed credential genera
 
 Public API errors no longer retain raw response bodies, response objects, headers, parse text, validation inputs, upstream messages, hierarchical URL userinfo (including FTP and WebSocket URLs), query strings, or fragments
 
+Invalid absolute or network URLs now use `[invalid-url]` in public context. URL construction and fetch transport failures throw `ApiRequestError` with `URL_RESOLUTION_FAILURE` or `TRANSPORT_FAILURE` without retaining native error messages, causes, codes, or input URLs
+
 The removed fields include `ApiHttpError.body`, `ApiHttpError.response`, `ApiHttpError.statusText`, `ApiValidationError.body`, `ApiValidationError.validationError`, and `ApiParseError.text`
 
 Terminal auth failures throw `ApiAuthError` immediately and schedule generation-aware best-effort clear without awaiting a potentially stalled getter or clear callback
 
 Observed caller cancellation throws `ApiAbortError`, while deadlines still throw `ApiTimeoutError`
+
+Transport `onRequestError`, retry, and auth-classification callbacks receive the sanitized `ApiRequestError`, and `handleApiRoute` converts it to the same safe 502 fallback used for upstream parse failures
 
 ### Before
 
@@ -434,7 +452,7 @@ try {
 
 `ApiAuthError.cause` is now a sanitized `HTTP_FAILURE` or `AUTH_CALLBACK_FAILURE` descriptor instead of the original error object
 
-Do not read auth callback messages, bodies, or headers from the terminal error; record intentionally safe diagnostics inside application-owned callbacks or hooks before throwing
+Do not read auth callback messages, bodies, or headers from the terminal error. Record intentionally safe transport diagnostics inside a custom fetch implementation before it throws because downstream hooks receive only `ApiRequestError`
 
 Route conversion resolves explicit code and status mappings before the configured safe fallback and never uses an upstream message implicitly
 
@@ -599,7 +617,7 @@ Supported optional peer ranges are now `react >=18 <20` and `iron-session >=8 <9
 
 - Search for removed Electron, schema-free JSON, and schema-free JWT imports
 - Choose explicit React persistence where required
-- Update every deduped SvelteKit refresh callback with `applyRefresh`
+- Update every SvelteKit refresh callback with `applyRefresh`, including `dedupeRefresh: false`
 - Audit cross-origin API calls and configure only required `allowedOrigins`
 - Replace static retryable streams with `rawBodyFactory`
 - Select a `maxResponseBytes` limit for untrusted or potentially large responses

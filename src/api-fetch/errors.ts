@@ -15,6 +15,27 @@ const AUTH_CALLBACK_FAILURE = Object.freeze({
   type: "AUTH_CALLBACK_FAILURE" as const
 });
 
+/** Safe request failure categories that never retain the original thrown value */
+export type ApiRequestErrorReason =
+  | "TRANSPORT_FAILURE"
+  | "URL_RESOLUTION_FAILURE";
+
+/** Error raised when an API URL cannot be resolved or its transport fails */
+export class ApiRequestError extends Error {
+  readonly context: ApiRequestContext;
+  readonly reason: ApiRequestErrorReason;
+
+  constructor(reason: ApiRequestErrorReason, context: ApiRequestContext) {
+    const safeContext = sanitizeContext(context);
+
+    super(`API request failed: ${safeContext.method} ${safeContext.url}`);
+
+    this.name    = "ApiRequestError";
+    this.context = safeContext;
+    this.reason  = reason;
+  }
+}
+
 // HTTP errors
 /** Error raised for api http failures */
 export class ApiHttpError extends Error {

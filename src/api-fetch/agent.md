@@ -94,6 +94,8 @@ Snapshot one exact fully resolved URL, including query, before auth work. Trust 
 
 Public error contexts remove URL userinfo, query strings, and fragments from both `context.path` and `context.url`
 
+Fail closed to `[invalid-url]` when an absolute or network URL cannot be parsed. Normalize URL construction and fetch transport failures to `ApiRequestError` without retaining the original error, cause, code, input, or message
+
 HTTP, parse, and validation errors must not retain raw response bodies, response objects, headers, parse text, or validation input bodies
 
 HTTP error messages use configured safe fallbacks or a generic request failure and never upstream response messages
@@ -105,6 +107,10 @@ Refresh retry happens once after `401` or `419` by default
 Resolve configured access tokens after awaited body preparation and request hooks, immediately before every network attempt. Record whether formatted auth headers were actually merged and the exact token generation used
 
 Explicit `Authorization` or `Proxy-Authorization` values opt the request out of configured token lookup. Keep their precedence and do not classify the resulting 401/419 as a configured bearer failure
+
+When configured auth actually generates a header, force `redirect: "manual"` so native fetch cannot forward custom credential headers. Treat every 3xx, including same-origin redirects, through the normal `ApiHttpError` path. Explicit request auth keeps caller-owned redirect behavior
+
+Custom fetch implementations must honor the forced manual redirect mode for generated auth
 
 Missing refresh callbacks, non-replayable auth requests, refresh throw, empty refresh results, and a second auth response throw `ApiAuthError`. Schedule clear without awaiting it, re-read the current generation first, and call `clear(expectedAccessToken)` only when it still matches
 
@@ -120,7 +126,7 @@ Refresh and access-token callbacks must produce non-empty, control-character-fre
 
 The SvelteKit adapter separates shared refresh result creation from cookie-context persistence through `refresh` and `applyRefresh`
 
-Adapter dedupe requires `applyRefresh`; every fetcher participant applies the shared result to its own cookies before retrying
+Every SvelteKit refresh requires `applyRefresh`; every fetcher participant applies the refresh result to its own cookies before retrying
 
 Capture the failed token generation for every SvelteKit refresh participant and re-read it before applying a shared result. Return a newer token unchanged and pass the expected generation into `applyRefresh` and `clear` for adapter-level compare-and-set
 
@@ -134,7 +140,7 @@ Without a namespace handle, SvelteKit single-flight state belongs to the created
 
 Failed or empty refresh results are evicted immediately, while an `applyRefresh` failure clears only the affected cookie context through the normal terminal auth path
 
-`dedupeRefresh: false` keeps direct refresh compatibility and allows `refresh` to return the next access token without `applyRefresh`
+`dedupeRefresh: false` disables single-flight only. Keep refresh result creation side-effect free and run the same generation-aware `applyRefresh` path
 
 General retry is separate from auth refresh and defaults to `GET` only
 
@@ -154,11 +160,11 @@ Hooks are available globally and per request for observability
 
 HTTP errors, response JSON parse failures, and response schema validation failures should call `onResponseError` because a response was received
 
-Network failures, aborts, and other pre-response failures should call `onRequestError`
+Network failures, aborts, and other pre-response failures should call `onRequestError`. Transport failures must already be a sanitized `ApiRequestError` before hooks, retry callbacks, or auth classification can observe them
 
 Use `createApiLoggerHooks` to enable built-in API call logs through the existing hook surface
 
-Use `handleApiRoute` in Web `Response` route handlers when repeated try/catch blocks only convert `ApiAuthError`, `ApiHttpError`, `ApiParseError`, and response-target `ApiValidationError` into HTTP responses
+Use `handleApiRoute` in Web `Response` route handlers when repeated try/catch blocks only convert `ApiAuthError`, `ApiHttpError`, `ApiRequestError`, `ApiParseError`, and response-target `ApiValidationError` into HTTP responses
 
 `handleApiRoute` should preserve `ApiHttpError.code` in JSON responses when present and resolve messages from `codeMessages`, then `statusMessages`, then the configured or generic fallback without exposing raw upstream messages
 

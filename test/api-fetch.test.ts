@@ -1,3 +1,6 @@
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
+
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import {
@@ -5,6 +8,7 @@ import {
   ApiAuthError,
   ApiHttpError,
   ApiParseError,
+  ApiRequestError,
   ApiResponseSizeError,
   ApiTimeoutError,
   ApiValidationError,
@@ -26,7 +30,7 @@ import {
 import {
   createApiFetcher as createSvelteKitApiFetcher,
   createSvelteKitRefreshNamespace,
-  type SvelteKitDirectRefreshAuthOptions,
+  type SvelteKitRefreshAuthOptions,
   type SvelteKitRefreshNamespace
 } from "../src/api-fetch/sveltekit.js";
 import {
@@ -842,6 +846,146 @@ describe("api-fetch", () => {
     expect((error as ApiHttpError).context.path).not.toMatch(/user|password|token|fragment/);
     expect((error as ApiHttpError).context.url).not.toMatch(/user|password|token|fragment/);
     expect((error as Error).message).not.toMatch(/user|password|token|fragment/);
+  });
+
+  it("fails closed when an invalid absolute URL contains credentials", async () => {
+    const invalidUrl = "https://url-user:url-password@[invalid/private?token=query#fragment";
+    const fetch = vi.fn<FetchLike>(async () => jsonResponse({ ok: true }));
+    const api = createApiFetcher({ fetch });
+    const error = await api.get(invalidUrl).catch((reason: unknown) => reason);
+
+    expect(error).toMatchObject({
+      context: {
+        path: "[invalid-url]",
+        url : "[invalid-url]"
+      },
+      name: "ApiRequestError"
+    });
+    expect(getExposedErrorText(error)).not.toMatch(/url-user|url-password|query|fragment/);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "ftp://ftp-user:ftp-password@[invalid/private?token=query#fragment",
+    "ws://ws-user:ws-password@[invalid/private?token=query#fragment"
+  ])("normalizes native fetch URL failures without exposing %s", async (url) => {
+    const api = createApiFetcher();
+    const error = await api.get(url).catch((reason: unknown) => reason);
+
+    expect(error).toMatchObject({
+      context: {
+        path: "[invalid-url]",
+        url : "[invalid-url]"
+      },
+      name: "ApiRequestError"
+    });
+    expect(getExposedErrorText(error)).not.toMatch(/user|password|token|fragment/);
+  });
+
+  it.each([
+    "ftp://ftp-user:ftp-password@[invalid/private?token=query#fragment",
+    "ws://ws-user:ws-password@[invalid/private?token=query#fragment"
+  ])("does not resolve malformed scheme URL %s against baseURL", async (url) => {
+    const fetch = vi.fn<FetchLike>(async () => jsonResponse({ ok: true }));
+    const api = createApiFetcher({
+      baseURL: "https://api.example.com",
+      fetch
+    });
+    const error = await api.get(url).catch((reason: unknown) => reason);
+
+    expect(error).toMatchObject({
+      context: {
+        path: "[invalid-url]",
+        url : "[invalid-url]"
+      },
+      name  : "ApiRequestError",
+      reason: "URL_RESOLUTION_FAILURE"
+    });
+    expect(getExposedErrorText(error)).not.toMatch(/user|password|token|fragment/);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("keeps transport failures sanitized in hooks and retry callbacks", async () => {
+    const callbackErrors: unknown[] = [];
+    const api = createApiFetcher({
+      fetch: async () => {
+        throw Object.assign(new TypeError("transport-user:transport-password"), {
+          input: "https://transport-user:transport-password@example.com/?token=secret"
+        });
+      },
+      hooks: {
+        onRequestError: ({ error }) => {
+          callbackErrors.push(error);
+        }
+      }
+    });
+    const error = await api.get("/offline", {
+      retry: {
+        limit      : 1,
+        shouldRetry: ({ error: retryError }) => {
+          callbackErrors.push(retryError);
+
+          return false;
+        }
+      }
+    }).catch((reason: unknown) => reason);
+
+    expect(error).toMatchObject({
+      name  : "ApiRequestError",
+      reason: "TRANSPORT_FAILURE"
+    });
+    expect(callbackErrors).toHaveLength(2);
+    expect(callbackErrors).toEqual([
+      expect.any(ApiRequestError),
+      expect.any(ApiRequestError)
+    ]);
+    expect(getExposedErrorText(error)).not.toMatch(/transport-user|transport-password|secret/);
+    expect(callbackErrors.map(getExposedErrorText).join(" "))
+      .not.toMatch(/transport-user|transport-password|secret/);
+  });
+
+  it("blocks automatic redirects that would forward generated custom auth", async () => {
+    const receivedApiKeys: Array<string | undefined> = [];
+    const targetServer = createServer((request, response) => {
+      const apiKey = request.headers["x-api-key"];
+
+      receivedApiKeys.push(Array.isArray(apiKey) ? apiKey[0] : apiKey);
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ ok: true }));
+    });
+    const redirectServer = createServer((_request, response) => {
+      response.writeHead(302, {
+        Location: `${getServerOrigin(targetServer)}/target`
+      });
+      response.end();
+    });
+
+    await listenServer(targetServer);
+    await listenServer(redirectServer);
+
+    try {
+      const api = createApiFetcher({
+        baseURL: getServerOrigin(redirectServer),
+        auth   : {
+          formatTokenHeader: (accessToken) => ({
+            "X-API-Key": accessToken
+          }),
+          getAccessToken: () => "redirect-secret"
+        }
+      });
+      const error = await api.get("/redirect").catch((reason: unknown) => reason);
+
+      expect(error).toMatchObject({
+        name  : "ApiHttpError",
+        status: 302
+      });
+      expect(receivedApiKeys).toEqual([]);
+    } finally {
+      await Promise.all([
+        closeServer(redirectServer),
+        closeServer(targetServer)
+      ]);
+    }
   });
 
   it("keeps parse and validation payloads unreachable from public errors", async () => {
@@ -2345,6 +2489,18 @@ describe("api-fetch", () => {
     })).toThrow(TypeError);
   });
 
+  it("requires applyRefresh when SvelteKit refresh dedupe is disabled", () => {
+    expect(() => createSvelteKitApiFetcher({
+      cookies: { accessToken: "expired" },
+      dedupeRefresh: false,
+      fetch  : async () => jsonResponse({ ok: true }),
+      auth   : {
+        getAccessToken: (cookies: { accessToken: string }) => cookies.accessToken,
+        refresh       : async () => "fresh"
+      } as never
+    })).toThrow(/applyRefresh is required for every SvelteKit refresh/u);
+  });
+
   if (false) {
     const accessNamespace = createSvelteKitRefreshNamespace<{
       accessToken: string;
@@ -2361,10 +2517,21 @@ describe("api-fetch", () => {
 
     void incompatibleNamespace;
 
-    // @ts-expect-error deduped refresh requires applyRefresh
     createSvelteKitApiFetcher({
       cookies: { accessToken: "expired" },
       fetch  : async () => jsonResponse({ ok: true }),
+      // @ts-expect-error every SvelteKit refresh requires generation-aware applyRefresh
+      auth   : {
+        getAccessToken: (cookies: { accessToken: string }) => cookies.accessToken,
+        refresh       : async () => "fresh"
+      }
+    });
+
+    createSvelteKitApiFetcher({
+      cookies: { accessToken: "expired" },
+      dedupeRefresh: false,
+      fetch  : async () => jsonResponse({ ok: true }),
+      // @ts-expect-error non-deduped refresh still requires generation-aware applyRefresh
       auth   : {
         getAccessToken: (cookies: { accessToken: string }) => cookies.accessToken,
         refresh       : async () => "fresh"
@@ -2416,10 +2583,14 @@ describe("api-fetch", () => {
     });
   }
 
-  it("allows direct SvelteKit refresh without applyRefresh when dedupe is disabled", async () => {
-    const cookies = { accessToken: "expired-direct" };
-    const refresh = vi.fn(async (context: typeof cookies) => {
-      context.accessToken = "fresh";
+  it("applies a non-deduped SvelteKit refresh result", async () => {
+    const cookies = { accessToken: "expired-non-deduped" };
+    const refresh = vi.fn(async () => ({ accessToken: "fresh" }));
+    const applyRefresh = vi.fn(async (
+      context: typeof cookies,
+      result: { accessToken: string }
+    ) => {
+      context.accessToken = result.accessToken;
 
       return context.accessToken;
     });
@@ -2432,6 +2603,7 @@ describe("api-fetch", () => {
           : jsonResponse({ message: "expired" }, 401)
       ),
       auth: {
+        applyRefresh,
         getAccessToken: (context) => context.accessToken,
         refresh
       }
@@ -2441,6 +2613,51 @@ describe("api-fetch", () => {
       response: { ok: true }
     });
     expect(refresh).toHaveBeenCalledTimes(1);
+    expect(applyRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not apply a non-deduped SvelteKit refresh over a newer login", async () => {
+    const cookies = { accessToken: "old-login" };
+    const refreshGate = createDeferred<void>();
+    const refreshStarted = createDeferred<void>();
+    const applyRefresh = vi.fn(async (
+      context: typeof cookies,
+      result: { accessToken: string }
+    ) => {
+      context.accessToken = result.accessToken;
+
+      return context.accessToken;
+    });
+    const api = createSvelteKitApiFetcher({
+      cookies,
+      dedupeRefresh: false,
+      fetch: async (_input, init) => (
+        new Headers(init?.headers).get("Authorization") === "Bearer new-login"
+          ? jsonResponse({ ok: true })
+          : jsonResponse({ message: "expired" }, 401)
+      ),
+      auth: {
+        applyRefresh,
+        getAccessToken: (context) => context.accessToken,
+        refresh       : async () => {
+          refreshStarted.resolve();
+          await refreshGate.promise;
+
+          return { accessToken: "stale-refresh" };
+        }
+      }
+    });
+    const request = api.get("/private");
+
+    await refreshStarted.promise;
+    cookies.accessToken = "new-login";
+    refreshGate.resolve();
+
+    await expect(request).resolves.toMatchObject({
+      response: { ok: true }
+    });
+    expect(cookies.accessToken).toBe("new-login");
+    expect(applyRefresh).not.toHaveBeenCalled();
   });
 
   it("does not apply a shared SvelteKit refresh over a newer login", async () => {
@@ -2491,19 +2708,23 @@ describe("api-fetch", () => {
     expect(applyRefresh).not.toHaveBeenCalled();
   });
 
-  it("passes custom non-HTTP errors to SvelteKit refresh as unknown", async () => {
+  it("passes sanitized transport errors to SvelteKit refresh", async () => {
     const cookies = { accessToken: "expired-custom" };
     const customError = new Error("custom auth failure");
-    const auth: SvelteKitDirectRefreshAuthOptions<typeof cookies> = {
+    const auth: SvelteKitRefreshAuthOptions<typeof cookies, string> = {
+      applyRefresh: (context, result) => {
+        context.accessToken = result;
+
+        return context.accessToken;
+      },
       getAccessToken: (context) => context.accessToken,
       refresh: vi.fn(async (_context, error) => {
         expectTypeOf(error).toBeUnknown;
-        expect(error).toBe(customError);
-        cookies.accessToken = "fresh";
+        expect(error).toBeInstanceOf(ApiRequestError);
 
-        return cookies.accessToken;
+        return "fresh";
       }),
-      shouldRefreshOnError: (error) => error === customError
+      shouldRefreshOnError: (error) => error instanceof ApiRequestError
     };
     const api = createSvelteKitApiFetcher({
       cookies,
@@ -3372,7 +3593,16 @@ describe("api-fetch", () => {
       }
     });
 
-    await expect(api.get("/offline")).rejects.toThrow("network down");
+    await expect(api.get("/offline")).rejects.toMatchObject({
+      context: {
+        method: "GET",
+        path  : "/offline",
+        url   : "/offline"
+      },
+      message: "API request failed: GET /offline",
+      name   : "ApiRequestError",
+      reason : "TRANSPORT_FAILURE"
+    });
 
     const message = logger.mock.calls[0]?.[0];
 
@@ -3651,6 +3881,21 @@ describe("api-fetch", () => {
     });
   });
 
+  it("handles sanitized request failures as bad gateway", async () => {
+    const response = await handleApiRoute(() => {
+      throw new ApiRequestError("TRANSPORT_FAILURE", {
+        method: "GET",
+        path  : "/upstream",
+        url   : "https://api.example.com/upstream"
+      });
+    });
+
+    expect(response.status).toBe(502);
+    await expect(response.json()).resolves.toEqual({
+      message: "API request failed"
+    });
+  });
+
   it("does not convert unknown API route errors", async () => {
     const error = new Error("boom");
 
@@ -3708,3 +3953,41 @@ function createDeferred<TValue>() {
     resolve
   };
 }
+
+const listenServer = (server: Server): Promise<void> => new Promise((resolve, reject) => {
+  server.once("error", reject);
+  server.listen(0, "127.0.0.1", () => {
+    server.off("error", reject);
+    resolve();
+  });
+});
+
+const closeServer = (server: Server): Promise<void> => new Promise((resolve, reject) => {
+  server.close((error) => {
+    if (error) {
+      reject(error);
+      return;
+    }
+
+    resolve();
+  });
+});
+
+const getServerOrigin = (server: Server): string => {
+  const address = server.address() as AddressInfo;
+
+  return `http://127.0.0.1:${address.port}`;
+};
+
+const getExposedErrorText = (error: unknown): string => {
+  if (typeof error !== "object" || error === null) {
+    return String(error);
+  }
+
+  return JSON.stringify(Object.fromEntries(
+    Object.getOwnPropertyNames(error).map((key) => [
+      key,
+      (error as Record<string, unknown>)[key]
+    ])
+  ));
+};

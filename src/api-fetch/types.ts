@@ -679,13 +679,23 @@ export type EndpointCallArgs<TEndpoint extends AnyApiEndpoint> =
 
 /** Result returned by endpoint */
 export type EndpointResult<TEndpoint extends AnyApiEndpoint> =
-  TEndpoint["options"] extends {
-    select: (...args: any[]) => infer TResult;
-  }
-    ? TResult
-    : EndpointResponseSchema<TEndpoint> extends z.ZodType
+  [EndpointSelectResult<TEndpoint>] extends [never]
+    ? EndpointResponseSchema<TEndpoint> extends z.ZodType
       ? ApiDefaultResponse<EndpointResponseSchema<TEndpoint>>
-      : ApiDefaultResponse<undefined>;
+      : ApiDefaultResponse<undefined>
+    : EndpointSelectResult<TEndpoint>;
+
+type EndpointSelect<TEndpoint extends AnyApiEndpoint> =
+  "select" extends keyof TEndpoint["options"]
+    ? TEndpoint["options"]["select"]
+    : undefined;
+
+type EndpointSelectResult<TEndpoint extends AnyApiEndpoint> =
+  Exclude<EndpointSelect<TEndpoint>, null | undefined> extends (
+    ...args: any[]
+  ) => infer TResult
+    ? TResult
+    : never;
 
 type EndpointOptionSchema<
   TEndpoint extends AnyApiEndpoint,

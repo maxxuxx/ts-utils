@@ -72,6 +72,8 @@ const user = await session.ensure(undefined);
 - React core operations reuse the snapshot already validated at hydration, storage-event, or write boundaries instead of applying non-idempotent transforms again
 - JWT parsing and expiration checks run only when `jwtSchema` is provided.
 - `jwtSchema` validates strictly decoded payload claims before the original token is attached
+- JWT claim types may be ordinary object interfaces without a string index signature; schema output must still be a plain record at runtime
+- Expiration and refresh-threshold checks use `exp` only when the validated runtime value is a finite number
 - Invalid base64url or UTF-8 fails before `jwtSchema` parsing
 - Without `jwtSchema`, opaque access tokens are allowed.
 - `parseTokens` validates login or refresh response tokens before storing them.

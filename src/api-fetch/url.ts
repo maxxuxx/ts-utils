@@ -1,6 +1,8 @@
 import { appendQuery } from "./query.js";
 import type { QueryParams } from "./types.js";
 
+const INVALID_API_URL = "[invalid-url]";
+
 // URL helpers
 /** Builds api url */
 export const buildApiUrl = (
@@ -8,10 +10,11 @@ export const buildApiUrl = (
   baseUrl?: string,
   query?: QueryParams
 ): string => {
-  if (isAbsoluteUrl(path) || baseUrl) {
-    const normalizedPath = path.trimStart();
-    const url = isAbsoluteUrl(path)
-      ? new URL(path)
+  const normalizedPath = path.trimStart();
+
+  if (isAbsoluteUrlLike(normalizedPath) || baseUrl) {
+    const url = isAbsoluteUrlLike(normalizedPath)
+      ? new URL(normalizedPath.replaceAll("\\", "/"))
       : isNetworkPath(normalizedPath)
         ? new URL(normalizedPath, baseUrl)
         : new URL(
@@ -35,6 +38,10 @@ export const redactApiUrl = (url: string): string => {
     return absoluteUrl;
   }
 
+  if (isAbsoluteOrNetworkUrl(url)) {
+    return INVALID_API_URL;
+  }
+
   const queryIndex    = url.indexOf("?");
   const fragmentIndex = url.indexOf("#");
   const indexes       = [queryIndex, fragmentIndex].filter((index) => index >= 0);
@@ -44,8 +51,8 @@ export const redactApiUrl = (url: string): string => {
 
 const redactAbsoluteUrl = (value: string): string | undefined => {
   const normalized = value.trimStart();
-  const isAbsolute = /^[A-Za-z][A-Za-z0-9+.-]*:/.test(normalized);
-  const isNetwork  = /^[\\/]{2}/.test(normalized);
+  const isAbsolute = isAbsoluteUrlLike(normalized);
+  const isNetwork  = isNetworkPath(normalized);
 
   if (!isAbsolute && !isNetwork) {
     return undefined;
@@ -70,6 +77,16 @@ const redactAbsoluteUrl = (value: string): string | undefined => {
   }
 };
 
+const isAbsoluteOrNetworkUrl = (value: string): boolean => {
+  const normalized = value.trimStart();
+
+  return isAbsoluteUrlLike(normalized) || isNetworkPath(normalized);
+};
+
+const isAbsoluteUrlLike = (value: string): boolean => (
+  /^[A-Za-z][A-Za-z0-9+.-]*:/.test(value)
+);
+
 const appendQueryToPath = (path: string, query?: QueryParams): string => {
   if (!query) {
     return path;
@@ -91,7 +108,5 @@ const appendQueryToPath = (path: string, query?: QueryParams): string => {
   const separator = pathWithoutHash.includes("?") ? "&" : "?";
   return `${pathWithoutHash}${separator}${queryString}${hashPart}`;
 };
-
-const isAbsoluteUrl = (path: string): boolean => /^https?:\/\//.test(path);
 
 const isNetworkPath = (path: string): boolean => /^[\\/]{2}/.test(path);

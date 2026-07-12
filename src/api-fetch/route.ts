@@ -8,6 +8,7 @@ import {
   ApiAuthError,
   ApiHttpError,
   ApiParseError,
+  ApiRequestError,
   ApiValidationError
 } from "./errors.js";
 import type {
@@ -73,6 +74,7 @@ export const toApiRouteErrorResponse = (
 
   if (
     error instanceof ApiParseError
+    || error instanceof ApiRequestError
     || (error instanceof ApiValidationError && error.target === "response")
   ) {
     return badGateway(options.responseMessage ?? DEFAULT_API_ROUTE_ERROR_MESSAGE);

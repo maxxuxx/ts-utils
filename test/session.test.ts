@@ -8,10 +8,18 @@ import {
 import {
   TokenSessionError,
   createTokenSession,
+  type SafeParseResult,
+  type TokenRefreshContext,
   type TokenSessionData
 } from "../src/session/index.js";
-import { createReactTokenSession } from "../src/session/react.js";
-import { createSession } from "../src/session/sveltekit.js";
+import {
+  createReactTokenSession,
+  type ReactTokenSessionOptions
+} from "../src/session/react.js";
+import {
+  createSession,
+  type SvelteKitTokenSessionOptions
+} from "../src/session/sveltekit.js";
 
 type TestUser = {
   id: string;
@@ -49,7 +57,117 @@ const Claims = z.object({
 
 type TestClaims = z.infer<typeof Claims>;
 
+interface InterfaceSessionClaims {
+  exp : number;
+  role: string;
+}
+
+type InterfaceReactSessionOptions = ReactTokenSessionOptions<
+  TestUser,
+  TestTokens,
+  InterfaceSessionClaims
+>;
+
+type InterfaceSvelteKitSessionOptions = SvelteKitTokenSessionOptions<
+  TestUser,
+  TestTokens,
+  InterfaceSessionClaims
+>;
+
+type InterfaceSessionAdapterOptions =
+  | InterfaceReactSessionOptions
+  | InterfaceSvelteKitSessionOptions;
+
+const interfaceClaimsSchema = {
+  safeParse(value: unknown): SafeParseResult<InterfaceSessionClaims> {
+    const parsed = z.object({
+      exp : z.number(),
+      role: z.string()
+    }).safeParse(value);
+
+    return parsed.success
+      ? {
+          data: parsed.data,
+          success: true
+        }
+      : {
+          error: parsed.error,
+          success: false
+        };
+  }
+};
+
+const acceptInterfaceSessionAdapterOptions = (
+  _options: InterfaceSessionAdapterOptions
+): void => undefined;
+
+void acceptInterfaceSessionAdapterOptions;
+
 describe("session module", () => {
+  it("accepts ordinary interfaces for JWT claims and reads numeric expiration", async () => {
+    const nowSeconds = 1_700_000_000;
+    let storedSession: TestSession = {
+      tokens: {
+        accessToken: createToken({
+          exp : nowSeconds + 60,
+          role: "admin"
+        }),
+        refreshToken: "interface-refresh-token"
+      },
+      user: {
+        id: "user-1"
+      }
+    };
+    const refreshTokens = vi.fn(async (
+      _refreshToken: string,
+      context: TokenRefreshContext<
+        void,
+        TestUser,
+        TestTokens,
+        InterfaceSessionClaims
+      >
+    ) => {
+      expect(context.claims?.exp).toBe(nowSeconds + 60);
+      expect(context.claims?.role).toBe("admin");
+
+      return {
+        accessToken: createToken({
+          exp : nowSeconds + 3_600,
+          role: "admin"
+        }),
+        refreshToken: "next-interface-refresh-token"
+      };
+    });
+    const session = createTokenSession<
+      void,
+      TestUser,
+      TestTokens,
+      InterfaceSessionClaims
+    >({
+      clear: () => {
+        storedSession = {};
+      },
+      jwtSchema: interfaceClaimsSchema,
+      now      : () => nowSeconds * 1000,
+      read     : () => storedSession,
+      refreshThresholdSeconds: 300,
+      refreshTokens,
+      tokenSchema: Tokens,
+      userSchema : User,
+      write: (_context, nextSession) => {
+        storedSession = nextSession;
+      }
+    });
+
+    await expect(session.ensure(undefined)).resolves.toEqual({
+      id: "user-1"
+    });
+    expect(refreshTokens).toHaveBeenCalledTimes(1);
+    expect(storedSession.tokens?.refreshToken).toBe(
+      "next-interface-refresh-token"
+    );
+  });
+
   it("supports access-token-only sessions without refresh tokens", async () => {
     let storedSession: TestSession = {
       tokens: {

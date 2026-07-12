@@ -32,6 +32,7 @@ import {
 | `handleApiRoute`, `toApiRouteErrorResponse` | 알려진 API error를 route response로 변환합니다. |
 | `ApiHttpError`, `ApiValidationError`, `ApiParseError`, `ApiTimeoutError` | HTTP, validation, parse, deadline 실패를 나타냅니다 |
 | `ApiAuthError`, `ApiAbortError`, `ApiResponseSizeError` | 최종 auth 실패, caller 취소, response byte 제한 실패를 나타냅니다 |
+| `ApiRequestError` | 원본 throw 값을 보존하지 않는 정제된 URL resolution 및 transport 실패를 나타냅니다 |
 | `createApiLoggerHooks`, `formatApiLogEvent` | hook 기반 API logging을 생성합니다. |
 | `api-fetch/sveltekit` | cookie에 묶인 SvelteKit auth callback과 refresh dedupe adapter입니다. |
 
@@ -148,7 +149,7 @@ adapter sharing은 in-flight work만 유지하며 successful refresh result를 c
 
 namespace handle을 생략하면 refresh single-flight state는 해당 adapter instance 안에만 유지됩니다
 
-`refresh`가 cookie context를 직접 갱신하고 다음 access token을 반환하는 경우에만 `dedupeRefresh: false`로 `applyRefresh`를 생략합니다
+`dedupeRefresh: false`는 single-flight 공유만 끄며 `refresh`는 여전히 result를 반환하고 `applyRefresh`가 capture한 token generation을 다시 확인한 뒤 적용합니다
 
 ## 동작 메모
 
@@ -176,24 +177,29 @@ namespace handle을 생략하면 refresh single-flight state는 해당 adapter i
 - shared refresh를 기다리는 각 caller는 자신의 abort signal을 관찰하며 한 caller의 abort가 shared refresh를 취소하지 않습니다
 - 초기 token 조회도 caller abort를 관찰하며 terminal best-effort clear는 primary `ApiAuthError`를 지연시키지 않습니다
 - refresh/access token은 비어 있지 않고 control character가 없으며 HTTP header에 안전한 string이어야 하고 사용할 수 없는 값은 fetch/retry 없이 terminal auth 처리됩니다
-- SvelteKit adapter dedupe에는 `applyRefresh`가 필요하며 실패하거나 비어 있는 shared result는 유지하지 않습니다
+- `dedupeRefresh: false`를 포함한 모든 SvelteKit refresh에는 `applyRefresh`가 필요하며 refresh callback은 cookie state를 직접 변경하지 않고 data를 반환합니다
 - shared typed SvelteKit namespace handle은 하나의 in-flight runner를 사용하므로 같은 stable key는 cache configuration 없이 work를 공유합니다
 - SvelteKit `applyRefresh` 실패는 terminal auth 처리에서 해당 request의 cookie context만 clear합니다
 - SvelteKit은 `applyRefresh` 전에 capture한 token generation을 다시 확인하며 새 login이 있으면 stale shared result를 적용하지 않고 현재 token을 반환합니다
 - auth는 relative request, client `baseURL` origin, 명시한 `allowedOrigins`에만 전송하며 request-level `baseURL`은 implicit trust anchor가 아닙니다
 - untrusted request에서는 client, endpoint, request 설정에서 합쳐진 `Authorization`, `Proxy-Authorization` header를 제거합니다
 - explicit `Authorization` 또는 `Proxy-Authorization`이 있으면 그 요청은 configured token lookup을 건너뛰며, 401/419도 configured bearer session을 refresh/clear하지 않습니다
+- configured auth가 생성한 header를 받는 request는 `redirect: "manual"`을 강제하며 cross-origin과 same-origin 3xx를 custom credential header 자동 전달 대신 `ApiHttpError`로 반환합니다
+- custom fetch 구현은 generated-auth 경계를 유지하도록 강제된 manual redirect mode를 따라야 합니다
+- explicit request auth는 caller 책임이며 caller의 일반 `RequestInit.redirect` 동작을 유지하므로 credential이 redirect를 따라가면 안 될 때 `redirect: "manual"`을 지정합니다
 - refresh callback이 없거나 auth request를 재생할 수 없거나 refresh가 소진되면 `ApiAuthError`를 throw하고 현재 token이 실패 credential과 같은 generation일 때만 generation-aware best-effort clear를 예약합니다
 - `clear(expectedAccessToken)`과 SvelteKit `applyRefresh(cookies, result, expectedAccessToken)`은 adapter가 compare-and-set을 구현하도록 expected generation을 받으며 추가 argument를 무시하는 기존 callback도 계속 사용할 수 있습니다
 - core `refresh(error, expectedAccessToken)`도 실패한 credential generation을 받습니다
 - retry는 GET, 요청 전체에서 하나의 budget, `Retry-After`, fixed delay, jitter 없음이 기본이며 write method는 명시해야 합니다
 - 관찰된 caller abort는 `ApiAbortError`, deadline 만료는 `ApiTimeoutError`이며 retry delay는 항상 caller signal을 관찰합니다
 - custom fetch 구현은 active work 중 caller signal을 직접 관찰하거나 reject해야 합니다
+- 올바르지 않은 absolute/network URL의 public context는 `[invalid-url]`을 사용하고 URL resolution 및 transport 실패는 native error, `cause`, `code`, `input`을 보존하지 않는 `ApiRequestError`를 throw합니다
+- transport 실패의 `onRequestError`, auth 분류, retry callback에는 동일하게 정제된 `ApiRequestError`만 전달합니다
 - HTTP error는 server code만 보존할 수 있고 raw body, response, header, parse text, validation input, HTTP/FTP/WebSocket, backslash 및 separator 생략 형식을 포함해 parse 가능한 모든 hierarchical URL userinfo, query, fragment, upstream message는 보존하지 않습니다
 - `ApiAuthError.cause`는 정제된 `HTTP_FAILURE` 또는 `AUTH_CALLBACK_FAILURE` descriptor이며 auth callback error object나 message를 보존하지 않습니다
 - `errorFallback.message`는 upstream message가 없을 때만 쓰는 fallback이 아니라 항상 사용하는 configured safe HTTP error message입니다
 - configured safe message가 없으면 generic request failure를 사용하고 upstream message는 항상 무시합니다
-- `handleApiRoute`는 `ApiHttpError.code`를 보존하고 `codeMessages`, `statusMessages`, `responseMessage`, `API request failed` 순서로 message를 정합니다
+- `handleApiRoute`는 `ApiRequestError`를 안전한 502 response로 변환하고 `ApiHttpError.code`를 보존하며 `codeMessages`, `statusMessages`, `responseMessage`, `API request failed` 순서로 message를 정합니다
 - 명시한 mapping callback이 선택하지 않는 한 raw upstream message를 route response에 노출하지 않습니다
 - server time header가 없거나 올바르지 않으면 무시합니다.
 - `handleApiRoute`는 알려진 API error만 변환하고 알 수 없는 error는 다시 throw합니다.

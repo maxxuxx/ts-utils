@@ -26,7 +26,7 @@ export type ReactSessionStorage = Readonly<{
 export type ReactTokenSessionOptions<
   TUser,
   TTokens extends TokenSessionTokens,
-  TClaims extends JwtPayload = JwtPayload
+  TClaims extends object = JwtPayload
 > = Omit<
   TokenSessionOptions<void, TUser, TTokens, TClaims>,
   "clear" | "read" | "write"
@@ -70,7 +70,7 @@ export type ReactTokenSession<
 export const createReactTokenSession = <
   TUser,
   TTokens extends TokenSessionTokens,
-  TClaims extends JwtPayload = JwtPayload
+  TClaims extends object = JwtPayload
 >(
   options: ReactTokenSessionOptions<TUser, TTokens, TClaims>
 ): ReactTokenSession<TUser, TTokens> => {

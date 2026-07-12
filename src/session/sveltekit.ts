@@ -29,7 +29,7 @@ export type SvelteKitCookies = Readonly<{
 export type SvelteKitTokenSessionOptions<
   TUser,
   TTokens extends TokenSessionTokens,
-  TClaims extends JwtPayload = JwtPayload
+  TClaims extends object = JwtPayload
 > = Omit<
   TokenSessionOptions<SvelteKitCookies, TUser, TTokens, TClaims>,
   "clear" | "read" | "write"
@@ -61,7 +61,7 @@ export type SvelteKitTokenSession<
 export const createSession = <
   TUser,
   TTokens extends TokenSessionTokens,
-  TClaims extends JwtPayload = JwtPayload
+  TClaims extends object = JwtPayload
 >(
   options: SvelteKitTokenSessionOptions<TUser, TTokens, TClaims>
 ): SvelteKitTokenSession<TUser, TTokens> => {

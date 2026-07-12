@@ -33,6 +33,7 @@ import {
 | `handleApiRoute`, `toApiRouteErrorResponse` | Convert known API errors into route responses. |
 | `ApiHttpError`, `ApiValidationError`, `ApiParseError`, `ApiTimeoutError` | Typed HTTP, validation, parse, and deadline failures |
 | `ApiAuthError`, `ApiAbortError`, `ApiResponseSizeError` | Terminal auth, caller cancellation, and response byte-limit failures |
+| `ApiRequestError` | Sanitized URL-resolution and transport failures without the original thrown value |
 | `createApiLoggerHooks`, `formatApiLogEvent` | Generate hook-based API logging. |
 | `api-fetch/sveltekit` | Cookie-bound SvelteKit adapter for auth callbacks and refresh dedupe. |
 
@@ -160,7 +161,7 @@ Adapter sharing retains only in-flight work and does not cache successful refres
 
 When the namespace handle is omitted, refresh single-flight state stays local to that adapter instance
 
-Set `dedupeRefresh: false` only when `refresh` directly updates its cookie context and returns the next access token without `applyRefresh`
+`dedupeRefresh: false` disables single-flight sharing only; `refresh` still returns a result and `applyRefresh` applies it after the captured token generation is checked again
 
 ## Behavior notes
 
@@ -188,24 +189,29 @@ Set `dedupeRefresh: false` only when `refresh` directly updates its cookie conte
 - Every caller observes its own abort signal while waiting for shared refresh work; aborting one caller does not cancel the shared refresh
 - Initial token lookup also observes caller abort, and terminal best-effort clear never delays the primary `ApiAuthError`
 - Refresh and access tokens must be non-empty, control-character-free, HTTP-header-safe strings; unusable values enter terminal auth handling without a fetch or retry
-- SvelteKit adapter dedupe requires `applyRefresh`; failed or empty shared results are not retained
+- Every SvelteKit refresh requires `applyRefresh`, including `dedupeRefresh: false`; refresh callbacks return data and never update cookie state directly
 - A shared typed SvelteKit namespace handle uses one in-flight runner, so the same stable key shares work without cache configuration
 - A SvelteKit `applyRefresh` failure clears only that request's cookie context through terminal auth handling
 - SvelteKit rechecks the captured token generation before `applyRefresh`; a newer login is returned unchanged instead of being overwritten by a stale shared result
 - Auth is sent only to relative requests, the client `baseURL` origin, and explicit `allowedOrigins`; a request-level `baseURL` is never an implicit trust anchor
 - Untrusted requests remove merged `Authorization` and `Proxy-Authorization` headers from client, endpoint, and request configuration
 - Explicit `Authorization` or `Proxy-Authorization` opts that request out of configured token lookup; its 401/419 response does not refresh or clear the configured bearer session
+- Requests that receive generated configured-auth headers force `redirect: "manual"`; cross-origin and same-origin 3xx responses are returned as `ApiHttpError` instead of letting fetch forward a custom credential header automatically
+- A custom fetch implementation must honor the forced manual redirect mode to preserve this generated-auth boundary
+- Explicit request auth is caller-owned and keeps the caller's normal `RequestInit.redirect` behavior; use `redirect: "manual"` when that credential must not follow redirects
 - Auth responses without refresh, non-replayable auth requests, and exhausted refresh throw `ApiAuthError` and schedule generation-aware best-effort clear only when the current token still matches the failed credential
 - `clear(expectedAccessToken)` and SvelteKit `applyRefresh(cookies, result, expectedAccessToken)` receive the expected generation so application adapters can implement compare-and-set behavior; callbacks that ignore the extra argument remain valid
 - Core `refresh(error, expectedAccessToken)` also receives the credential generation that failed
 - Retries default to GET, one shared request budget, `Retry-After` support, fixed delay, and no jitter; configure write methods explicitly
 - Observed caller abort throws `ApiAbortError`; deadline expiry throws `ApiTimeoutError`; retry delay always observes the caller signal
 - Custom fetch implementations must reject or otherwise observe the caller signal during active work
+- Invalid absolute or network URLs use `[invalid-url]` in public contexts, while URL-resolution and transport failures throw `ApiRequestError` without retaining the native error, `cause`, `code`, or `input`
+- `onRequestError`, auth classification, and retry callbacks receive the same sanitized `ApiRequestError` for transport failures
 - HTTP errors may retain a server code but never retain raw bodies, responses, headers, parse text, validation inputs, userinfo from any parseable hierarchical URL form (including HTTP, FTP, WebSocket, backslash, and omitted-separator forms), query strings, fragments, or upstream messages
 - `ApiAuthError.cause` is a sanitized `HTTP_FAILURE` or `AUTH_CALLBACK_FAILURE` descriptor and never retains an auth callback error object or message
 - `errorFallback.message` is the configured safe HTTP error message, not an upstream-message fallback; upstream messages are always ignored
 - Without a configured safe message, HTTP errors use the generic request failure
-- `handleApiRoute` preserves `ApiHttpError.code` and resolves `codeMessages`, `statusMessages`, `responseMessage`, then `API request failed`
+- `handleApiRoute` converts `ApiRequestError` to a safe 502 response and preserves `ApiHttpError.code` while resolving `codeMessages`, `statusMessages`, `responseMessage`, then `API request failed`
 - Raw upstream messages are not exposed by route conversion unless an explicit mapping callback chooses them
 - Missing or invalid server time headers are ignored.
 - `handleApiRoute` only converts known API errors. Unknown errors are rethrown.

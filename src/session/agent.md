@@ -50,6 +50,10 @@ JWT parsing and expiration checks only run when `jwtSchema` is provided, so opaq
 
 JWT schemas validate the strictly decoded payload before the original token is attached. Use the final refresh context claims when code needs the validated claims plus raw token
 
+Session claim generics accept ordinary object interfaces without requiring a `JwtPayload` string index signature. Runtime JWT schema output must still be a plain record
+
+Read `exp` as an unknown runtime claim and apply expiration or refresh-threshold decisions only when it is a finite number
+
 Session JWT paths use `safeDecodeJwtWithSchema` so invalid base64url and UTF-8 fail before schema parsing in Node and browser-compatible runtimes
 
 Refresh results are parsed through `tokenSchema` and, when configured, `jwtSchema` before being written back to storage

@@ -9,13 +9,17 @@ export {
   ApiAuthError,
   ApiHttpError,
   ApiParseError,
+  ApiRequestError,
   ApiResponseSizeError,
   ApiTimeoutError,
   ApiValidationError,
   getApiErrorCode,
   getApiMessage
 } from "./errors.js";
-export type { ApiAuthErrorCause } from "./errors.js";
+export type {
+  ApiAuthErrorCause,
+  ApiRequestErrorReason
+} from "./errors.js";
 export {
   createApiLoggerHooks,
   formatApiLogEvent

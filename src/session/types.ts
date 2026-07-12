@@ -70,7 +70,7 @@ export type TokenRefreshContext<
   TContext,
   TUser,
   TTokens extends TokenSessionTokens,
-  TClaims extends JwtPayload
+  TClaims extends object
 > = Readonly<{
   claims: JwtPayloadWithToken<TClaims> | null;
   context: TContext;
@@ -90,7 +90,7 @@ export type TokenSessionOptions<
   TContext,
   TUser,
   TTokens extends TokenSessionTokens,
-  TClaims extends JwtPayload = JwtPayload
+  TClaims extends object = JwtPayload
 > = TokenSessionStore<TContext, TUser, TTokens> & Readonly<{
   dedupeRefresh?: boolean | TokenSessionRefreshDedupeOptions;
   jwtSchema?: SafeSchema<TClaims>;

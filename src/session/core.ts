@@ -44,7 +44,7 @@ export const createTokenSession = <
   TContext,
   TUser,
   TTokens extends TokenSessionTokens,
-  TClaims extends JwtPayload = JwtPayload
+  TClaims extends object = JwtPayload
 >(
   options: TokenSessionOptions<TContext, TUser, TTokens, TClaims>
 ): TokenSessionController<TContext, TUser, TTokens> => (
@@ -56,7 +56,7 @@ export const createTokenSessionFromValidatedStore = <
   TContext,
   TUser,
   TTokens extends TokenSessionTokens,
-  TClaims extends JwtPayload = JwtPayload
+  TClaims extends object = JwtPayload
 >(
   options: TokenSessionOptions<TContext, TUser, TTokens, TClaims>
 ): TokenSessionController<TContext, TUser, TTokens> => (
@@ -67,7 +67,7 @@ const createTokenSessionController = <
   TContext,
   TUser,
   TTokens extends TokenSessionTokens,
-  TClaims extends JwtPayload = JwtPayload
+  TClaims extends object = JwtPayload
 >(
   options: TokenSessionOptions<TContext, TUser, TTokens, TClaims>,
   parseStoreReads: boolean
@@ -477,7 +477,7 @@ const resolveRefreshCacheMs = (
 
 const parseTokensOrNull = <
   TTokens extends TokenSessionTokens,
-  TClaims extends JwtPayload
+  TClaims extends object
 >(
   value: unknown,
   options: Readonly<{
@@ -525,7 +525,7 @@ const parseSchemaOrNull = <TData>(
   return parsed.success ? parsed.data : null;
 };
 
-const hasValidClaims = <TClaims extends JwtPayload>(
+const hasValidClaims = <TClaims extends object>(
   accessToken: string,
   schema: SafeSchema<TClaims> | undefined
 ): boolean => {
@@ -594,26 +594,36 @@ const readString = (value: unknown): string | undefined => (
 
 // Expiration helpers
 const isExpired = (
-  claims: JwtPayload,
+  claims: object,
   now: (() => number) | undefined
 ): boolean => {
-  if (!isNumericDate(claims.exp)) {
+  const expiration = readNumericExpiration(claims);
+
+  if (expiration === undefined) {
     return false;
   }
 
-  return claims.exp * 1000 <= resolveNowMs(now);
+  return expiration * 1000 <= resolveNowMs(now);
 };
 
 const isExpiringSoon = (
-  claims: JwtPayload,
+  claims: object,
   thresholdSeconds: number | undefined,
   now: (() => number) | undefined
 ): boolean => {
-  if (!thresholdSeconds || !isNumericDate(claims.exp)) {
+  const expiration = readNumericExpiration(claims);
+
+  if (!thresholdSeconds || expiration === undefined) {
     return false;
   }
 
-  return claims.exp * 1000 <= resolveNowMs(now) + Math.max(0, thresholdSeconds) * 1000;
+  return expiration * 1000 <= resolveNowMs(now) + Math.max(0, thresholdSeconds) * 1000;
+};
+
+const readNumericExpiration = (claims: object): number | undefined => {
+  const expiration = (claims as { exp?: unknown }).exp;
+
+  return isNumericDate(expiration) ? expiration : undefined;
 };
 
 const isNumericDate = (value: unknown): value is number => (

@@ -10,6 +10,7 @@ import {
   ApiAuthError,
   ApiHttpError,
   ApiParseError,
+  ApiRequestError,
   ApiResponseSizeError,
   ApiTimeoutError,
   ApiValidationError,
@@ -168,16 +169,28 @@ export const createApiFetcher = (
       query,
       snapshot
     } = snapshotRequestOptions(requestOptions);
-    const resolvedURL = buildApiUrl(
-      path,
-      requestBaseURL ?? clientBaseURL,
-      query
-    );
-    const trustedOrigin = isTrustedRequestOrigin(
-      resolvedURL,
-      clientBaseURL,
-      resolvedOptions.allowedOrigins
-    );
+    const unresolvedContext = {
+      method,
+      path: redactApiUrl(path),
+      url : redactApiUrl(path)
+    };
+    let resolvedURL: string;
+    let trustedOrigin: boolean;
+
+    try {
+      resolvedURL = buildApiUrl(
+        path,
+        requestBaseURL ?? clientBaseURL,
+        query
+      );
+      trustedOrigin = isTrustedRequestOrigin(
+        resolvedURL,
+        clientBaseURL,
+        resolvedOptions.allowedOrigins
+      );
+    } catch {
+      throw new ApiRequestError("URL_RESOLUTION_FAILURE", unresolvedContext);
+    }
     const authContext = {
       method,
       path: redactApiUrl(path),
@@ -507,13 +520,20 @@ const sendRequest = async <
 
       const clientSendTimeMs = getServerTimeNow(clientOptions.serverTime);
 
-      response = await fetchImpl(resolvedURL, {
-        ...fetchOptions,
-        body: parsedBody.body,
-        headers: builtHeaders.headers,
-        method,
-        signal: signal.signal
-      });
+      try {
+        response = await fetchImpl(resolvedURL, {
+          ...fetchOptions,
+          ...(builtHeaders.authApplied
+            ? { redirect: "manual" as const }
+            : {}),
+          body: parsedBody.body,
+          headers: builtHeaders.headers,
+          method,
+          signal: signal.signal
+        });
+      } catch (error) {
+        throw new ApiRequestError("TRANSPORT_FAILURE", context);
+      }
       updateServerTimeClock(
         clientOptions.serverTime,
         response,

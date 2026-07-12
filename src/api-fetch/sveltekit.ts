@@ -59,40 +59,18 @@ export type SvelteKitRefreshAuthOptions<TCookies, TRefresh> =
     ) => MaybePromise<TRefresh | null | undefined>;
   }>;
 
-/** SvelteKit auth callbacks that return an access token without shared refresh state */
-export type SvelteKitDirectRefreshAuthOptions<TCookies> =
-  SvelteKitApiAuthBaseOptions<TCookies> & Readonly<{
-    applyRefresh?: never;
-    getRefreshKey?: never;
-    namespace    ?: never;
-    refresh: (
-      cookies: TCookies,
-      error: unknown
-    ) => MaybePromise<string | null | undefined>;
-  }>;
-
 /** Options for svelte kit api auth */
 export type SvelteKitApiAuthOptions<TCookies, TRefresh = string> =
   | SvelteKitApiAuthWithoutRefresh<TCookies>
-  | SvelteKitDirectRefreshAuthOptions<TCookies>
   | SvelteKitRefreshAuthOptions<TCookies, TRefresh>;
 
 /** Options for svelte kit api fetcher */
 export type SvelteKitApiFetcherOptions<TCookies, TRefresh = string> =
   Omit<ApiFetcherOptions, "auth"> & Readonly<{
+    auth?: SvelteKitApiAuthOptions<TCookies, TRefresh>;
     cookies: TCookies;
-  }> & (
-    | Readonly<{
-        auth?:
-          | SvelteKitApiAuthWithoutRefresh<TCookies>
-          | SvelteKitRefreshAuthOptions<TCookies, TRefresh>;
-        dedupeRefresh?: true;
-      }>
-    | Readonly<{
-        auth?: SvelteKitApiAuthOptions<TCookies, TRefresh>;
-        dedupeRefresh: false;
-      }>
-  );
+    dedupeRefresh?: boolean;
+  }>;
 
 /** Creates a stable typed namespace for sharing SvelteKit refresh work */
 export const createSvelteKitRefreshNamespace = <
@@ -112,8 +90,8 @@ export const createApiFetcher = <TCookies, TRefresh = string>(
     ...apiOptions
   } = options;
 
-  if (auth?.refresh && dedupeRefresh !== false && !auth.applyRefresh) {
-    throw new TypeError("applyRefresh is required when SvelteKit refresh dedupe is enabled");
+  if (auth?.refresh && !auth.applyRefresh) {
+    throw new TypeError("applyRefresh is required for every SvelteKit refresh");
   }
 
   const refreshSingleFlight = !auth?.refresh || dedupeRefresh === false
@@ -181,6 +159,12 @@ async function refreshWithDedupe<TCookies, TRefresh>({
     return currentAccessToken;
   }
 
+  const applyRefresh = auth.applyRefresh;
+
+  if (!applyRefresh) {
+    throw new TypeError("applyRefresh is required for every SvelteKit refresh");
+  }
+
   if (dedupeRefresh === false) {
     const result = await auth.refresh(cookies, error);
 
@@ -192,26 +176,12 @@ async function refreshWithDedupe<TCookies, TRefresh>({
       return undefined;
     }
 
-    if (!auth.applyRefresh) {
-      if (typeof result !== "string") {
-        throw new TypeError("Direct SvelteKit refresh must return an access token");
-      }
-
-      return result;
-    }
-
     return applyRefreshIfCurrent(
       auth,
       cookies,
-      result as TRefresh,
+      result,
       expectedAccessToken
     );
-  }
-
-  const applyRefresh = auth.applyRefresh;
-
-  if (!applyRefresh) {
-    throw new TypeError("applyRefresh is required when SvelteKit refresh dedupe is enabled");
   }
 
   const refreshKey = auth.getRefreshKey
