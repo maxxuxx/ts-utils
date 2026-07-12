@@ -86,6 +86,8 @@ describe("http-response module", () => {
       message: "Unprocessable Entity"
     });
     expect(noContentResponse.status).toBe(204);
+    expect(noContentResponse.body).toBeNull();
+    expect(noContentResponse.headers.get("content-type")).toBeNull();
     await expect(noContentResponse.text()).resolves.toBe("");
   });
 

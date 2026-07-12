@@ -35,6 +35,8 @@ Normalizers return predictable fallback values instead of throwing
 
 `toDate` validates every constructed `Date`, including finite numbers outside the JavaScript Date range, and returns the caller-provided fallback unchanged for invalid values
 
+For `Date` instances, capture `getTime()` once, construct the clone from that captured value, and validate the clone rather than calling an overridable method twice
+
 `toDateString` uses lightweight token replacement and no date library
 
 `toFlagBoolean` keeps backend DTO mapping ergonomic by accepting a custom true value

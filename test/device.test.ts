@@ -191,15 +191,27 @@ describe("device module", () => {
   });
 
   it("rejects SameSite None cookies without Secure", () => {
-    expect(() => createCookieDeviceUuidStore({
+    const createInsecureStore = () => createCookieDeviceUuidStore({
       document: createDocument(),
       sameSite: "None",
       secure  : false
-    })).toThrow();
-    expect(() => createCookieDeviceUuidStore({
-      document: createDocument(),
+    });
+
+    expect(createInsecureStore).toThrow(TypeError);
+    expect(createInsecureStore).toThrow(/^SameSite=None requires secure cookies$/);
+
+    const document: BrowserDocumentLike = {
+      cookie: ""
+    };
+    const store = createCookieDeviceUuidStore({
+      document,
       sameSite: "None",
       secure  : true
-    })).not.toThrow();
+    });
+
+    store.write(uuid);
+
+    expect(document.cookie).toContain("SameSite=None");
+    expect(document.cookie).toContain("Secure");
   });
 });

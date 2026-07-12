@@ -49,6 +49,7 @@ const day = to.dateString(input.createdAt, "yyyy-mm-dd");
 - `toNumber`는 finite number, numeric string, boolean, safe bigint, valid date를 받습니다.
 - `toText`는 valid date를 ISO string으로 반환합니다.
 - `toDate`는 valid `Date` instance를 clone하고 최종 생성된 date를 검증합니다
+- `Date` input은 `getTime()`으로 한 번만 읽은 뒤 clone을 검증합니다
 - `toFlagBoolean`은 `true`, `false`, `yes`, `no`, `on`, `off`, `1`, `0` 같은 문자열을 처리합니다.
 
 ## 주의할 점

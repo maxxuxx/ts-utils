@@ -62,6 +62,25 @@ describe("parser", () => {
     expect(parser.email.parse(" HARU@example.com ")).toBe("haru@example.com");
   });
 
+  it.each([
+    1n,
+    null,
+    [],
+    {}
+  ])("rejects unsupported numeric coercion input %#", (value) => {
+    const numericParsers = [
+      parser.id,
+      parser.page,
+      parser.limit,
+      parser.coerce.number,
+      parser.coerce.integer
+    ];
+
+    for (const numericParser of numericParsers) {
+      expect(numericParser.safeParse(value).success).toBe(false);
+    }
+  });
+
   it("wraps custom zod schemas", () => {
     const User = createParser(z.object({
       id:   z.number(),

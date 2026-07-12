@@ -219,8 +219,8 @@ export const isTruthy = <TValue>(value: TValue): value is Exclude<TValue, false 
   Boolean(value)
 );
 
-/** Checks whether a value is falsy under JavaScript semantics, including 0n */
-export const isFalsy = (value: unknown): value is false | 0 | 0n | "" | null | undefined => (
+/** Checks JavaScript falsiness without applying an unsound type narrowing for NaN */
+export const isFalsy = (value: unknown): boolean => (
   !value
 );
 

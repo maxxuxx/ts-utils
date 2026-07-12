@@ -50,6 +50,23 @@ describe("normalize module", () => {
     expect(to.dateString(source, "yyyy-mm-dd")).toBe("2026-05-20");
   });
 
+  it("validates a Date clone from one captured timestamp", () => {
+    class ChangingDate extends Date {
+      calls = 0;
+
+      override getTime(): number {
+        this.calls += 1;
+
+        return this.calls === 1 ? Number.MAX_VALUE : 0;
+      }
+    }
+
+    const source = new ChangingDate(0);
+
+    expect(toDate(source)).toBeUndefined();
+    expect(source.calls).toBe(1);
+  });
+
   it("normalizes flag booleans", () => {
     expect(toFlagBoolean(true)).toBe(true);
     expect(toFlagBoolean("SALE", "SALE")).toBe(true);

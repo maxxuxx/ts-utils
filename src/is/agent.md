@@ -35,7 +35,9 @@ All guards must be dependency free
 
 `isPrimitive` follows JavaScript primitive categories, so every number value including `NaN` is primitive even though `isNumber(NaN)` is false
 
-Truthy and falsy guard types must include bigint zero semantics alongside their runtime `Boolean` checks
+`isFalsy` returns a plain boolean because JavaScript treats `NaN` as falsy but TypeScript has no distinct `NaN` type for a sound falsy predicate
+
+Falsy runtime semantics still include `false`, numeric zero, bigint zero, an empty string, nullish values, and `NaN`
 
 Use `isFiniteNumber` when `Infinity` must also be rejected
 

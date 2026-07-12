@@ -48,13 +48,16 @@ format.valueUnit(12.5, "kg");
 
 - The default locale is `ko-KR`.
 - `formatDate` supports `yyyy`, `mm`, `dd`, `HH`, `MM`, and `ss` tokens.
-- `formatPhoneNumber` handles recognized mobile, Seoul, common area, VoIP, toll-free, and representative-number prefixes
+- `formatPhoneNumber` handles mobile, Seoul, regional, and `030`, `050`, `060`, `070`, `080` service prefixes
+- Eight-digit representative numbers accept only `14YY`, `15YY`, `16YY`, and `18YY` families
+- Phone families follow the National Law Information Center [Telecommunications Numbering Rules](https://www.law.go.kr/LSW/admRulInfoP.do?admRulSeq=2100000206775&chrClsCd=010201)
 - `formatValueUnit` defaults to a single-space separator.
 
 ## Edge cases
 
 - Invalid inputs return the provided `fallback`, which defaults to an empty string.
 - Unknown 10-digit and 11-digit prefixes are returned as normalized digits without added separators
+- Unsupported eight-digit `17YY` and `19YY` values use the configured fallback
 - Unsafe `bigint` values and invalid dates are treated as invalid number inputs.
 - `formatValueUnit` returns fallback when the unit is blank.
 - Use `normalize` when you need data coercion without display formatting.

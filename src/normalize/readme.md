@@ -49,6 +49,7 @@ const day = to.dateString(input.createdAt, "yyyy-mm-dd");
 - `toNumber` accepts finite numbers, numeric strings, booleans, safe bigint values, and valid dates.
 - `toText` returns valid dates as ISO strings.
 - `toDate` clones valid `Date` instances and validates the final constructed date
+- `Date` inputs are read once through `getTime()` before the clone is validated
 - `toFlagBoolean` accepts common strings such as `true`, `false`, `yes`, `no`, `on`, `off`, `1`, and `0`.
 
 ## Edge cases

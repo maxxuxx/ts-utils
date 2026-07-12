@@ -21,12 +21,12 @@ import {
   isValidDate
 } from "../src/is/index.js";
 
-const keepTruthyBigInt = (value: 0n | 1n): 1n | undefined => {
-  if (isFalsy(value)) {
+const readFalsyNumber = (value: number): number | undefined => {
+  if (!isFalsy(value)) {
     return undefined;
   }
 
-  expectTypeOf(value).toEqualTypeOf<1n>();
+  expectTypeOf(value).toEqualTypeOf<number>();
 
   return value;
 };
@@ -97,9 +97,9 @@ describe("is module", () => {
     expect(isEmpty({ id: 1 })).toBe(false);
     expect(is.truthy("value")).toBe(true);
     expect(is.falsy(0)).toBe(true);
+    expect(isFalsy(Number.NaN)).toBe(true);
     expect(isFalsy(0n)).toBe(true);
-    expect(keepTruthyBigInt(0n)).toBeUndefined();
-    expect(keepTruthyBigInt(1n)).toBe(1n);
+    expect(Number.isNaN(readFalsyNumber(Number.NaN))).toBe(true);
   });
 
   it("checks promise-like values", () => {

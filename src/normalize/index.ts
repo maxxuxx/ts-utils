@@ -77,12 +77,13 @@ export const toText = (value: unknown, fallback = ""): string => {
   }
 };
 
-/** Converts a value to a valid Date clone or returns the provided fallback */
+/** Captures a Date timestamp once and returns a validated clone or the provided fallback */
 export const toDate = (value: unknown, fallback?: Date): Date | undefined => {
   if (value instanceof Date) {
     const time = value.getTime();
+    const date = new Date(time);
 
-    return isValidDate(value) ? new Date(time) : fallback;
+    return isValidDate(date) ? date : fallback;
   }
 
   if (typeof value === "number" && Number.isFinite(value)) {

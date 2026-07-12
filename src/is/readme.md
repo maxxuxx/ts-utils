@@ -58,7 +58,8 @@ if (isNonEmptyArray(items)) {
 ## Edge cases
 
 - `isEmpty` treats `null`, `undefined`, empty strings, arrays, maps, sets, and plain objects as empty.
-- `isTruthy` and `isFalsy` follow JavaScript truthiness, including falsy `0n`
+- `isTruthy` and `isFalsy` follow JavaScript truthiness, including falsy `NaN` and `0n`
+- `isFalsy` returns `boolean` instead of narrowing because TypeScript cannot represent `NaN` as a distinct falsy type
 - These helpers do not validate nested object shapes. Use `parser` or Zod schemas for that.
 - `isURL` checks `value instanceof URL`, not whether a string is a valid URL.
 

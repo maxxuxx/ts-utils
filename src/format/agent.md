@@ -41,7 +41,11 @@ Invalid inputs should return a fallback string instead of throwing
 
 Invalid `Date` values and unsafe `bigint` values must use the fallback instead of formatting through `0`
 
-Korean phone formatting must check recognized mobile, area, VoIP, toll-free, Seoul, and representative-number prefixes before inserting separators
+Korean phone formatting recognizes mobile and area prefixes plus service families `030`, `050`, `060`, `070`, and `080`
+
+Eight-digit representative numbers accept only the official `14YY`, `15YY`, `16YY`, and `18YY` families, not `17YY` or `19YY`
+
+Keep the family list aligned with the National Law Information Center [Telecommunications Numbering Rules](https://www.law.go.kr/LSW/admRulInfoP.do?admRulSeq=2100000206775&chrClsCd=010201)
 
 Unknown 10-digit and 11-digit prefixes return as normalized digits without misleading Korean separators; other invalid shapes keep using the configured fallback
 

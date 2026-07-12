@@ -48,13 +48,16 @@ format.valueUnit(12.5, "kg");
 
 - 기본 locale은 `ko-KR`입니다.
 - `formatDate`는 `yyyy`, `mm`, `dd`, `HH`, `MM`, `ss` token을 지원합니다.
-- `formatPhoneNumber`는 알려진 mobile, 서울, 일반 지역번호, VoIP, 수신자부담, 대표번호 prefix를 처리합니다
+- `formatPhoneNumber`는 mobile, 서울, 지역번호와 `030`, `050`, `060`, `070`, `080` service prefix를 처리합니다
+- 8자리 대표번호는 `14YY`, `15YY`, `16YY`, `18YY` family만 허용합니다
+- 전화번호 family는 국가법령정보센터 [전기통신번호관리세칙](https://www.law.go.kr/LSW/admRulInfoP.do?admRulSeq=2100000206775&chrClsCd=010201)을 기준으로 합니다
 - `formatValueUnit`의 기본 separator는 한 칸 공백입니다.
 
 ## 주의할 점
 
 - 유효하지 않은 입력은 `fallback`을 반환하며 기본값은 빈 문자열입니다.
 - 알 수 없는 10자리 또는 11자리 prefix는 separator를 붙이지 않은 정규화된 숫자로 반환합니다
+- 지원하지 않는 8자리 `17YY`, `19YY` 값은 설정한 fallback을 반환합니다
 - safe integer 범위를 벗어난 `bigint`와 invalid date는 invalid number input으로 봅니다.
 - `formatValueUnit`은 unit이 blank이면 fallback을 반환합니다.
 - 표시가 아니라 data coercion이 필요하면 `normalize`를 사용합니다.

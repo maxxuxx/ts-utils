@@ -58,7 +58,8 @@ if (isNonEmptyArray(items)) {
 ## 주의할 점
 
 - `isEmpty`는 `null`, `undefined`, 빈 문자열, 빈 array/map/set/plain object를 empty로 봅니다.
-- `isTruthy`, `isFalsy`는 falsy `0n`을 포함한 JavaScript truthiness를 따릅니다
+- `isTruthy`, `isFalsy`는 falsy `NaN`, `0n`을 포함한 JavaScript truthiness를 따릅니다
+- TypeScript가 `NaN`을 별도 falsy type으로 표현할 수 없으므로 `isFalsy`는 narrowing 없이 `boolean`을 반환합니다
 - nested object shape 검증은 하지 않습니다. 그 경우 `parser` 또는 Zod schema를 사용합니다.
 - `isURL`은 string parse가 아니라 `value instanceof URL`을 검사합니다.
 
