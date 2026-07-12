@@ -23,7 +23,9 @@ import {
 } from "../src/api-fetch/index.js";
 import {
   createApiFetcher as createSvelteKitApiFetcher,
-  type SvelteKitDirectRefreshAuthOptions
+  createSvelteKitRefreshNamespace,
+  type SvelteKitDirectRefreshAuthOptions,
+  type SvelteKitRefreshNamespace
 } from "../src/api-fetch/sveltekit.js";
 import {
   createServerClock
@@ -1088,11 +1090,14 @@ describe("api-fetch", () => {
 
       return cookies.accessToken;
     });
+    const namespace = createSvelteKitRefreshNamespace<{
+      accessToken: string;
+    }>();
     const auth = {
       applyRefresh,
       getAccessToken: (cookies: typeof cookiesA) => cookies.accessToken,
       getRefreshKey : (cookies: typeof cookiesA) => cookies.refreshKey,
-      namespace     : "shared-cookie-contexts",
+      namespace,
       refresh
     };
     const apiA = createSvelteKitApiFetcher({
@@ -1151,6 +1156,9 @@ describe("api-fetch", () => {
 
       return { accessToken: "fresh-config" };
     });
+    const namespace = createSvelteKitRefreshNamespace<{
+      accessToken: string;
+    }>();
     const auth = {
       applyRefresh: async (
         cookies: typeof cookiesA,
@@ -1162,7 +1170,7 @@ describe("api-fetch", () => {
       },
       getAccessToken: (cookies: typeof cookiesA) => cookies.accessToken,
       getRefreshKey : (cookies: typeof cookiesA) => cookies.refreshKey,
-      namespace     : "shared-cache-config",
+      namespace,
       refresh
     };
     const fetch = vi.fn<FetchLike>(async (_input, init) => (
@@ -1199,7 +1207,52 @@ describe("api-fetch", () => {
     expect(cookiesB.accessToken).toBe("fresh-config");
   });
 
-  it("keeps SvelteKit refreshes separate for different namespaces", async () => {
+  it("keeps typed SvelteKit namespace sharing in-flight only", async () => {
+    const cookies = {
+      accessToken: "expired-sequential",
+      refreshKey : "sequential-refresh"
+    };
+    const namespace = createSvelteKitRefreshNamespace<{
+      accessToken: string;
+    }>();
+    let refreshCount = 0;
+    const refresh = vi.fn(async () => ({
+      accessToken: `fresh-sequential-${++refreshCount}`
+    }));
+    const api = createSvelteKitApiFetcher({
+      cookies,
+      fetch: async (_input, init) => (
+        new Headers(init?.headers).get("Authorization")?.startsWith("Bearer fresh-")
+          ? jsonResponse({ ok: true })
+          : jsonResponse({ message: "expired" }, 401)
+      ),
+      auth: {
+        applyRefresh: (context, result) => {
+          context.accessToken = result.accessToken;
+
+          return context.accessToken;
+        },
+        getAccessToken: (context) => context.accessToken,
+        getRefreshKey : (context) => context.refreshKey,
+        namespace,
+        refresh
+      }
+    });
+
+    await expect(api.get("/me")).resolves.toMatchObject({
+      response: { ok: true }
+    });
+
+    cookies.accessToken = "expired-sequential";
+
+    await expect(api.get("/me")).resolves.toMatchObject({
+      response: { ok: true }
+    });
+    expect(refresh).toHaveBeenCalledTimes(2);
+    expect(cookies.accessToken).toBe("fresh-sequential-2");
+  });
+
+  it("keeps SvelteKit refreshes separate for different namespace handles", async () => {
     const cookiesA = {
       accessToken: "expired-namespace",
       id         : "a",
@@ -1225,7 +1278,9 @@ describe("api-fetch", () => {
         accessToken: `fresh-${cookies.id}`
       };
     });
-    const createAuth = (namespace: string) => ({
+    const createAuth = (
+      namespace: SvelteKitRefreshNamespace<{ accessToken: string }>
+    ) => ({
       applyRefresh: async (
         cookies: typeof cookiesA,
         result: { accessToken: string }
@@ -1244,12 +1299,12 @@ describe("api-fetch", () => {
       createSvelteKitApiFetcher({
         cookies: cookiesA,
         fetch,
-        auth   : createAuth("namespace-a")
+        auth   : createAuth(createSvelteKitRefreshNamespace())
       }).get("/me"),
       createSvelteKitApiFetcher({
         cookies: cookiesB,
         fetch,
-        auth   : createAuth("namespace-b")
+        auth   : createAuth(createSvelteKitRefreshNamespace())
       }).get("/me")
     ]);
 
@@ -1277,6 +1332,9 @@ describe("api-fetch", () => {
     const refresh = vi.fn(async (cookies: typeof cookiesA) => ({
       accessToken: `fresh-${cookies.refreshKey}`
     }));
+    const namespace = createSvelteKitRefreshNamespace<{
+      accessToken: string;
+    }>();
     const auth = {
       applyRefresh: async (
         cookies: typeof cookiesA,
@@ -1288,7 +1346,7 @@ describe("api-fetch", () => {
       },
       getAccessToken: (cookies: typeof cookiesA) => cookies.accessToken,
       getRefreshKey : (cookies: typeof cookiesA) => cookies.refreshKey,
-      namespace     : "separate-refresh-keys",
+      namespace,
       refresh
     };
 
@@ -1320,6 +1378,9 @@ describe("api-fetch", () => {
       .mockRejectedValueOnce(refreshError)
       .mockResolvedValueOnce({ accessToken: "fresh" });
     const clear = vi.fn(async () => undefined);
+    const namespace = createSvelteKitRefreshNamespace<{
+      accessToken: string;
+    }>();
     const api = createSvelteKitApiFetcher({
       cookies,
       fetch: async (_input, init) => (
@@ -1336,7 +1397,7 @@ describe("api-fetch", () => {
         clear,
         getAccessToken: (context) => context.accessToken,
         getRefreshKey : (context) => context.refreshKey,
-        namespace     : "failed-refresh-eviction",
+        namespace,
         refresh
       }
     });
@@ -1387,12 +1448,15 @@ describe("api-fetch", () => {
       cookies.accessToken = "";
       cookies.cleared     = true;
     });
+    const namespace = createSvelteKitRefreshNamespace<{
+      accessToken: string;
+    }>();
     const auth = {
       applyRefresh,
       clear,
       getAccessToken: (cookies: typeof cookiesA) => cookies.accessToken,
       getRefreshKey : (cookies: typeof cookiesA) => cookies.refreshKey,
-      namespace     : "apply-failure-context",
+      namespace,
       refresh
     };
     const fetch = vi.fn<FetchLike>(async (_input, init) => (
@@ -1444,6 +1508,21 @@ describe("api-fetch", () => {
   });
 
   if (false) {
+    const accessNamespace = createSvelteKitRefreshNamespace<{
+      accessToken: string;
+    }>();
+
+    expectTypeOf(accessNamespace).toEqualTypeOf<
+      SvelteKitRefreshNamespace<{ accessToken: string }>
+    >();
+
+    // @ts-expect-error refresh namespace result contracts are invariant
+    const incompatibleNamespace: SvelteKitRefreshNamespace<{
+      sessionToken: string;
+    }> = accessNamespace;
+
+    void incompatibleNamespace;
+
     // @ts-expect-error deduped refresh requires applyRefresh
     createSvelteKitApiFetcher({
       cookies: { accessToken: "expired" },
@@ -1451,6 +1530,36 @@ describe("api-fetch", () => {
       auth   : {
         getAccessToken: (cookies: { accessToken: string }) => cookies.accessToken,
         refresh       : async () => "fresh"
+      }
+    });
+
+    createSvelteKitApiFetcher<
+      { accessToken: string },
+      { sessionToken: string }
+    >({
+      cookies: { accessToken: "expired" },
+      fetch  : async () => jsonResponse({ ok: true }),
+      auth   : {
+        applyRefresh: (_cookies, result) => result.sessionToken,
+        getAccessToken: (cookies) => cookies.accessToken,
+        // @ts-expect-error namespace contract does not match the refresh result
+        namespace: accessNamespace,
+        refresh  : async () => ({ sessionToken: "fresh" })
+      }
+    });
+
+    createSvelteKitApiFetcher<
+      { accessToken: string },
+      { accessToken: string }
+    >({
+      cookies: { accessToken: "expired" },
+      fetch  : async () => jsonResponse({ ok: true }),
+      auth   : {
+        applyRefresh: (_cookies, result) => result.accessToken,
+        getAccessToken: (cookies) => cookies.accessToken,
+        // @ts-expect-error string refresh namespaces are no longer accepted
+        namespace: "app-session",
+        refresh  : async () => ({ accessToken: "fresh" })
       }
     });
 

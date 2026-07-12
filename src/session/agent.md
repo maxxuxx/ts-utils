@@ -28,7 +28,7 @@ The core session entry should stay dependency free apart from local JWT and prom
 
 `types.ts` contains public store, token, refresh, and controller contracts
 
-`core.ts` contains `createTokenSession`, the shared session parser, optional JWT claim parsing, controller-scoped refresh single-flight, refresh decisions, and `TokenSessionError`
+`core.ts` contains `createTokenSession`, the React-only validated-store controller path, the shared session parser, per-context mutation queues, optional JWT claim parsing, controller-scoped refresh single-flight, refresh decisions, and `TokenSessionError`
 
 `sveltekit.ts` contains the `iron-session` cookie adapter for SvelteKit-style cookies
 
@@ -58,6 +58,8 @@ Use `userSchema` and `tokenSchema` together as the single session boundary parse
 
 Apply schema transforms once at each boundary and never pass parsed user or token output back through the same schema before storage
 
+React alone uses the internal validated-store core path because hydration, storage events, and controller writes already prepare its cached snapshots. Keep the public `createTokenSession` path validating raw store reads
+
 Invalid persisted JSON or schema-invalid React session data must be removed from storage and replaced with an empty or configured valid fallback
 
 React sessions are memory-only when `storage` is omitted or set to `"memory"`; persistent `localStorage`, `sessionStorage`, or a custom storage adapter requires an explicit option
@@ -72,6 +74,8 @@ Use the server or initial session only for construction hydration. A matching la
 
 Attach one storage event handler on the first React subscriber, detach it after the last unsubscribe, and filter events by both storage area and key while accepting matching-area clear events
 
+Attach the handler before the first authoritative storage catch-up read so deletion, corruption, or replacement between construction and subscription cannot leave stale state
+
 `refreshThresholdSeconds` refreshes only when a JWT is present, a refresh token exists, and `refreshTokens` is configured
 
 Core refresh single-flight state belongs to each controller so unrelated controllers never share results only because their refresh-token strings match
@@ -79,6 +83,8 @@ Core refresh single-flight state belongs to each controller so unrelated control
 Every core refresh participant writes the shared validated token result into its own storage context
 
 Before a pending refresh writes, re-read the context and compare its raw access and refresh token identity with the identity that started the work
+
+Serialize the final refresh re-read, identity check, and awaited write with `clear`, `set`, and the complete `updateUser` read-modify-write transaction in one controller-local queue per context. Never hold this queue during the network refresh
 
 When identity changed to a newer login, return its current access token without writing. When the session was cleared, fail with `TokenSessionError` without writing. When only the user changed, preserve the current user with the refreshed tokens
 

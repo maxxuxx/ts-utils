@@ -69,6 +69,7 @@ const user = await session.ensure(undefined);
 - `userSchema` and `tokenSchema` validate restored session values and every controller write
 - Schema-invalid `set` and `updateUser` calls reject before changing the current session
 - Schema transforms run once per read, input, or refresh-result boundary and parsed output is not reparsed before storage
+- React core operations reuse the snapshot already validated at hydration, storage-event, or write boundaries instead of applying non-idempotent transforms again
 - JWT parsing and expiration checks run only when `jwtSchema` is provided.
 - `jwtSchema` validates strictly decoded payload claims before the original token is attached
 - Invalid base64url or UTF-8 fails before `jwtSchema` parsing
@@ -107,6 +108,8 @@ Malformed JSON and values rejected by `userSchema` or `tokenSchema` are removed 
 
 The server or initial session is used only for initial hydration. A later matching storage deletion or clear event produces an empty snapshot
 
+The first subscriber attaches the storage handler before an authoritative catch-up read, so deletion or corruption between construction and subscription becomes an empty snapshot
+
 Snapshots are detached and recursively frozen, while repeated reads return the same object identity until a committed update
 
 Snapshot containers must be plain objects or arrays. Mutable built-ins with internal state, including `Date`, `Map`, `Set`, and typed arrays, are rejected before the current snapshot changes
@@ -121,6 +124,7 @@ Persistent writes prepare and serialize the next snapshot before storage mutatio
 - Separate controllers keep independent refresh state even when their refresh-token strings match
 - Every context waiting on one core refresh writes the validated result to its own store
 - A pending refresh rechecks the current raw token identity before writing
+- Each controller serializes the final refresh check and awaited write with `clear`, `set`, and `updateUser` for the same context while keeping the network refresh outside that queue
 - A newer login remains untouched and supplies its current access token, while a cleared session rejects without being restored
 - User-only changes made during refresh are preserved with the refreshed tokens
 - SvelteKit adapter requires cookies from the call or `getCookies`; missing cookies produce a session error.

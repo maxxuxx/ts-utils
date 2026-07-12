@@ -47,6 +47,30 @@ export const createTokenSession = <
   TClaims extends JwtPayload = JwtPayload
 >(
   options: TokenSessionOptions<TContext, TUser, TTokens, TClaims>
+): TokenSessionController<TContext, TUser, TTokens> => (
+  createTokenSessionController(options, true)
+);
+
+/** @internal Creates a token session for framework stores that already validate every stored snapshot */
+export const createTokenSessionFromValidatedStore = <
+  TContext,
+  TUser,
+  TTokens extends TokenSessionTokens,
+  TClaims extends JwtPayload = JwtPayload
+>(
+  options: TokenSessionOptions<TContext, TUser, TTokens, TClaims>
+): TokenSessionController<TContext, TUser, TTokens> => (
+  createTokenSessionController(options, false)
+);
+
+const createTokenSessionController = <
+  TContext,
+  TUser,
+  TTokens extends TokenSessionTokens,
+  TClaims extends JwtPayload = JwtPayload
+>(
+  options: TokenSessionOptions<TContext, TUser, TTokens, TClaims>,
+  parseStoreReads: boolean
 ): TokenSessionController<TContext, TUser, TTokens> => {
   const useRefreshToken = options.useRefreshToken ?? true;
   const {
@@ -54,6 +78,7 @@ export const createTokenSession = <
     parseTokens,
     parseUser
   } = createTokenSessionParsers(options);
+  const mutationQueue = createContextMutationQueue<TContext>();
   const refreshSingleFlight = createSingleFlight<string, TTokens>({
     successTtlMs: resolveRefreshCacheMs(options.dedupeRefresh)
   });
@@ -68,6 +93,16 @@ export const createTokenSession = <
     session: TokenSessionData<TUser, TTokens>
   ): Promise<void> => {
     await writeParsedSession(context, parseSession(session));
+  };
+  const readSession = async (context: TContext) => {
+    const storedSession = await options.read(context);
+
+    return {
+      session: parseStoreReads
+        ? parseSession(storedSession)
+        : storedSession,
+      storedSession
+    };
   };
 
   const readClaims = (accessToken: string): JwtPayloadWithToken<TClaims> | null => {
@@ -88,7 +123,7 @@ export const createTokenSession = <
     return decoded.data;
   };
   const readEnsuredUser = async (context: TContext): Promise<TUser> => {
-    const session      = parseSession(await options.read(context));
+    const { session }  = await readSession(context);
     const user         = requireUser(session.user);
     const tokens       = requireTokens(session.tokens);
     const accessToken  = readAccessToken(tokens);
@@ -108,9 +143,11 @@ export const createTokenSession = <
   };
 
   const refresh = async (context: TContext): Promise<string> => {
-    const storedSession  = await options.read(context);
+    const {
+      session,
+      storedSession
+    } = await readSession(context);
     const tokenIdentity  = readTokenIdentity(storedSession);
-    const session        = parseSession(storedSession);
     const user           = requireUser(session.user);
     const tokens         = requireTokens(session.tokens);
     const accessToken   = readAccessToken(tokens);
@@ -152,11 +189,40 @@ export const createTokenSession = <
           executeRefresh
         );
     } catch (error) {
-      const currentStoredSession = await options.read(context);
-      const currentSession       = parseSession(currentStoredSession);
+      return mutationQueue.run(context, async () => {
+        const {
+          session: currentSession,
+          storedSession: currentStoredSession
+        } = await readSession(context);
+        const currentTokenIdentity = readTokenIdentity(currentStoredSession);
+
+        if (!hasSameTokenIdentity(tokenIdentity, currentTokenIdentity)) {
+          const currentAccessToken = readAccessToken(currentSession.tokens);
+
+          if (currentAccessToken) {
+            readClaims(currentAccessToken);
+
+            return currentAccessToken;
+          }
+
+          throw createSessionError("invalid_token");
+        }
+
+        throw error;
+      });
+    }
+
+    return mutationQueue.run(context, async () => {
+      const {
+        session: currentSession,
+        storedSession: currentStoredSession
+      } = await readSession(context);
       const currentTokenIdentity = readTokenIdentity(currentStoredSession);
 
-      if (!hasSameTokenIdentity(tokenIdentity, currentTokenIdentity)) {
+      if (!hasSameTokenIdentity(
+        tokenIdentity,
+        currentTokenIdentity
+      )) {
         const currentAccessToken = readAccessToken(currentSession.tokens);
 
         if (currentAccessToken) {
@@ -168,41 +234,20 @@ export const createTokenSession = <
         throw createSessionError("invalid_token");
       }
 
-      throw error;
-    }
+      const currentUser = requireUser(currentSession.user);
 
-    const currentStoredSession = await options.read(context);
-    const currentSession       = parseSession(currentStoredSession);
-    const currentTokenIdentity = readTokenIdentity(currentStoredSession);
+      await writeParsedSession(context, {
+        ...currentSession,
+        tokens: nextTokens,
+        user  : currentUser
+      });
 
-    if (!hasSameTokenIdentity(
-      tokenIdentity,
-      currentTokenIdentity
-    )) {
-      const currentAccessToken = readAccessToken(currentSession.tokens);
-
-      if (currentAccessToken) {
-        readClaims(currentAccessToken);
-
-        return currentAccessToken;
-      }
-
-      throw createSessionError("invalid_token");
-    }
-
-    const currentUser = requireUser(currentSession.user);
-
-    await writeParsedSession(context, {
-      ...currentSession,
-      tokens: nextTokens,
-      user  : currentUser
+      return readAccessToken(nextTokens) ?? "";
     });
-
-    return readAccessToken(nextTokens) ?? "";
   };
 
   const ensure = async (context: TContext): Promise<TUser> => {
-    const session      = parseSession(await options.read(context));
+    const { session }  = await readSession(context);
     const user         = requireUser(session.user);
     const tokens       = requireTokens(session.tokens);
     const accessToken  = readAccessToken(tokens);
@@ -246,12 +291,12 @@ export const createTokenSession = <
 
   return Object.freeze({
     clear: async (context) => {
-      await options.clear(context);
+      await mutationQueue.run(context, () => options.clear(context));
     },
     ensure,
-    get: async (context) => parseSession(await options.read(context)),
+    get: async (context) => (await readSession(context)).session,
     getAccessToken: async (context) => {
-      const session = parseSession(await options.read(context));
+      const { session } = await readSession(context);
 
       return readAccessToken(session.tokens);
     },
@@ -266,18 +311,48 @@ export const createTokenSession = <
     },
     refresh,
     set: async (context, session) => {
-      await writeSession(context, session);
+      await mutationQueue.run(context, () => writeSession(context, session));
     },
     updateUser: async (context, user) => {
-      const session = parseSession(await options.read(context));
-      const nextUser = parseUser(user);
+      await mutationQueue.run(context, async () => {
+        const { session } = await readSession(context);
+        const nextUser = parseUser(user);
 
-      await writeParsedSession(context, {
-        ...session,
-        user: nextUser
+        await writeParsedSession(context, {
+          ...session,
+          user: nextUser
+        });
       });
     }
   });
+};
+
+// Mutation helpers
+const createContextMutationQueue = <TContext>() => {
+  const tails = new Map<TContext, Promise<void>>();
+
+  const run = <TValue>(
+    context: TContext,
+    mutation: () => PromiseLike<TValue> | TValue
+  ): Promise<TValue> => {
+    const previous = tails.get(context) ?? Promise.resolve();
+    const result   = previous.then(mutation);
+    const tail     = result.then(
+      () => undefined,
+      () => undefined
+    );
+
+    tails.set(context, tail);
+    void tail.then(() => {
+      if (tails.get(context) === tail) {
+        tails.delete(context);
+      }
+    });
+
+    return result;
+  };
+
+  return { run };
 };
 
 // Parsing helpers

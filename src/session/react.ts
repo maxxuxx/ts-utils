@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 import {
-  createTokenSession,
+  createTokenSessionFromValidatedStore,
   createTokenSessionParsers
 } from "./core.js";
 import type {
@@ -80,15 +80,19 @@ export const createReactTokenSession = <
     options.serverSession ?? options.initialSession ?? {},
     parseSession
   ));
-  const subscriptions    = new Set<Readonly<{
-    listener: () => void;
-  }>>();
-  let snapshot            = readStoredSession(
+  const emptySession     = createSnapshot<TUser, TTokens>({});
+  const restoredSession  = restoreStoredSession(
     storage,
     options.storageKey,
+    storage?.getItem(options.storageKey) ?? null,
     serverSession,
     parseSession
   );
+  const subscriptions    = new Set<Readonly<{
+    listener: () => void;
+  }>>();
+  let snapshot             = restoredSession.snapshot;
+  let storedValue          = restoredSession.storedValue;
   let removeStorageListener: (() => void) | null = null;
 
   const notify = () => {
@@ -108,6 +112,7 @@ export const createReactTokenSession = <
       }
 
       storage.setItem(options.storageKey, serialized);
+      storedValue = serialized;
     }
 
     snapshot = nextSnapshot;
@@ -118,12 +123,42 @@ export const createReactTokenSession = <
     const nextSnapshot = createSnapshot<TUser, TTokens>({});
 
     storage?.removeItem(options.storageKey);
+    storedValue = null;
 
     snapshot = nextSnapshot;
     notify();
   };
 
-  const controller = createTokenSession<void, TUser, TTokens, TClaims>({
+  const syncSnapshotFromStorage = (force = false) => {
+    if (!storage) {
+      return;
+    }
+
+    const value = storage.getItem(options.storageKey);
+
+    if (!force && value === storedValue) {
+      return;
+    }
+
+    const restored = restoreStoredSession(
+      storage,
+      options.storageKey,
+      value,
+      emptySession,
+      parseSession
+    );
+
+    snapshot    = restored.snapshot;
+    storedValue = restored.storedValue;
+    notify();
+  };
+
+  const controller = createTokenSessionFromValidatedStore<
+    void,
+    TUser,
+    TTokens,
+    TClaims
+  >({
     ...options,
     clear: async () => clearSnapshot(),
     read : () => snapshot,
@@ -131,27 +166,20 @@ export const createReactTokenSession = <
   });
 
   const subscribe = (listener: () => void) => {
-    if (subscriptions.size === 0 && storage) {
+    const subscription       = { listener };
+    const isFirstSubscription = subscriptions.size === 0;
+
+    subscriptions.add(subscription);
+
+    if (isFirstSubscription && storage) {
       removeStorageListener = addStorageListener(
         options.storageKey,
         storage,
-        () => {
-          const nextSnapshot = readStoredSession(
-            storage,
-            options.storageKey,
-            createSnapshot<TUser, TTokens>({}),
-            parseSession
-          );
-
-          snapshot = nextSnapshot;
-          notify();
-        }
+        () => syncSnapshotFromStorage(true)
       );
+
+      syncSnapshotFromStorage();
     }
-
-    const subscription = { listener };
-
-    subscriptions.add(subscription);
 
     return () => {
       subscriptions.delete(subscription);
@@ -189,33 +217,40 @@ export const createReactTokenSession = <
 };
 
 // Storage helpers
-const readStoredSession = <
+const restoreStoredSession = <
   TUser,
   TTokens extends TokenSessionTokens
 >(
   storage: ReactSessionStorage | null,
   key: string,
+  value: string | null,
   fallback: TokenSessionData<TUser, TTokens>,
   parseSession: (value: unknown) => TokenSessionData<TUser, TTokens>
-): TokenSessionData<TUser, TTokens> => {
-  if (!storage) {
-    return fallback;
-  }
-
-  const value = storage.getItem(key);
-
-  if (value === null) {
-    return fallback;
+): Readonly<{
+  snapshot   : TokenSessionData<TUser, TTokens>;
+  storedValue: string | null;
+}> => {
+  if (!storage || value === null) {
+    return {
+      snapshot   : fallback,
+      storedValue: null
+    };
   }
 
   try {
     const parsed = JSON.parse(value) as unknown;
 
-    return createSnapshot(parseSession(parsed));
+    return {
+      snapshot   : createSnapshot(parseSession(parsed)),
+      storedValue: value
+    };
   } catch {
     storage.removeItem(key);
 
-    return fallback;
+    return {
+      snapshot   : fallback,
+      storedValue: null
+    };
   }
 };
 

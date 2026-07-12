@@ -98,11 +98,13 @@ The SvelteKit adapter separates shared refresh result creation from cookie-conte
 
 Adapter dedupe requires `applyRefresh`; every fetcher participant applies the shared result to its own cookies before retrying
 
-Use an explicit `namespace` plus a stable `getRefreshKey` when different SvelteKit fetcher instances should share refresh work
+Use one stable handle from `createSvelteKitRefreshNamespace<TRefresh>()` plus a stable `getRefreshKey` when different SvelteKit fetcher instances should share refresh work
 
-Named SvelteKit refresh sharing is in-flight only and uses one flight per namespace regardless of caller configuration; do not add adapter success-result caching or cache-based flight partitions
+Typed SvelteKit refresh sharing is in-flight only and uses one flight per handle regardless of caller configuration; do not add adapter success-result caching or cache-based flight partitions
 
-Without a namespace, SvelteKit single-flight state belongs to the created adapter and must not collide with unrelated fetchers that happen to use the same token string
+The namespace handle is invariant in `TRefresh`, so incompatible refresh result contracts cannot share it. Keep the handle stable outside fetcher construction and keep shared runners in the handle-keyed `WeakMap`
+
+Without a namespace handle, SvelteKit single-flight state belongs to the created adapter and must not collide with unrelated fetchers that happen to use the same token string
 
 Failed or empty refresh results are evicted immediately, while an `applyRefresh` failure clears only the affected cookie context through the normal terminal auth path
 

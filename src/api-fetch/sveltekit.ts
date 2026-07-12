@@ -12,7 +12,15 @@ import type {
 
 const EMPTY_REFRESH_RESULT = Symbol("empty refresh result");
 
-const namedRefreshFlights = new Map<string, SingleFlight<string, unknown>>();
+declare const SVELTEKIT_REFRESH_NAMESPACE_RESULT: unique symbol;
+
+const sharedRefreshFlights = new WeakMap<object, unknown>();
+
+/** Opaque shared refresh namespace bound to one refresh result contract */
+export type SvelteKitRefreshNamespace<TRefresh> = Readonly<{
+  readonly [SVELTEKIT_REFRESH_NAMESPACE_RESULT]:
+    (result: TRefresh) => TRefresh;
+}>;
 
 type SvelteKitApiAuthBaseOptions<TCookies> = Readonly<{
   clear               ?: (cookies: TCookies) => MaybePromise<void>;
@@ -40,7 +48,7 @@ export type SvelteKitRefreshAuthOptions<TCookies, TRefresh> =
       cookies: TCookies,
       accessToken: string | null | undefined
     ) => MaybePromise<string | null | undefined>;
-    namespace?: string;
+    namespace?: SvelteKitRefreshNamespace<TRefresh>;
     refresh: (
       cookies: TCookies,
       error: unknown
@@ -81,6 +89,13 @@ export type SvelteKitApiFetcherOptions<TCookies, TRefresh = string> =
         dedupeRefresh: false;
       }>
   );
+
+/** Creates a stable typed namespace for sharing SvelteKit refresh work */
+export const createSvelteKitRefreshNamespace = <
+  TRefresh
+>(): SvelteKitRefreshNamespace<TRefresh> => (
+  Object.freeze({}) as SvelteKitRefreshNamespace<TRefresh>
+);
 
 /** Creates api fetcher */
 export const createApiFetcher = <TCookies, TRefresh = string>(
@@ -204,20 +219,23 @@ async function refreshWithDedupe<TCookies, TRefresh>({
 }
 
 function resolveRefreshSingleFlight<TRefresh>(
-  namespace: string | undefined
+  namespace: SvelteKitRefreshNamespace<TRefresh> | undefined
 ): SingleFlight<string, TRefresh> {
   if (namespace === undefined) {
     return createSingleFlight<string, TRefresh>();
   }
 
-  let refreshSingleFlight = namedRefreshFlights.get(namespace);
+  const existing = sharedRefreshFlights.get(namespace);
 
-  if (refreshSingleFlight === undefined) {
-    refreshSingleFlight = createSingleFlight<string, unknown>();
-    namedRefreshFlights.set(namespace, refreshSingleFlight);
+  if (existing !== undefined) {
+    return existing as SingleFlight<string, TRefresh>;
   }
 
-  return refreshSingleFlight as SingleFlight<string, TRefresh>;
+  const created = createSingleFlight<string, TRefresh>();
+
+  sharedRefreshFlights.set(namespace, created);
+
+  return created;
 }
 
 async function runRefreshOnce<TRefresh>(

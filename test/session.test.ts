@@ -455,6 +455,222 @@ describe("session module", () => {
     });
   });
 
+  it("commits a delayed refresh before a newer login mutation", async () => {
+    let storedSession: TestSession = {
+      tokens: {
+        accessToken : "old-delayed-set-access",
+        refreshToken: "old-delayed-set-refresh"
+      },
+      user: {
+        id: "old-user"
+      }
+    };
+    const refreshWriteStarted = createDeferred<void>();
+    const refreshWriteGate    = createDeferred<void>();
+    const session = createTokenSession<void, TestUser, TestTokens>({
+      clear: () => {
+        storedSession = {};
+      },
+      read: () => storedSession,
+      refreshTokens: async () => ({
+        accessToken : "fresh-delayed-set-access",
+        refreshToken: "fresh-delayed-set-refresh"
+      }),
+      tokenSchema: Tokens,
+      userSchema : User,
+      write: async (_context, nextSession) => {
+        if (nextSession.tokens?.accessToken === "fresh-delayed-set-access") {
+          refreshWriteStarted.resolve();
+          await refreshWriteGate.promise;
+        }
+
+        storedSession = nextSession;
+      }
+    });
+    const pendingRefresh = session.refresh(undefined);
+
+    await refreshWriteStarted.promise;
+
+    const pendingSet = session.set(undefined, {
+      tokens: {
+        accessToken : "new-delayed-set-access",
+        refreshToken: "new-delayed-set-refresh"
+      },
+      user: {
+        id: "new-user"
+      }
+    });
+
+    refreshWriteGate.resolve();
+
+    await Promise.all([pendingRefresh, pendingSet]);
+    expect(storedSession).toEqual({
+      tokens: {
+        accessToken : "new-delayed-set-access",
+        refreshToken: "new-delayed-set-refresh"
+      },
+      user: {
+        id: "new-user"
+      }
+    });
+  });
+
+  it("commits a delayed refresh before a clear mutation", async () => {
+    let storedSession: TestSession = {
+      tokens: {
+        accessToken : "old-delayed-clear-access",
+        refreshToken: "old-delayed-clear-refresh"
+      },
+      user: {
+        id: "old-user"
+      }
+    };
+    const refreshWriteStarted = createDeferred<void>();
+    const refreshWriteGate    = createDeferred<void>();
+    const session = createTokenSession<void, TestUser, TestTokens>({
+      clear: () => {
+        storedSession = {};
+      },
+      read: () => storedSession,
+      refreshTokens: async () => ({
+        accessToken : "fresh-delayed-clear-access",
+        refreshToken: "fresh-delayed-clear-refresh"
+      }),
+      tokenSchema: Tokens,
+      userSchema : User,
+      write: async (_context, nextSession) => {
+        if (nextSession.tokens?.accessToken === "fresh-delayed-clear-access") {
+          refreshWriteStarted.resolve();
+          await refreshWriteGate.promise;
+        }
+
+        storedSession = nextSession;
+      }
+    });
+    const pendingRefresh = session.refresh(undefined);
+
+    await refreshWriteStarted.promise;
+
+    const pendingClear = session.clear(undefined);
+
+    refreshWriteGate.resolve();
+
+    await Promise.all([pendingRefresh, pendingClear]);
+    expect(storedSession).toEqual({});
+  });
+
+  it("commits a delayed refresh before an updateUser mutation", async () => {
+    let storedSession: TestSession = {
+      tokens: {
+        accessToken : "old-delayed-user-access",
+        refreshToken: "old-delayed-user-refresh"
+      },
+      user: {
+        id: "old-user"
+      }
+    };
+    const refreshWriteStarted = createDeferred<void>();
+    const refreshWriteGate    = createDeferred<void>();
+    const session = createTokenSession<void, TestUser, TestTokens>({
+      clear: () => {
+        storedSession = {};
+      },
+      read: () => storedSession,
+      refreshTokens: async () => ({
+        accessToken : "fresh-delayed-user-access",
+        refreshToken: "fresh-delayed-user-refresh"
+      }),
+      tokenSchema: Tokens,
+      userSchema : User,
+      write: async (_context, nextSession) => {
+        if (nextSession.tokens?.accessToken === "fresh-delayed-user-access") {
+          refreshWriteStarted.resolve();
+          await refreshWriteGate.promise;
+        }
+
+        storedSession = nextSession;
+      }
+    });
+    const pendingRefresh = session.refresh(undefined);
+
+    await refreshWriteStarted.promise;
+
+    const pendingUpdate = session.updateUser(undefined, {
+      id: "updated-user"
+    });
+
+    refreshWriteGate.resolve();
+
+    await Promise.all([pendingRefresh, pendingUpdate]);
+    expect(storedSession).toEqual({
+      tokens: {
+        accessToken : "fresh-delayed-user-access",
+        refreshToken: "fresh-delayed-user-refresh"
+      },
+      user: {
+        id: "updated-user"
+      }
+    });
+  });
+
+  it("does not let delayed updateUser restore stale tokens", async () => {
+    let storedSession: TestSession = {
+      tokens: {
+        accessToken : "old-update-access",
+        refreshToken: "old-update-refresh"
+      },
+      user: {
+        id: "old-user"
+      }
+    };
+    const updateWriteStarted = createDeferred<void>();
+    const updateWriteGate    = createDeferred<void>();
+    const session = createTokenSession<void, TestUser, TestTokens>({
+      clear: () => {
+        storedSession = {};
+      },
+      read: () => storedSession,
+      tokenSchema: Tokens,
+      userSchema : User,
+      write: async (_context, nextSession) => {
+        if (nextSession.user?.id === "updated-user") {
+          updateWriteStarted.resolve();
+          await updateWriteGate.promise;
+        }
+
+        storedSession = nextSession;
+      }
+    });
+    const pendingUpdate = session.updateUser(undefined, {
+      id: "updated-user"
+    });
+
+    await updateWriteStarted.promise;
+
+    const pendingSet = session.set(undefined, {
+      tokens: {
+        accessToken : "new-update-access",
+        refreshToken: "new-update-refresh"
+      },
+      user: {
+        id: "new-user"
+      }
+    });
+
+    updateWriteGate.resolve();
+
+    await Promise.all([pendingUpdate, pendingSet]);
+    expect(storedSession).toEqual({
+      tokens: {
+        accessToken : "new-update-access",
+        refreshToken: "new-update-refresh"
+      },
+      user: {
+        id: "new-user"
+      }
+    });
+  });
+
   it("validates newer session state before accepting it during refresh", async () => {
     let storedSession: TestSession = {
       tokens: {
@@ -1274,6 +1490,184 @@ describe("session module", () => {
     unsubscribe();
   });
 
+  it("does not reapply React transforms when reading a hydrated access token", async () => {
+    let tokenParseCount = 0;
+    let userParseCount  = 0;
+    const TransformTokens = z.object({
+      accessToken : z.string(),
+      refreshToken: z.string().optional()
+    }).transform((tokens) => ({
+      ...tokens,
+      accessToken: `${tokens.accessToken}|token-${++tokenParseCount}`
+    }));
+    const TransformUser = z.object({
+      id: z.string()
+    }).transform((user) => ({
+      ...user,
+      marker: `user-${++userParseCount}`
+    }));
+    type TransformedTokens = z.output<typeof TransformTokens>;
+    type TransformedUser = z.output<typeof TransformUser>;
+    const storage = createMemoryStorage();
+
+    storage.setItem("hydrated-transform-session", JSON.stringify({
+      tokens: {
+        accessToken: "hydrated-access"
+      },
+      user: {
+        id: "hydrated-user"
+      }
+    }));
+
+    const session = createReactTokenSession<TransformedUser, TransformedTokens>({
+      storage,
+      storageKey: "hydrated-transform-session",
+      tokenSchema: TransformTokens,
+      useRefreshToken: false,
+      userSchema : TransformUser
+    });
+
+    expect(tokenParseCount).toBe(1);
+    expect(userParseCount).toBe(1);
+    await expect(session.getAccessToken()).resolves.toBe("hydrated-access|token-1");
+    expect(tokenParseCount).toBe(1);
+    expect(userParseCount).toBe(1);
+  });
+
+  it("does not reapply React token transforms during updateUser", async () => {
+    let tokenParseCount = 0;
+    let userParseCount  = 0;
+    const TransformTokens = z.object({
+      accessToken : z.string(),
+      refreshToken: z.string().optional()
+    }).transform((tokens) => ({
+      ...tokens,
+      accessToken: `${tokens.accessToken}|token-${++tokenParseCount}`
+    }));
+    const TransformUser = z.object({
+      id: z.string()
+    }).transform((user) => ({
+      ...user,
+      marker: `user-${++userParseCount}`
+    }));
+    type TransformedTokens = z.output<typeof TransformTokens>;
+    type TransformedUser = z.output<typeof TransformUser>;
+    const storage = createMemoryStorage();
+    const session = createReactTokenSession<TransformedUser, TransformedTokens>({
+      storage,
+      storageKey: "update-transform-session",
+      tokenSchema: TransformTokens,
+      useRefreshToken: false,
+      userSchema : TransformUser
+    });
+
+    await session.set({
+      tokens: {
+        accessToken: "set-access"
+      } as TransformedTokens,
+      user: {
+        id: "set-user"
+      } as TransformedUser
+    });
+    await session.updateUser({
+      id: "updated-user"
+    } as TransformedUser);
+
+    expect(tokenParseCount).toBe(1);
+    expect(userParseCount).toBe(2);
+    expect(session.get()).toEqual({
+      tokens: {
+        accessToken: "set-access|token-1"
+      },
+      user: {
+        id    : "updated-user",
+        marker: "user-2"
+      }
+    });
+    expect(JSON.parse(storage.getItem("update-transform-session") ?? "null")).toEqual(
+      session.get()
+    );
+  });
+
+  it("applies React transforms once across set refresh and clear writes", async () => {
+    let tokenParseCount = 0;
+    let userParseCount  = 0;
+    const TransformTokens = z.object({
+      accessToken : z.string(),
+      refreshToken: z.string()
+    }).transform((tokens) => ({
+      ...tokens,
+      accessToken: `${tokens.accessToken}|token-${++tokenParseCount}`
+    }));
+    const TransformUser = z.object({
+      id: z.string()
+    }).transform((user) => ({
+      ...user,
+      marker: `user-${++userParseCount}`
+    }));
+    type TransformedTokens = z.output<typeof TransformTokens>;
+    type TransformedUser = z.output<typeof TransformUser>;
+    const storage = createMemoryStorage();
+    const refreshTokens = vi.fn(async (
+      _refreshToken: string,
+      context: {
+        tokens: TransformedTokens;
+        user: TransformedUser;
+      }
+    ) => {
+      expect(context.tokens.accessToken).toBe("set-access|token-1");
+      expect(context.user.marker).toBe("user-1");
+
+      return {
+        accessToken : "fresh-access",
+        refreshToken: "fresh-refresh"
+      } as TransformedTokens;
+    });
+    const session = createReactTokenSession<TransformedUser, TransformedTokens>({
+      refreshTokens,
+      storage,
+      storageKey: "write-transform-session",
+      tokenSchema: TransformTokens,
+      userSchema : TransformUser
+    });
+
+    await session.set({
+      tokens: {
+        accessToken : "set-access",
+        refreshToken: "set-refresh"
+      } as TransformedTokens,
+      user: {
+        id: "set-user"
+      } as TransformedUser
+    });
+
+    expect(tokenParseCount).toBe(1);
+    expect(userParseCount).toBe(1);
+    await expect(session.refresh()).resolves.toBe("fresh-access|token-2");
+    expect(tokenParseCount).toBe(2);
+    expect(userParseCount).toBe(1);
+    expect(session.get()).toEqual({
+      tokens: {
+        accessToken : "fresh-access|token-2",
+        refreshToken: "fresh-refresh"
+      },
+      user: {
+        id    : "set-user",
+        marker: "user-1"
+      }
+    });
+    expect(JSON.parse(storage.getItem("write-transform-session") ?? "null")).toEqual(
+      session.get()
+    );
+
+    await session.clear();
+
+    expect(session.get()).toEqual({});
+    expect(storage.getItem("write-transform-session")).toBeNull();
+    expect(tokenParseCount).toBe(2);
+    expect(userParseCount).toBe(1);
+  });
+
   it("uses the React server session only for initial hydration", () => {
     const storage = createMemoryStorage();
     const storageEvents = createStorageEventHarness();
@@ -1329,6 +1723,123 @@ describe("session module", () => {
 
       expect(session.get()).toEqual({});
       expect(listener).toHaveBeenCalledTimes(1);
+
+      unsubscribe();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("catches up a React storage deletion on first subscribe", () => {
+    const storage = createMemoryStorage();
+    const storageEvents = createStorageEventHarness();
+
+    storage.setItem("deleted-before-subscribe", JSON.stringify({
+      tokens: {
+        accessToken: "stored-token"
+      },
+      user: {
+        id: "stored-user"
+      }
+    }));
+    vi.stubGlobal("addEventListener", storageEvents.addEventListener);
+    vi.stubGlobal("removeEventListener", storageEvents.removeEventListener);
+
+    try {
+      const session = createReactTokenSession<TestUser, TestTokens>({
+        storage,
+        storageKey: "deleted-before-subscribe",
+        useRefreshToken: false
+      });
+      const previousSnapshot = session.getSnapshot();
+
+      storage.removeItem("deleted-before-subscribe");
+
+      const listener = vi.fn();
+      const unsubscribe = session.subscribe(listener);
+
+      expect(session.get()).toEqual({});
+      expect(session.getSnapshot()).not.toBe(previousSnapshot);
+      expect(listener).toHaveBeenCalledTimes(1);
+
+      unsubscribe();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("catches up corrupt React storage on first subscribe", () => {
+    const storage = createMemoryStorage();
+    const storageEvents = createStorageEventHarness();
+
+    storage.setItem("corrupt-before-subscribe", JSON.stringify({
+      tokens: {
+        accessToken: "stored-token"
+      },
+      user: {
+        id: "stored-user"
+      }
+    }));
+    vi.stubGlobal("addEventListener", storageEvents.addEventListener);
+    vi.stubGlobal("removeEventListener", storageEvents.removeEventListener);
+
+    try {
+      const session = createReactTokenSession<TestUser, TestTokens>({
+        storage,
+        storageKey: "corrupt-before-subscribe",
+        useRefreshToken: false
+      });
+
+      storage.setItem("corrupt-before-subscribe", "{broken");
+
+      const listener = vi.fn();
+      const unsubscribe = session.subscribe(listener);
+
+      expect(session.get()).toEqual({});
+      expect(storage.getItem("corrupt-before-subscribe")).toBeNull();
+      expect(listener).toHaveBeenCalledTimes(1);
+
+      unsubscribe();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("attaches the React storage handler before the first subscribe catch-up read", () => {
+    const baseStorage = createMemoryStorage();
+    const storageEvents = createStorageEventHarness();
+    const order: string[] = [];
+    const storage = {
+      ...baseStorage,
+      getItem: (key: string) => {
+        order.push("read");
+
+        return baseStorage.getItem(key);
+      }
+    };
+    const addEventListener = vi.fn((
+      type: "storage",
+      listener: (event: unknown) => void
+    ) => {
+      order.push("attach");
+      storageEvents.addEventListener(type, listener);
+    });
+
+    vi.stubGlobal("addEventListener", addEventListener);
+    vi.stubGlobal("removeEventListener", storageEvents.removeEventListener);
+
+    try {
+      const session = createReactTokenSession<TestUser, TestTokens>({
+        storage,
+        storageKey: "ordered-subscribe-catch-up",
+        useRefreshToken: false
+      });
+
+      order.length = 0;
+
+      const unsubscribe = session.subscribe(vi.fn());
+
+      expect(order).toEqual(["attach", "read"]);
 
       unsubscribe();
     } finally {
