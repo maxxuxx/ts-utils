@@ -37,26 +37,53 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Verify exports
+        run: npm run verify:exports
+
+      - name: Verify package
+        run: npm run verify:pack
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev
+
+      - name: Audit all dependencies
+        run: npm audit
+
       - name: Check published version
-        id: package
-        shell: bash
         run: |
-          name="$(node -p "require('./package.json').name")"
-          version="$(node -p "require('./package.json').version")"
+          node --input-type=module <<'NODE'
+          import { readFileSync } from "node:fs";
+          import { spawnSync } from "node:child_process";
 
-          echo "name=$name" >> "$GITHUB_OUTPUT"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
+          const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
+          const specifier   = `${packageJson.name}@${packageJson.version}`;
+          const npmCommand  = process.platform === "win32" ? "npm.cmd" : "npm";
+          const result = spawnSync(
+            npmCommand,
+            ["view", specifier, "version", "--json"],
+            { encoding: "utf8" }
+          );
 
-          if npm view "$name@$version" version > /dev/null 2>&1; then
-            echo "published=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "published=false" >> "$GITHUB_OUTPUT"
-          fi
+          if (result.error) {
+            console.error(`[publish] registry lookup failed for ${specifier}`, result.error);
+            process.exit(1);
+          }
+
+          if (result.status === 0) {
+            console.error(`[publish] ${specifier} already exists`);
+            process.exit(1);
+          }
+
+          const registryOutput = `${result.stdout}\n${result.stderr}`;
+
+          if (!/\bE404\b/u.test(registryOutput)) {
+            console.error(`[publish] registry lookup failed for ${specifier}`);
+            console.error(registryOutput.trim());
+            process.exit(result.status ?? 1);
+          }
+
+          console.log(`[publish] ${specifier} is available`);
+          NODE
 
       - name: Publish to npm
-        if: steps.package.outputs.published == 'false'
         run: npm publish --access public
-
-      - name: Skip existing version
-        if: steps.package.outputs.published == 'true'
-        run: echo "${{ steps.package.outputs.name }}@${{ steps.package.outputs.version }} is already published"

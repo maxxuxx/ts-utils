@@ -31,3 +31,15 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Verify exports
+        run: npm run verify:exports
+
+      - name: Verify package
+        run: npm run verify:pack
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev
+
+      - name: Audit all dependencies
+        run: npm audit

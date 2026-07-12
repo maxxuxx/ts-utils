@@ -1,6 +1,6 @@
 {
   "name": "@maxxuxx/ts-utils",
-  "version": "0.7.26",
+  "version": "0.8.0",
   "description": "Shared TypeScript utilities",
   "type": "module",
   "license": "MIT",
@@ -24,6 +24,9 @@
   "files": [
     "dist",
     "src/**/readme.md",
+    "src/**/readme.kr.md",
+    "docs/readme.kr.md",
+    "docs/migration-0.8.md",
     "README.md",
     "LICENSE"
   ],
@@ -140,14 +143,16 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit -p tsconfig.json && npm run typecheck:variance",
-    "typecheck:variance": "tsc --noEmit -p test/fixtures/tsconfig.sveltekit-refresh-namespace-variance.json"
+    "typecheck:variance": "tsc --noEmit -p test/fixtures/tsconfig.sveltekit-refresh-namespace-variance.json",
+    "verify:exports": "node scripts/verify-exports.mjs",
+    "verify:pack": "node scripts/verify-pack.mjs"
   },
   "dependencies": {
     "zod": "^4.4.3"
   },
   "peerDependencies": {
-    "iron-session": ">=8",
-    "react": ">=18"
+    "iron-session": ">=8 <9",
+    "react": ">=18 <20"
   },
   "peerDependenciesMeta": {
     "iron-session": {
@@ -163,7 +168,7 @@
     "iron-session": "^8.0.4",
     "react": "^19.2.7",
     "typescript": "^5.9.3",
-    "vitest": "^4.0.14"
+    "vitest": "^4.1.10"
   },
   "engines": {
     "node": ">=22.12.0"

@@ -5,6 +5,14 @@ import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 const sourceRoot = join(process.cwd(), "src");
+const packagePath = join(process.cwd(), "package.json");
+
+const packageManifest = (): {
+  exports?: Record<string, {
+    import?: string;
+  }>;
+  scripts?: Record<string, string>;
+} => JSON.parse(readFileSync(packagePath, "utf8"));
 
 const sourceFiles = (): string[] => {
   const files: string[] = [];
@@ -115,14 +123,7 @@ describe("source documentation", () => {
   });
 
   it("keeps package export targets backed by source files", () => {
-    const packageJson = JSON.parse(readFileSync(
-      join(process.cwd(), "package.json"),
-      "utf8"
-    )) as {
-      exports?: Record<string, {
-        import?: string;
-      }>;
-    };
+    const packageJson = packageManifest();
     const missingSources = Object.entries(packageJson.exports ?? {})
       .flatMap(([subpath, target]) => {
         if (!target.import) {
@@ -139,5 +140,69 @@ describe("source documentation", () => {
       });
 
     expect(missingSources).toEqual([]);
+  });
+
+  it("preserves an empty package root without Electron exports", () => {
+    const packageJson = packageManifest();
+    const electronExports = Object.keys(packageJson.exports ?? {})
+      .filter((subpath) => subpath.toLowerCase().includes("electron"));
+
+    expect(readFileSync(join(sourceRoot, "index.ts"), "utf8").trim()).toBe("export {};");
+    expect(electronExports).toEqual([]);
+    expect(existsSync(join(sourceRoot, "electron-log"))).toBe(false);
+    expect(existsSync(join(sourceRoot, "electron-updater"))).toBe(false);
+  });
+
+  it("exposes Node-based package verification commands", () => {
+    const packageJson = packageManifest();
+
+    expect(packageJson.scripts).toMatchObject({
+      "verify:exports": "node scripts/verify-exports.mjs",
+      "verify:pack"   : "node scripts/verify-pack.mjs"
+    });
+    expect(existsSync(join(process.cwd(), "scripts", "verify-exports.mjs"))).toBe(true);
+    expect(existsSync(join(process.cwd(), "scripts", "verify-pack.mjs"))).toBe(true);
+  });
+
+  it("runs the release gates in order in CI and publish workflows", () => {
+    const expectedCommands = [
+      "npm run typecheck",
+      "npm test",
+      "npm run build",
+      "npm run verify:exports",
+      "npm run verify:pack",
+      "npm audit --omit=dev",
+      "npm audit"
+    ];
+    const workflowFiles = [
+      join(process.cwd(), ".github", "workflows", "ci.yml"),
+      join(process.cwd(), ".github", "workflows", "publish.yml")
+    ];
+    const missingOrOutOfOrder = workflowFiles.flatMap((file) => {
+      const commands = [...readFileSync(file, "utf8").matchAll(/^\s*run: (.+)$/gmu)]
+        .map((match) => match[1]?.trim() ?? "");
+      const indexes = expectedCommands.map((command) => commands.indexOf(command));
+      const missing = expectedCommands.filter((_command, index) => indexes[index] === -1);
+      const ordered = indexes.every((index, position) => (
+        index !== -1 && (position === 0 || index > (indexes[position - 1] ?? -1))
+      ));
+
+      return missing.length === 0 && ordered
+        ? []
+        : [`${relative(process.cwd(), file)}: ${missing.join(", ") || "command order"}`];
+    });
+
+    expect(missingOrOutOfOrder).toEqual([]);
+  });
+
+  it("fails publishing when the exact package version already exists", () => {
+    const publishWorkflow = readFileSync(
+      join(process.cwd(), ".github", "workflows", "publish.yml"),
+      "utf8"
+    );
+
+    expect(publishWorkflow).not.toContain("Skip existing version");
+    expect(publishWorkflow).toContain("already exists");
+    expect(publishWorkflow).toContain("process.exit(1)");
   });
 });

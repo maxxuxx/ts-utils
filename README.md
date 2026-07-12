@@ -4,6 +4,8 @@
 
 [한국어](./docs/readme.kr.md)
 
+[0.8 migration guide](./docs/migration-0.8.md)
+
 Shared TypeScript utilities for projects that need small reusable runtime helpers
 
 ## Install

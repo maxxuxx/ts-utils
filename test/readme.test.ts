@@ -1,11 +1,12 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
 const root = process.cwd();
 const sourceRoot = join(root, "src");
 const rootKoreanReadme = join(root, "docs", "readme.kr.md");
+const migrationGuide = join(root, "docs", "migration-0.8.md");
 const englishModuleSections = [
   "## Use this when",
   "## Import",
@@ -30,6 +31,39 @@ const moduleDirectories = (): string[] => (
     .map((entry) => join(sourceRoot, entry))
     .filter((path) => statSync(path).isDirectory())
     .sort()
+);
+
+const packageManifest = (): {
+  exports?: Record<string, unknown>;
+  files?: string[];
+  name?: string;
+  peerDependencies?: Record<string, string>;
+  version?: string;
+} => JSON.parse(readFileSync(
+  join(root, "package.json"),
+  "utf8"
+));
+
+const readmeFiles = (): string[] => [
+  join(root, "README.md"),
+  rootKoreanReadme,
+  ...moduleDirectories().flatMap((directory) => [
+    join(directory, "readme.md"),
+    join(directory, "readme.kr.md")
+  ])
+];
+
+const localMarkdownTargets = (file: string): string[] => (
+  [...readFileSync(file, "utf8").matchAll(/\[[^\]]*\]\(([^)]+)\)/gu)]
+    .map((match) => match[1]?.trim() ?? "")
+    .filter((target) => (
+      target.length > 0 &&
+      !target.startsWith("#") &&
+      !/^[a-z][a-z\d+.-]*:/iu.test(target)
+    ))
+    .map((target) => target.replace(/^<|>$/gu, "").split(/[?#]/u, 1)[0] ?? "")
+    .filter((target) => target.length > 0)
+    .map((target) => resolve(dirname(file), target))
 );
 
 describe("readme documentation", () => {
@@ -91,33 +125,30 @@ describe("readme documentation", () => {
     expect(missingSections).toEqual([]);
   });
 
-  it("keeps Korean README files out of the npm package file list", () => {
-    const packageJson = JSON.parse(readFileSync(
-      join(root, "package.json"),
-      "utf8"
-    )) as {
-      files?: string[];
-    };
-
-    expect(packageJson.files).not.toEqual(expect.arrayContaining([
-      "README.kr.md"
-    ]));
-    expect(packageJson.files).not.toEqual(expect.arrayContaining([
-      "docs/readme.kr.md"
-    ]));
-    expect(packageJson.files).not.toEqual(expect.arrayContaining([
+  it("includes every Korean README target and the migration guide in the npm package", () => {
+    expect(packageManifest().files).toEqual(expect.arrayContaining([
+      "docs/readme.kr.md",
+      "docs/migration-0.8.md",
       "src/**/readme.kr.md"
     ]));
   });
 
+  it("keeps every local README link resolvable", () => {
+    const missingTargets = readmeFiles()
+      .flatMap((file) => localMarkdownTargets(file).map((target) => ({
+        file,
+        target
+      })))
+      .filter(({ target }) => !existsSync(target))
+      .map(({ file, target }) => (
+        `${relative(root, file)} -> ${relative(root, target)}`
+      ));
+
+    expect(missingTargets).toEqual([]);
+  });
+
   it("documents every public subpath in the root README module table", () => {
-    const packageJson = JSON.parse(readFileSync(
-      join(root, "package.json"),
-      "utf8"
-    )) as {
-      exports?: Record<string, unknown>;
-      name?: string;
-    };
+    const packageJson = packageManifest();
     const readmes = [
       readFileSync(join(root, "README.md"), "utf8"),
       readFileSync(rootKoreanReadme, "utf8")
@@ -134,5 +165,59 @@ describe("readme documentation", () => {
       });
 
     expect(missingRows).toEqual([]);
+  });
+
+  it("pins the 0.8 release and supported peer major ranges", () => {
+    const packageJson = packageManifest();
+
+    expect(packageJson.version).toBe("0.8.0");
+    expect(packageJson.peerDependencies).toMatchObject({
+      "iron-session": ">=8 <9",
+      react        : ">=18 <20"
+    });
+  });
+
+  it("documents every 0.8 migration surface with before and after examples", () => {
+    expect(existsSync(migrationGuide)).toBe(true);
+
+    const migration = existsSync(migrationGuide)
+      ? readFileSync(migrationGuide, "utf8")
+      : "";
+    const requiredMarkers = [
+      "@maxxuxx/ts-utils/electron-log/main",
+      "@maxxuxx/ts-utils/electron-updater/main",
+      "electron-helper/main/log",
+      "electron-helper/main/updater",
+      "createReactTokenSession",
+      "storage: \"local\"",
+      "safeParseJsonWithSchema",
+      "parseJsonWithSchema",
+      "safeDecodeJwtWithSchema",
+      "decodeJwtWithSchema",
+      "createSvelteKitRefreshNamespace",
+      "applyRefresh",
+      "cacheSuccessMs",
+      "allowedOrigins",
+      "ApiAuthError",
+      "errorFallback",
+      "rawBodyFactory",
+      "maxResponseBytes",
+      "ApiResponseSizeError",
+      "isFalsy",
+      "parser.id",
+      "formatPhoneNumber",
+      "calculateTimeOffset",
+      "getEnvNumber",
+      "createCookieDeviceUuidStore",
+      "unsafe bigint values are rejected before string conversion",
+      "17YY` and `19YY` use the configured fallback"
+    ];
+    const missingMarkers = requiredMarkers.filter((marker) => !migration.includes(marker));
+    const beforeExamples = migration.match(/^### Before/uigm) ?? [];
+    const afterExamples = migration.match(/^### After/uigm) ?? [];
+
+    expect(missingMarkers).toEqual([]);
+    expect(beforeExamples.length).toBeGreaterThanOrEqual(8);
+    expect(afterExamples.length).toBeGreaterThanOrEqual(8);
   });
 });
