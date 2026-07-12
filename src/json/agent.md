@@ -28,11 +28,15 @@ Do not import Zod directly in this module. Schema helpers should accept a struct
 
 `safeParseJson` and `parseJson` accept only strings. Treat `null` and `undefined` as invalid text so `localStorage.getItem(...)` does not silently become JSON `null`
 
+Schema-free `safeParseJson` and `parseJson` expose parsed data as `unknown` and must not accept a caller-selected parsed-value generic. Typed output requires the `WithSchema` APIs
+
 `parseJson` throws `JsonParseError` unless a fallback is explicitly provided
 
 `safeStringifyJson` treats an undefined stringify result as failure because this module returns JSON text, not JavaScript values
 
 `isJsonValue` should represent actual JSON-compatible values, so reject `NaN`, `Infinity`, `undefined`, functions, symbols, `BigInt`, dates, maps, sets, class instances, and circular structures
+
+`isJsonValue` tracks only the active recursion stack so shared object and array references are accepted while true cycles are rejected
 
 Keep this module focused on JSON parsing and serialization. Do not add UTF, base64, or hex conversion here; use the `encoding` module for byte/string representation conversion
 

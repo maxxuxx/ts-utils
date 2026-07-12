@@ -53,6 +53,7 @@ const query = compact({
 - `compact`는 빈 문자열, `0`, `false` 같은 falsy business value를 보존합니다.
 - `removeUndefined`는 명시적 `null` 값을 보존합니다.
 - `mergeDefaults(value, defaults)`는 defaults를 먼저 펼친 뒤 `value`의 defined value를 덮어씁니다.
+- `pick`, `removeUndefined`, `compact`, `fromEntries`는 `__proto__`를 포함한 모든 key를 own data property로 만들며 일반 object prototype을 바꾸지 않습니다
 
 ## 주의할 점
 

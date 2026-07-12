@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 
 import { z } from "../src/parser/index.js";
 import {
@@ -16,18 +16,36 @@ import {
 
 describe("json module", () => {
   it("parses JSON safely", () => {
-    expect(safeParseJson<{ id: number }>("{\"id\":1}")).toEqual({
+    const parsed = safeParseJson("{\"id\":1}");
+
+    expect(parsed).toEqual({
       data: {
         id: 1
       },
       ok: true
     });
+    if (parsed.ok) {
+      expectTypeOf(parsed.data).toEqualTypeOf<unknown>();
+    }
 
     const result = safeParseJson("{invalid");
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error).toBeInstanceOf(JsonParseError);
+    }
+  });
+
+  it("requires schemas for caller-selected parsed types", () => {
+    expectTypeOf(parseJson("{}")).toEqualTypeOf<unknown>();
+
+    if (false) {
+      // @ts-expect-error Typed output requires a schema-backed safe parser
+      safeParseJson<{ id: number }>("{}");
+      // @ts-expect-error Schema-free parsing has no parsed-value generic
+      parseJson<{ id: number }, null>("bad", {
+        fallback: null
+      });
     }
   });
 
@@ -99,8 +117,23 @@ describe("json module", () => {
     if (result.ok) {
       const id: number = result.data.id;
 
+      expectTypeOf(result.data).toEqualTypeOf<{
+        id: number;
+        name: string;
+      }>();
       expect(id).toBe(1);
     }
+  });
+
+  it("accepts shared object and array references", () => {
+    const child = { value: 1 };
+    const items = [1, "value"];
+
+    expect.soft(isJsonValue({
+      left : child,
+      right: child
+    })).toBe(true);
+    expect.soft(isJsonValue([items, items])).toBe(true);
   });
 
   it("checks JSON compatible values", () => {

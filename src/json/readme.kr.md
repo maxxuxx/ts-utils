@@ -26,7 +26,7 @@ import {
 
 | Export | 역할 |
 |---|---|
-| `safeParseJson`, `parseJson` | JSON parse를 result 또는 throw/fallback 방식으로 처리합니다. |
+| `safeParseJson`, `parseJson` | JSON을 unknown data로 parse하고 result 또는 throw/fallback 방식으로 처리합니다. |
 | `safeStringifyJson`, `stringifyJson` | stringify를 result 또는 throw/fallback 방식으로 처리합니다. |
 | `safeParseJsonWithSchema`, `parseJsonWithSchema` | JSON parse 후 schema로 검증합니다. |
 | `isJsonValue` | 값이 JSON-compatible인지 확인합니다. |
@@ -36,11 +36,15 @@ import {
 ## 기본 예제
 
 ```ts
-const config = json.parse(localStorage.getItem("config"), {
-  fallback: {
-    theme: "light"
+const config = json.parseWithSchema(
+  localStorage.getItem("config"),
+  ConfigSchema,
+  {
+    fallback: {
+      theme: "light"
+    }
   }
-});
+);
 
 const text = json.stringify(config, {
   space: 2
@@ -51,6 +55,8 @@ const text = json.stringify(config, {
 
 - `safeParseJson`은 string만 받습니다. `null`과 `undefined`는 invalid input입니다.
 - `parseJson`은 명시적 `fallback`이 없으면 throw합니다.
+- schema-free parse 성공 data는 `unknown`이며 caller generic으로 parsed type을 선택할 수 없습니다
+- runtime validation을 거친 typed output이 필요하면 `safeParseJsonWithSchema` 또는 `parseJsonWithSchema`를 사용합니다
 - `safeStringifyJson`은 top-level `undefined`를 실패로 처리합니다.
 - schema helper는 `parse(value)` function이 있는 객체를 받을 수 있습니다.
 - `JsonResult`는 `@maxxuxx/ts-utils/result`의 공통 `Result` contract alias입니다
@@ -59,6 +65,7 @@ const text = json.stringify(config, {
 
 - circular object와 `BigInt` stringify 실패는 `JsonStringifyError`가 됩니다.
 - `isJsonValue`는 `NaN`, `Infinity`, `undefined`, function, symbol, `BigInt`, date, map, set, class instance, circular structure를 거부합니다.
+- `isJsonValue`는 active path가 circular하지 않으면 같은 object 또는 array를 반복 참조해도 허용합니다
 - safe schema helper는 schema validation error를 그대로 반환합니다.
 - JSON text를 base64나 hex로 인코딩해야 하면 `encoding`을 함께 사용합니다.
 

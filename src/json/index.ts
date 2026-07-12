@@ -95,7 +95,7 @@ const isPlainRecord = (value: unknown): value is Record<string, unknown> => {
 
 const isJsonValueInternal = (
   value: unknown,
-  seen: WeakSet<object>
+  stack: WeakSet<object>
 ): value is JsonValue => {
   if (value === null || typeof value === "string" || typeof value === "boolean") {
     return true;
@@ -106,50 +106,60 @@ const isJsonValueInternal = (
   }
 
   if (Array.isArray(value)) {
-    if (seen.has(value)) {
+    if (stack.has(value)) {
       return false;
     }
 
-    seen.add(value);
+    stack.add(value);
 
-    return value.every((item) => isJsonValueInternal(item, seen));
+    try {
+      return value.every((item) => isJsonValueInternal(item, stack));
+    } finally {
+      stack.delete(value);
+    }
   }
 
   if (!isPlainRecord(value)) {
     return false;
   }
 
-  if (seen.has(value)) {
+  if (stack.has(value)) {
     return false;
   }
 
-  seen.add(value);
+  stack.add(value);
 
-  return Object.values(value).every((item) => isJsonValueInternal(item, seen));
+  try {
+    return Object.values(value).every((item) => (
+      isJsonValueInternal(item, stack)
+    ));
+  } finally {
+    stack.delete(value);
+  }
 };
 
-/** Checks whether a value is json value */
+/** Checks whether a value is json-compatible while rejecting circular paths */
 export const isJsonValue = (value: unknown): value is JsonValue => (
   isJsonValueInternal(value, new WeakSet())
 );
 
-/** Safely parses json */
-export const safeParseJson = <TValue = unknown>(
+/** Safely parses json as unknown data; use a schema helper for typed output */
+export const safeParseJson = (
   text: string | null | undefined
-): JsonResult<TValue, JsonParseError> => {
+): JsonResult<unknown, JsonParseError> => {
   try {
-    return ok(JSON.parse(readJsonText(text)) as TValue);
+    return ok(JSON.parse(readJsonText(text)) as unknown);
   } catch (error) {
     return err(new JsonParseError(error));
   }
 };
 
-/** Parses json */
-export const parseJson = <TValue = unknown, TFallback = never>(
+/** Parses json as unknown data; use a schema helper for typed output */
+export const parseJson = <TFallback = never>(
   text: string | null | undefined,
   options: JsonParseOptions<TFallback> = {}
-): TValue | TFallback => {
-  const result = safeParseJson<TValue>(text);
+): unknown | TFallback => {
+  const result = safeParseJson(text);
 
   if (result.ok) {
     return result.data;

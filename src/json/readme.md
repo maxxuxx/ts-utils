@@ -26,7 +26,7 @@ import {
 
 | Export | Role |
 |---|---|
-| `safeParseJson`, `parseJson` | Parse JSON as result or throwing/fallback helper. |
+| `safeParseJson`, `parseJson` | Parse JSON as unknown data through a result or throwing/fallback helper. |
 | `safeStringifyJson`, `stringifyJson` | Stringify values as result or throwing/fallback helper. |
 | `safeParseJsonWithSchema`, `parseJsonWithSchema` | Parse JSON and validate the result with a schema. |
 | `isJsonValue` | Checks whether a value is JSON-compatible. |
@@ -36,11 +36,15 @@ import {
 ## Basic example
 
 ```ts
-const config = json.parse(localStorage.getItem("config"), {
-  fallback: {
-    theme: "light"
+const config = json.parseWithSchema(
+  localStorage.getItem("config"),
+  ConfigSchema,
+  {
+    fallback: {
+      theme: "light"
+    }
   }
-});
+);
 
 const text = json.stringify(config, {
   space: 2
@@ -51,6 +55,8 @@ const text = json.stringify(config, {
 
 - `safeParseJson` accepts only strings. `null` and `undefined` are invalid input.
 - `parseJson` throws without an explicit `fallback`.
+- Schema-free parse success data is `unknown` and cannot be selected with a caller generic
+- Use `safeParseJsonWithSchema` or `parseJsonWithSchema` when parsed output needs a runtime-validated type
 - `safeStringifyJson` treats top-level `undefined` as failure because `JSON.stringify` returns `undefined`.
 - Schema helpers accept any object with a `parse(value)` function.
 - `JsonResult` aliases the shared `Result` contract from `@maxxuxx/ts-utils/result`
@@ -59,6 +65,7 @@ const text = json.stringify(config, {
 
 - Circular objects and `BigInt` stringify failures become `JsonStringifyError`.
 - `isJsonValue` rejects `NaN`, `Infinity`, `undefined`, functions, symbols, `BigInt`, dates, maps, sets, class instances, and circular structures.
+- `isJsonValue` accepts repeated references to the same object or array when no active path is circular
 - Schema validation errors are returned as-is from safe schema helpers.
 - Use `encoding` when JSON text must be base64 or hex encoded.
 

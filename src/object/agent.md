@@ -39,6 +39,10 @@ Keep functions shallow and predictable; do not add deep merge or path traversal 
 
 `entries` follows `Object.entries` semantics and only returns enumerable string-keyed entries
 
+Builders that start from an empty object must use `setOwn` for every key because direct assignment invokes the inherited `__proto__` setter
+
+Prototype-safe builders still return ordinary objects with `Object.prototype`; do not switch them to null-prototype objects
+
 Keep module docs updated whenever object behavior, exports, or internal file layout changes
 ## Public documentation
 

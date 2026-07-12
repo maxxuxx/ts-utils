@@ -13,8 +13,22 @@ export type CompactObject<TObject extends object> = Partial<{
   [TKey in keyof TObject]: NonNullable<TObject[TKey]>
 }>;
 
+// Property helpers
+const setOwn = (
+  target: Record<PropertyKey, unknown>,
+  key: PropertyKey,
+  value: unknown
+): void => {
+  Object.defineProperty(target, key, {
+    configurable: true,
+    enumerable  : true,
+    value,
+    writable    : true
+  });
+};
+
 // Selection helpers
-/** Picks selected values */
+/** Picks selected values into own data properties, including __proto__ */
 export const pick = <
   TObject extends object,
   const TKey extends keyof TObject
@@ -22,15 +36,15 @@ export const pick = <
   value: TObject,
   keys: readonly TKey[]
 ): Pick<TObject, TKey> => {
-  const result = {} as Pick<TObject, TKey>;
+  const result: Record<PropertyKey, unknown> = {};
 
   for (const key of keys) {
     if (Object.prototype.propertyIsEnumerable.call(value, key)) {
-      result[key] = value[key];
+      setOwn(result, key, value[key]);
     }
   }
 
-  return result;
+  return result as Pick<TObject, TKey>;
 };
 
 /** Omits selected values */
@@ -51,34 +65,34 @@ export const omit = <
 };
 
 // Cleanup helpers
-/** Removes undefined */
+/** Removes undefined while preserving keys as own data properties */
 export const removeUndefined = <TObject extends object>(
   value: TObject
 ): DefinedObject<TObject> => {
-  const result = {} as DefinedObject<TObject>;
+  const result: Record<PropertyKey, unknown> = {};
 
   for (const [key, item] of entries(value)) {
     if (item !== undefined) {
-      result[key] = item as Exclude<TObject[typeof key], undefined>;
+      setOwn(result, key, item);
     }
   }
 
-  return result;
+  return result as DefinedObject<TObject>;
 };
 
-/** Removes null and undefined values from an object */
+/** Removes null and undefined while preserving keys as own data properties */
 export const compact = <TObject extends object>(
   value: TObject
 ): CompactObject<TObject> => {
-  const result = {} as CompactObject<TObject>;
+  const result: Record<PropertyKey, unknown> = {};
 
   for (const [key, item] of entries(value)) {
     if (item !== undefined && item !== null) {
-      result[key] = item as NonNullable<TObject[typeof key]>;
+      setOwn(result, key, item);
     }
   }
 
-  return result;
+  return result as CompactObject<TObject>;
 };
 
 /** Merges defaults */
@@ -101,7 +115,7 @@ export const entries = <TObject extends object>(
   Object.entries(value) as Array<ObjectEntry<TObject>>
 );
 
-/** Builds a typed object from entries */
+/** Builds a typed object with own data properties from entries */
 export const fromEntries = <TEntry extends readonly [PropertyKey, unknown]>(
   value: Iterable<TEntry>
 ): {
@@ -110,7 +124,7 @@ export const fromEntries = <TEntry extends readonly [PropertyKey, unknown]>(
   const result: Record<PropertyKey, unknown> = {};
 
   for (const [key, item] of value) {
-    result[key] = item;
+    setOwn(result, key, item);
   }
 
   return result as {

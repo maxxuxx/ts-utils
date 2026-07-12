@@ -53,6 +53,7 @@ const query = compact({
 - `compact` preserves falsy business values such as empty string, `0`, and `false`.
 - `removeUndefined` preserves explicit `null` values.
 - `mergeDefaults(value, defaults)` spreads defaults first, then defined values from `value`.
+- `pick`, `removeUndefined`, `compact`, and `fromEntries` create own data properties for every key, including `__proto__`, without changing the ordinary object prototype
 
 ## Edge cases
 

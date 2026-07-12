@@ -29,6 +29,36 @@ describe("object module", () => {
     });
   });
 
+  it("creates own __proto__ properties without changing object prototypes", () => {
+    const prototypeValue = { polluted: true };
+    const source = Object.defineProperty({
+      keep: "value"
+    }, "__proto__", {
+      configurable: true,
+      enumerable  : true,
+      value       : prototypeValue,
+      writable    : true
+    }) as {
+      __proto__: typeof prototypeValue;
+      keep     : string;
+    };
+    const results = [
+      pick(source, ["__proto__"]),
+      removeUndefined(source),
+      compact(source),
+      fromEntries([["__proto__", prototypeValue]])
+    ];
+
+    for (const result of results) {
+      expect.soft(Object.prototype.hasOwnProperty.call(
+        result,
+        "__proto__"
+      )).toBe(true);
+      expect.soft(Object.getPrototypeOf(result)).toBe(Object.prototype);
+      expect.soft((result as { polluted?: unknown }).polluted).toBeUndefined();
+    }
+  });
+
   it("omits selected properties from a shallow copy", () => {
     const user = {
       email       : "haru@example.com",
