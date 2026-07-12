@@ -44,7 +44,7 @@ export const redactApiUrl = (url: string): string => {
 
 const redactAbsoluteUrl = (value: string): string | undefined => {
   const normalized = value.trimStart();
-  const isAbsolute = /^https?:\/\//i.test(normalized);
+  const isAbsolute = /^[A-Za-z][A-Za-z0-9+.-]*:/.test(normalized);
   const isNetwork  = /^[\\/]{2}/.test(normalized);
 
   if (!isAbsolute && !isNetwork) {
@@ -53,7 +53,7 @@ const redactAbsoluteUrl = (value: string): string | undefined => {
 
   try {
     const url = new URL(
-      isNetwork ? normalized.replaceAll("\\", "/") : normalized,
+      (isNetwork || isAbsolute) ? normalized.replaceAll("\\", "/") : normalized,
       isNetwork ? "https://redaction.invalid" : undefined
     );
 

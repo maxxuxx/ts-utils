@@ -144,7 +144,8 @@
     "prepare": "npm run build",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit -p tsconfig.json && npm run typecheck:variance",
+    "typecheck": "tsc --noEmit -p tsconfig.json && npm run typecheck:variance && npm run typecheck:nonstrict",
+    "typecheck:nonstrict": "tsc --noEmit -p test/fixtures/tsconfig.api-fetch-nonstrict.json",
     "typecheck:variance": "tsc --noEmit -p test/fixtures/tsconfig.sveltekit-refresh-namespace-variance.json",
     "verify:exports": "node scripts/verify-exports.mjs",
     "verify:pack": "node scripts/verify-pack.mjs"

@@ -1086,6 +1086,68 @@ describe("session module", () => {
     });
   });
 
+  it("isolates retained refresh success when a newer login reuses the refresh token", async () => {
+    let storedSession: TestSession = {
+      tokens: {
+        accessToken : "retained-generation-a-access",
+        refreshToken: "shared-retained-refresh"
+      },
+      user: {
+        id: "retained-generation-a-user"
+      }
+    };
+    const refreshTokens = vi.fn(async (
+      _refreshToken: string,
+      context: {
+        tokens: TestTokens;
+      }
+    ) => ({
+      accessToken: context.tokens.accessToken === "retained-generation-a-access"
+        ? "retained-generation-a-fresh"
+        : "retained-generation-b-fresh",
+      refreshToken: "shared-retained-refresh"
+    }));
+    const session = createTokenSession<void, TestUser, TestTokens>({
+      clear: () => {
+        storedSession = {};
+      },
+      dedupeRefresh: {
+        cacheSuccessMs: 60_000
+      },
+      read: () => storedSession,
+      refreshTokens,
+      tokenSchema: Tokens,
+      userSchema : User,
+      write: (_context, nextSession) => {
+        storedSession = nextSession;
+      }
+    });
+
+    await expect(session.refresh(undefined)).resolves.toBe("retained-generation-a-fresh");
+
+    await session.set(undefined, {
+      tokens: {
+        accessToken : "retained-generation-b-access",
+        refreshToken: "shared-retained-refresh"
+      },
+      user: {
+        id: "retained-generation-b-user"
+      }
+    });
+
+    await expect(session.refresh(undefined)).resolves.toBe("retained-generation-b-fresh");
+    expect(refreshTokens).toHaveBeenCalledTimes(2);
+    expect(storedSession).toEqual({
+      tokens: {
+        accessToken : "retained-generation-b-fresh",
+        refreshToken: "shared-retained-refresh"
+      },
+      user: {
+        id: "retained-generation-b-user"
+      }
+    });
+  });
+
   it("applies session schema transforms once per refresh boundary", async () => {
     let userParseCount  = 0;
     let tokenParseCount = 0;

@@ -36,11 +36,15 @@ export type OptionalSchema = z.ZodType | undefined;
 
 /** Input type inferred from an optional schema */
 export type SchemaInput<TSchema extends OptionalSchema> =
-  TSchema extends z.ZodType ? z.input<TSchema> : unknown;
+  [TSchema] extends [undefined]
+    ? unknown
+    : TSchema extends z.ZodType ? z.input<TSchema> : unknown;
 
 /** Output type inferred from an optional schema */
 export type SchemaOutput<TSchema extends OptionalSchema> =
-  TSchema extends z.ZodType ? z.output<TSchema> : unknown;
+  [TSchema] extends [undefined]
+    ? unknown
+    : TSchema extends z.ZodType ? z.output<TSchema> : unknown;
 
 /** Payload shape for api response */
 export type ApiResponsePayload<TData> =
@@ -167,10 +171,15 @@ export type ApiTokenHeaderFormatter = (
 
 /** Options for api auth */
 export type ApiAuthOptions = Readonly<{
-  clear               ?: () => MaybePromise<void>;
+  clear?: (
+    expectedAccessToken: string | null | undefined
+  ) => MaybePromise<void>;
   formatTokenHeader   ?: ApiTokenHeaderFormatter;
   getAccessToken       : () => MaybePromise<string | null | undefined>;
-  refresh            ?: (error: unknown) => MaybePromise<string | null | undefined>;
+  refresh            ?: (
+    error: unknown,
+    expectedAccessToken: string | null | undefined
+  ) => MaybePromise<string | null | undefined>;
   shouldRefreshOnError?: (error: unknown) => boolean;
 }>;
 
@@ -190,9 +199,11 @@ type ApiSchemaProperty<
   TSchema extends OptionalSchema
 > = ApiIsAny<TSchema> extends true
   ? { [TProperty in TKey]?: TSchema }
-  : TSchema extends z.ZodType
-    ? { [TProperty in TKey]-?: TSchema }
-    : { [TProperty in TKey]?: undefined };
+  : [TSchema] extends [undefined]
+    ? { [TProperty in TKey]?: undefined }
+    : TSchema extends z.ZodType
+      ? { [TProperty in TKey]-?: TSchema }
+      : { [TProperty in TKey]?: never };
 
 type ApiTypesEqual<TLeft, TRight> =
   (<TValue>() => TValue extends TLeft ? 1 : 2) extends
@@ -464,23 +475,11 @@ export type ApiFetcher = Readonly<{
 }>;
 
 // Endpoint types
-declare const apiEndpointType: unique symbol;
-
-type ApiEndpointTypeState<
-  TParamsSchema extends OptionalSchema,
-  TBodySchema extends OptionalSchema,
-  TResponseSchema extends OptionalSchema,
-  TResult
-> = Readonly<{
-  bodySchema    : TBodySchema;
-  paramsSchema  : TParamsSchema;
-  responseSchema: TResponseSchema;
-  result        : TResult;
-}>;
-
 /** Represents endpoint params */
 export type EndpointParams<TParamsSchema extends OptionalSchema> =
-  TParamsSchema extends z.ZodType ? z.output<TParamsSchema> : undefined;
+  [TParamsSchema] extends [undefined]
+    ? undefined
+    : TParamsSchema extends z.ZodType ? z.output<TParamsSchema> : undefined;
 
 /** Represents endpoint query */
 export type EndpointQuery<TParamsSchema extends OptionalSchema> =
@@ -518,12 +517,6 @@ export type ApiEndpoint<
   TResponseSchema extends OptionalSchema = OptionalSchema,
   TResult = ApiDefaultResponse<TResponseSchema>
 > = Readonly<{
-  [apiEndpointType]?: ApiEndpointTypeState<
-    TParamsSchema,
-    TBodySchema,
-    TResponseSchema,
-    TResult
-  >;
   method : ApiMethod;
   options: ApiEndpointOptions<
     TParamsSchema,
@@ -535,7 +528,11 @@ export type ApiEndpoint<
 }>;
 
 /** Endpoint definition with any supported schema combination */
-export type AnyApiEndpoint = ApiEndpoint<any, any, any, any>;
+export type AnyApiEndpoint = Readonly<{
+  method : ApiMethod;
+  options: any;
+  path   : string;
+}>;
 
 /** Factory signature for endpoint */
 export type EndpointFactory<TMethod extends ApiMethod> = {
@@ -647,15 +644,19 @@ export type EndpointCallOverrides = Omit<
 
 /** Path params input inferred from an endpoint schema */
 export type EndpointParamsInput<TParamsSchema extends OptionalSchema> =
-  TParamsSchema extends z.ZodType
-    ? { params: z.input<TParamsSchema> }
-    : { params?: undefined };
+  [TParamsSchema] extends [undefined]
+    ? { params?: undefined }
+    : TParamsSchema extends z.ZodType
+      ? { params: z.input<TParamsSchema> }
+      : { params?: undefined };
 
 /** Request body input inferred from an endpoint schema */
 export type EndpointBodyInput<TBodySchema extends OptionalSchema> =
-  TBodySchema extends z.ZodType
-    ? { body: z.input<TBodySchema> }
-    : { body?: undefined };
+  [TBodySchema] extends [undefined]
+    ? { body?: undefined }
+    : TBodySchema extends z.ZodType
+      ? { body: z.input<TBodySchema> }
+      : { body?: undefined };
 
 /** Input object accepted when calling an endpoint */
 export type EndpointCallInput<
@@ -667,19 +668,37 @@ export type EndpointCallInput<
 
 /** Argument tuple required to call an endpoint */
 export type EndpointCallArgs<TEndpoint extends AnyApiEndpoint> =
-  NonNullable<TEndpoint[typeof apiEndpointType]> extends ApiEndpointTypeState<
-    infer TParamsSchema,
-    infer TBodySchema,
-    any,
-    any
-  >
-    ? TParamsSchema extends z.ZodType
-      ? [input: EndpointCallInput<TParamsSchema, TBodySchema>]
-      : TBodySchema extends z.ZodType
-        ? [input: EndpointCallInput<TParamsSchema, TBodySchema>]
-        : [input?: EndpointCallInput<TParamsSchema, TBodySchema>]
-    : never;
+  [EndpointParamsSchema<TEndpoint>] extends [undefined]
+    ? [EndpointBodySchema<TEndpoint>] extends [undefined]
+      ? [input?: EndpointCallInput<undefined, undefined>]
+      : [input: EndpointCallInput<undefined, EndpointBodySchema<TEndpoint>>]
+    : [input: EndpointCallInput<
+      EndpointParamsSchema<TEndpoint>,
+      EndpointBodySchema<TEndpoint>
+    >];
 
 /** Result returned by endpoint */
 export type EndpointResult<TEndpoint extends AnyApiEndpoint> =
-  NonNullable<TEndpoint[typeof apiEndpointType]>["result"];
+  TEndpoint["options"] extends {
+    select: (...args: any[]) => infer TResult;
+  }
+    ? TResult
+    : EndpointResponseSchema<TEndpoint> extends z.ZodType
+      ? ApiDefaultResponse<EndpointResponseSchema<TEndpoint>>
+      : ApiDefaultResponse<undefined>;
+
+type EndpointOptionSchema<
+  TEndpoint extends AnyApiEndpoint,
+  TKey extends "bodySchema" | "params" | "responseSchema"
+> = TEndpoint["options"] extends Record<TKey, infer TSchema>
+  ? TSchema extends z.ZodType ? TSchema : undefined
+  : undefined;
+
+type EndpointParamsSchema<TEndpoint extends AnyApiEndpoint> =
+  EndpointOptionSchema<TEndpoint, "params">;
+
+type EndpointBodySchema<TEndpoint extends AnyApiEndpoint> =
+  EndpointOptionSchema<TEndpoint, "bodySchema">;
+
+type EndpointResponseSchema<TEndpoint extends AnyApiEndpoint> =
+  EndpointOptionSchema<TEndpoint, "responseSchema">;

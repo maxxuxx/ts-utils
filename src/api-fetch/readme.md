@@ -154,6 +154,8 @@ Create the typed namespace handle once outside fetcher construction, then reuse 
 
 Different handles remain isolated even when their result types and refresh keys match, and one handle cannot be supplied with an incompatible refresh result contract
 
+The namespace result type is invariant even for consumers that disable `strictFunctionTypes`; the compile fixture checks both subtype assignment directions
+
 Adapter sharing retains only in-flight work and does not cache successful refresh results or partition flights by cache duration
 
 When the namespace handle is omitted, refresh single-flight state stays local to that adapter instance
@@ -171,6 +173,8 @@ Set `dedupeRefresh: false` only when `refresh` directly updates its cookie conte
 - `responseSchema` validates the parsed response body and throws `ApiValidationError` for invalid responses.
 - Without `responseSchema`, the default `response` payload is `unknown`; use a runtime `select` callback when a custom result type is needed without a schema
 - Explicit body, response, params, and endpoint result generics cannot replace their runtime `bodySchema`, `responseSchema`, `params`, or `select` contracts
+- Endpoint call and result inference is derived from the runtime `options.params`, `bodySchema`, `responseSchema`, and `select` fields, including structurally declared values made with `satisfies ApiEndpoint`
+- Schema-free method and endpoint selectors support `strictNullChecks: false` consumers without requiring placeholder schemas
 - The default result shape is `{ code, message?, response }`. Response envelopes with `data` are unwrapped when possible.
 - `serverTime: true` creates an internal clock exposed as `api.serverTime`; `serverTime.clock` records into a caller-owned clock.
 - Client-level hooks run before request-level hooks. Logging is implemented as hooks, so custom hooks can be composed with logging.
@@ -178,19 +182,26 @@ Set `dedupeRefresh: false` only when `refresh` directly updates its cookie conte
 ## Edge cases
 
 - Auth refresh is attempted for 401 and 419 by default and shares one in-flight refresh per failed access-token value
+- One fully resolved URL, including query, is snapshotted before auth work and reused for trust classification and every network/auth retry
+- Access tokens are resolved after body preparation and request hooks, immediately before every network attempt
 - A login generation using a different current access token does not join or retry with an older refresh result
 - Every caller observes its own abort signal while waiting for shared refresh work; aborting one caller does not cancel the shared refresh
-- Refresh results must be non-empty, control-character-free strings; unusable values enter terminal auth handling without a retry
+- Initial token lookup also observes caller abort, and terminal best-effort clear never delays the primary `ApiAuthError`
+- Refresh and access tokens must be non-empty, control-character-free, HTTP-header-safe strings; unusable values enter terminal auth handling without a fetch or retry
 - SvelteKit adapter dedupe requires `applyRefresh`; failed or empty shared results are not retained
 - A shared typed SvelteKit namespace handle uses one in-flight runner, so the same stable key shares work without cache configuration
 - A SvelteKit `applyRefresh` failure clears only that request's cookie context through terminal auth handling
+- SvelteKit rechecks the captured token generation before `applyRefresh`; a newer login is returned unchanged instead of being overwritten by a stale shared result
 - Auth is sent only to relative requests, the client `baseURL` origin, and explicit `allowedOrigins`; a request-level `baseURL` is never an implicit trust anchor
 - Untrusted requests remove merged `Authorization` and `Proxy-Authorization` headers from client, endpoint, and request configuration
-- Auth responses without refresh, non-replayable auth requests, and exhausted refresh clear the session best effort and throw `ApiAuthError`
+- Explicit `Authorization` or `Proxy-Authorization` opts that request out of configured token lookup; its 401/419 response does not refresh or clear the configured bearer session
+- Auth responses without refresh, non-replayable auth requests, and exhausted refresh throw `ApiAuthError` and schedule generation-aware best-effort clear only when the current token still matches the failed credential
+- `clear(expectedAccessToken)` and SvelteKit `applyRefresh(cookies, result, expectedAccessToken)` receive the expected generation so application adapters can implement compare-and-set behavior; callbacks that ignore the extra argument remain valid
+- Core `refresh(error, expectedAccessToken)` also receives the credential generation that failed
 - Retries default to GET, one shared request budget, `Retry-After` support, fixed delay, and no jitter; configure write methods explicitly
 - Observed caller abort throws `ApiAbortError`; deadline expiry throws `ApiTimeoutError`; retry delay always observes the caller signal
 - Custom fetch implementations must reject or otherwise observe the caller signal during active work
-- HTTP errors may retain a server code but never retain raw bodies, responses, headers, parse text, validation inputs, URL userinfo, query strings, fragments, or upstream messages
+- HTTP errors may retain a server code but never retain raw bodies, responses, headers, parse text, validation inputs, userinfo from any parseable hierarchical URL form (including HTTP, FTP, WebSocket, backslash, and omitted-separator forms), query strings, fragments, or upstream messages
 - `ApiAuthError.cause` is a sanitized `HTTP_FAILURE` or `AUTH_CALLBACK_FAILURE` descriptor and never retains an auth callback error object or message
 - `errorFallback.message` is the configured safe HTTP error message, not an upstream-message fallback; upstream messages are always ignored
 - Without a configured safe message, HTTP errors use the generic request failure

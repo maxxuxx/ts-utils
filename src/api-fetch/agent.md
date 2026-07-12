@@ -72,6 +72,10 @@ Schema-free calls expose an `unknown` response payload. Public method and endpoi
 
 Do not let manually constructed `ApiEndpoint` values claim a non-default `TResult` without a runtime `select` function
 
+Derive endpoint call inputs and results structurally from `options.params`, `bodySchema`, `responseSchema`, and `select`; do not add opaque or optional phantom properties that disappear from `satisfies ApiEndpoint` literals
+
+Optional-schema conditional types must test exact `undefined` before checking `z.ZodType` so schema-free selectors remain usable with `strictNullChecks: false`
+
 `errorFallback.code` fills a missing server code while `errorFallback.message` is the configured safe error message because upstream messages are always ignored
 
 Endpoint definitions use `endpoint.get("/users/:id", { params, responseSchema })` so route declarations read like HTTP routes
@@ -86,6 +90,8 @@ Auth headers are attached only to relative requests, the client-level `baseURL` 
 
 A request-level `baseURL` resolves the URL but never expands the implicit auth trust boundary. Strip merged `Authorization` and `Proxy-Authorization` headers from every untrusted request, including client, endpoint, and request header sources
 
+Snapshot one exact fully resolved URL, including query, before auth work. Trust classification, public context, general retry, and auth retry must all use that same string without re-reading client or request `baseURL`
+
 Public error contexts remove URL userinfo, query strings, and fragments from both `context.path` and `context.url`
 
 HTTP, parse, and validation errors must not retain raw response bodies, response objects, headers, parse text, or validation input bodies
@@ -96,17 +102,27 @@ Use `formatTokenHeader` when a project sends the access token through a differen
 
 Refresh retry happens once after `401` or `419` by default
 
-Missing refresh callbacks, non-replayable auth requests, refresh throw, empty refresh results, and a second auth response clear the session on a best-effort basis and throw `ApiAuthError`
+Resolve configured access tokens after awaited body preparation and request hooks, immediately before every network attempt. Record whether formatted auth headers were actually merged and the exact token generation used
+
+Explicit `Authorization` or `Proxy-Authorization` values opt the request out of configured token lookup. Keep their precedence and do not classify the resulting 401/419 as a configured bearer failure
+
+Missing refresh callbacks, non-replayable auth requests, refresh throw, empty refresh results, and a second auth response throw `ApiAuthError`. Schedule clear without awaiting it, re-read the current generation first, and call `clear(expectedAccessToken)` only when it still matches
 
 Concurrent refresh calls are deduped per fetcher and failed access-token value. Re-read and normalize the current access token after refresh so a newer login generation wins over stale results
 
+Pass the failed credential into `refresh(error, expectedAccessToken)` so adapters can capture the exact generation instead of re-reading it after the failure
+
 Each caller races its refresh wait against its own signal without cancelling shared work. Only abort errors created from that observed caller signal may escape as `ApiAbortError`
 
-Refresh and access-token callbacks must produce non-empty control-character-free strings. Auth callback failures use the sanitized `AUTH_CALLBACK_FAILURE` cause descriptor; internal HTTP auth failures use a cloned `HTTP_FAILURE` descriptor without retaining messages, bodies, headers, or callback-owned objects
+Initial and retry token lookup also race the caller signal. A pending getter or fire-and-forget best-effort clear must never hide the primary abort or auth error
+
+Refresh and access-token callbacks must produce non-empty, control-character-free, HTTP-header-safe strings. Auth callback failures use the sanitized `AUTH_CALLBACK_FAILURE` cause descriptor; internal HTTP auth failures use a cloned `HTTP_FAILURE` descriptor without retaining messages, bodies, headers, or callback-owned objects
 
 The SvelteKit adapter separates shared refresh result creation from cookie-context persistence through `refresh` and `applyRefresh`
 
 Adapter dedupe requires `applyRefresh`; every fetcher participant applies the shared result to its own cookies before retrying
+
+Capture the failed token generation for every SvelteKit refresh participant and re-read it before applying a shared result. Return a newer token unchanged and pass the expected generation into `applyRefresh` and `clear` for adapter-level compare-and-set
 
 Use one stable handle from `createSvelteKitRefreshNamespace<TRefresh>()` plus a stable `getRefreshKey` when different SvelteKit fetcher instances should share refresh work
 

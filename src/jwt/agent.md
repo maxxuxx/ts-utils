@@ -33,7 +33,9 @@ This module only decodes JWT segments. Do not add signature verification, issuer
 
 Custom claim and header typing requires `JwtSchema<TValue>` through the `WithSchema` functions. Schema parsing runs after strict segment decoding and failures are wrapped in `JwtDecodeError` by safe functions
 
-`JwtSchema` output must be a plain record at both the type and runtime boundaries. Reject arrays, `Date`, class instances, `null`, and any other non-plain prototype; accept normal objects and null-prototype records
+`JwtSchema<TValue>` accepts object output types, including ordinary interfaces, without requiring a string index signature or `JwtObject` inheritance
+
+Schema output must be a plain record at runtime. Reject arrays, `Date`, class instances, `null`, and any other non-plain prototype; accept normal objects and null-prototype records
 
 The attached `token` field is reserved and always contains the original JWT string. Keep `JwtPayloadWithToken<T>` defined with `Omit<T, "token"> & { token: string }` so schema collisions remain type-safe
 

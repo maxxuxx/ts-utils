@@ -142,6 +142,8 @@ typed namespace handle은 fetcher construction 밖에서 한 번 만들고 refre
 
 서로 다른 handle은 result type과 refresh key가 같아도 격리되며 하나의 handle에는 호환되지 않는 refresh result contract를 지정할 수 없습니다
 
+namespace result type은 `strictFunctionTypes`를 끈 consumer에서도 invariant이며 compile fixture가 subtype 양방향 할당을 모두 검증합니다
+
 adapter sharing은 in-flight work만 유지하며 successful refresh result를 cache하거나 cache duration별로 flight를 분리하지 않습니다
 
 namespace handle을 생략하면 refresh single-flight state는 해당 adapter instance 안에만 유지됩니다
@@ -159,6 +161,8 @@ namespace handle을 생략하면 refresh single-flight state는 해당 adapter i
 - `responseSchema`가 실패하면 response validation error가 발생합니다.
 - `responseSchema`가 없으면 기본 `response` payload type은 `unknown`이며 schema 없이 custom result가 필요하면 runtime `select` callback을 사용합니다
 - body, response, params, endpoint result generic은 runtime `bodySchema`, `responseSchema`, `params`, `select` contract를 대신할 수 없습니다
+- endpoint call/result inference는 runtime `options.params`, `bodySchema`, `responseSchema`, `select` field에서 계산하므로 `satisfies ApiEndpoint`로 선언한 structural value도 지원합니다
+- schema-free method/endpoint selector는 placeholder schema 없이 `strictNullChecks: false` consumer에서도 동작합니다
 - 기본 성공 결과는 `{ code, message?, response }` 형태입니다.
 - `serverTime: true`는 내부 clock을 만들고 `api.serverTime`으로 노출합니다. `serverTime.clock`은 호출자가 소유한 clock에 기록합니다.
 - logging은 hook으로 구현되어 custom hook과 조합할 수 있습니다.
@@ -166,19 +170,26 @@ namespace handle을 생략하면 refresh single-flight state는 해당 adapter i
 ## 주의할 점
 
 - 기본 auth refresh 대상은 401과 419이며, 실패한 access-token 값마다 하나의 in-flight refresh를 공유합니다
+- query를 포함해 완전히 resolve한 URL 하나를 auth 작업 전에 snapshot하고 trust 분류와 모든 network/auth retry에서 재사용합니다
+- access token은 body 준비와 request hook 이후 각 network attempt 직전에 다시 resolve합니다
 - 현재 access token이 달라진 새 login generation은 이전 refresh에 합류하거나 이전 결과로 retry하지 않습니다
 - shared refresh를 기다리는 각 caller는 자신의 abort signal을 관찰하며 한 caller의 abort가 shared refresh를 취소하지 않습니다
-- refresh 결과는 비어 있지 않고 control character가 없는 string이어야 하며 사용할 수 없는 값은 retry 없이 terminal auth 처리됩니다
+- 초기 token 조회도 caller abort를 관찰하며 terminal best-effort clear는 primary `ApiAuthError`를 지연시키지 않습니다
+- refresh/access token은 비어 있지 않고 control character가 없으며 HTTP header에 안전한 string이어야 하고 사용할 수 없는 값은 fetch/retry 없이 terminal auth 처리됩니다
 - SvelteKit adapter dedupe에는 `applyRefresh`가 필요하며 실패하거나 비어 있는 shared result는 유지하지 않습니다
 - shared typed SvelteKit namespace handle은 하나의 in-flight runner를 사용하므로 같은 stable key는 cache configuration 없이 work를 공유합니다
 - SvelteKit `applyRefresh` 실패는 terminal auth 처리에서 해당 request의 cookie context만 clear합니다
+- SvelteKit은 `applyRefresh` 전에 capture한 token generation을 다시 확인하며 새 login이 있으면 stale shared result를 적용하지 않고 현재 token을 반환합니다
 - auth는 relative request, client `baseURL` origin, 명시한 `allowedOrigins`에만 전송하며 request-level `baseURL`은 implicit trust anchor가 아닙니다
 - untrusted request에서는 client, endpoint, request 설정에서 합쳐진 `Authorization`, `Proxy-Authorization` header를 제거합니다
-- refresh callback이 없거나 auth request를 재생할 수 없거나 refresh가 소진되면 session을 best effort로 clear하고 `ApiAuthError`를 throw합니다
+- explicit `Authorization` 또는 `Proxy-Authorization`이 있으면 그 요청은 configured token lookup을 건너뛰며, 401/419도 configured bearer session을 refresh/clear하지 않습니다
+- refresh callback이 없거나 auth request를 재생할 수 없거나 refresh가 소진되면 `ApiAuthError`를 throw하고 현재 token이 실패 credential과 같은 generation일 때만 generation-aware best-effort clear를 예약합니다
+- `clear(expectedAccessToken)`과 SvelteKit `applyRefresh(cookies, result, expectedAccessToken)`은 adapter가 compare-and-set을 구현하도록 expected generation을 받으며 추가 argument를 무시하는 기존 callback도 계속 사용할 수 있습니다
+- core `refresh(error, expectedAccessToken)`도 실패한 credential generation을 받습니다
 - retry는 GET, 요청 전체에서 하나의 budget, `Retry-After`, fixed delay, jitter 없음이 기본이며 write method는 명시해야 합니다
 - 관찰된 caller abort는 `ApiAbortError`, deadline 만료는 `ApiTimeoutError`이며 retry delay는 항상 caller signal을 관찰합니다
 - custom fetch 구현은 active work 중 caller signal을 직접 관찰하거나 reject해야 합니다
-- HTTP error는 server code만 보존할 수 있고 raw body, response, header, parse text, validation input, URL userinfo, query, fragment, upstream message는 보존하지 않습니다
+- HTTP error는 server code만 보존할 수 있고 raw body, response, header, parse text, validation input, HTTP/FTP/WebSocket, backslash 및 separator 생략 형식을 포함해 parse 가능한 모든 hierarchical URL userinfo, query, fragment, upstream message는 보존하지 않습니다
 - `ApiAuthError.cause`는 정제된 `HTTP_FAILURE` 또는 `AUTH_CALLBACK_FAILURE` descriptor이며 auth callback error object나 message를 보존하지 않습니다
 - `errorFallback.message`는 upstream message가 없을 때만 쓰는 fallback이 아니라 항상 사용하는 configured safe HTTP error message입니다
 - configured safe message가 없으면 generic request failure를 사용하고 upstream message는 항상 무시합니다

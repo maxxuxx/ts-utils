@@ -217,11 +217,11 @@ The same rule applies to `decodeJwtHeaderWithSchema` and `safeDecodeJwtHeaderWit
 
 JWT segments now use strict base64url and fatal UTF-8 decoding
 
-Schema-backed JWT decoders now require schemas to return plain records; arrays, `Date`, class instances, and `null` fail through the normal decode failure shape
+Schema-backed JWT decoders now require schemas to return plain records at runtime; arrays, `Date`, class instances, and `null` fail through the normal decode failure shape
 
 The attached `token` field is reserved and always contains the original JWT string, even when a payload schema returns its own `token` claim
 
-Use Zod object outputs or object type aliases for `JwtSchema<T>`; an interface must explicitly extend `JwtObject`
+Use Zod object outputs, object type aliases, or ordinary interfaces for `JwtSchema<T>`; interfaces do not need to extend `JwtObject` or declare a string index signature
 
 Invalid alphabet, misplaced or non-canonical padding, impossible lengths, and invalid UTF-8 return the normal null or `JwtDecodeError` failure shape
 
@@ -258,6 +258,10 @@ const selected = await api.get("/health", {
 ```
 
 Explicit schema generics also require their matching runtime `bodySchema`, `responseSchema`, or endpoint `params` field, and a custom endpoint result requires `select`
+
+Endpoint call arguments and results are inferred structurally from `options.params`, `bodySchema`, `responseSchema`, and `select`, so object literals declared with `satisfies ApiEndpoint` no longer depend on an internal phantom property
+
+Schema-free selectors and explicit `undefined` schemas now compile with `strictNullChecks: false`
 
 ## SvelteKit refresh sharing applies results per cookie context
 
@@ -324,6 +328,10 @@ The namespace type uses explicit `in out` variance, so consumers need a TypeScri
 
 Set `dedupeRefresh: false` only when `refresh` directly updates its own cookie context and returns the next access token
 
+Before applying a shared result, the adapter re-reads the token captured for that participant. If a newer login is present, it returns the current token without calling stale `applyRefresh`
+
+`applyRefresh` and `clear` receive the expected access token as an additional final argument for compare-and-set implementations; existing callbacks may ignore it
+
 ## Auth headers are origin-constrained
 
 Auth is sent only to relative requests, the configured `baseURL` origin, and explicit `allowedOrigins`
@@ -365,17 +373,27 @@ Only the client-level `baseURL` is an implicit trusted origin. A request-level `
 
 Untrusted requests remove merged `Authorization` and `Proxy-Authorization` headers even when those headers came from client, endpoint, or request configuration
 
+The fully resolved URL, including query, is snapshotted once before auth work and reused for classification and every fetch retry, so mutable `baseURL` accessors cannot change the destination after the trust decision
+
+Access tokens are resolved after body preparation and request hooks, immediately before every network attempt, and the initial lookup observes caller abort
+
+Explicit `Authorization` or `Proxy-Authorization` headers retain precedence and opt that request out of configured token lookup. Their 401/419 does not refresh or clear the bearer session
+
 Refresh sharing is keyed by the failed access-token value. After refresh, the client re-reads the current token so a newer login generation wins, and each caller can abort its own wait without cancelling shared work
 
-Refresh results must be non-empty, control-character-free strings; invalid runtime values clear best effort and throw `ApiAuthError` without a retry
+Refresh and access-token results must be non-empty, control-character-free, HTTP-header-safe strings; invalid runtime values throw a sanitized `ApiAuthError` without fetching or retrying. Hierarchical URL userinfo redaction also covers HTTP, FTP, WebSocket, backslash, and omitted-separator forms accepted by the URL parser
+
+Terminal clear is generation-aware and fire-and-forget: the primary error settles immediately, the client re-reads the current token, and `clear(expectedAccessToken)` runs only when it still matches the failed credential
+
+Core `refresh(error, expectedAccessToken)` receives the failed credential generation as its second argument; existing one-argument callbacks remain compatible
 
 ## API errors are normalized and redacted
 
-Public API errors no longer retain raw response bodies, response objects, headers, parse text, validation inputs, upstream messages, query strings, or fragments
+Public API errors no longer retain raw response bodies, response objects, headers, parse text, validation inputs, upstream messages, hierarchical URL userinfo (including FTP and WebSocket URLs), query strings, or fragments
 
 The removed fields include `ApiHttpError.body`, `ApiHttpError.response`, `ApiHttpError.statusText`, `ApiValidationError.body`, `ApiValidationError.validationError`, and `ApiParseError.text`
 
-Terminal auth failures clear best effort and throw `ApiAuthError`
+Terminal auth failures throw `ApiAuthError` immediately and schedule generation-aware best-effort clear without awaiting a potentially stalled getter or clear callback
 
 Observed caller cancellation throws `ApiAbortError`, while deadlines still throw `ApiTimeoutError`
 
@@ -562,7 +580,7 @@ Review these changes if the application relied on permissive coercion or invalid
 - `createCookieDeviceUuidStore` rejects `SameSite=None` when `secure` is false
 - URL query helpers preserve the complete fragment after the first `#`
 - `isPrimitive` includes JavaScript primitive values such as `NaN` and `0n`
-- Core session refresh sharing is controller-local and keyed by the exact raw access-token and refresh-token pair
+- Core session refresh sharing is controller-local and keys both pending and retained successful work by the exact raw access-token and refresh-token pair, so a newer login with a different access token never joins an older generation that reused the same refresh token
 - Object contexts must reuse identity when their session mutations need to share one serialization queue
 
 ## New public helpers

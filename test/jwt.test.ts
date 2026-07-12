@@ -25,6 +25,11 @@ type TestClaims = {
   sub: string;
 };
 
+interface InterfaceClaims {
+  exp: number;
+  role: string;
+}
+
 const readRecord = (value: unknown): Record<string, unknown> => {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new TypeError("object required");
@@ -56,6 +61,21 @@ const testClaimsSchema = {
     };
   }
 } satisfies JwtSchema<TestClaims>;
+
+const interfaceClaimsSchema = {
+  parse(value: unknown): InterfaceClaims {
+    const record = readRecord(value);
+
+    if (typeof record.exp !== "number" || typeof record.role !== "string") {
+      throw new TypeError("interface claims required");
+    }
+
+    return {
+      exp : record.exp,
+      role: record.role
+    };
+  }
+} satisfies JwtSchema<InterfaceClaims>;
 
 const roleSchema = {
   parse(value: unknown) {
@@ -103,6 +123,21 @@ const createToken = (payload: unknown, header: unknown = {
 );
 
 describe("jwt module", () => {
+  it("accepts ordinary interfaces as schema outputs", () => {
+    const token = createToken({
+      exp : 2_000_000_000,
+      role: "admin"
+    });
+    const claims = decodeJwtWithSchema(token, interfaceClaimsSchema);
+
+    expect(claims).toEqual({
+      exp : 2_000_000_000,
+      role: "admin",
+      token
+    });
+    expectTypeOf(claims).toEqualTypeOf<JwtPayloadWithToken<InterfaceClaims> | null>();
+  });
+
   it("decodes JWT payload claims and preserves the original token", () => {
     const token = createToken({
       aud  : "paytech-delivery",
@@ -218,18 +253,15 @@ describe("jwt module", () => {
     expect(safeDecodeJwtHeaderWithSchema(token, schema).ok).toBe(false);
   });
 
-  it("restricts JWT schema output contracts to record types", () => {
+  it("restricts JWT schema output contracts to object types", () => {
     if (false) {
-      // @ts-expect-error payload schemas cannot produce arrays
-      type ArraySchema = JwtSchema<string[]>;
-      // @ts-expect-error payload schemas cannot produce Date instances
-      type DateSchema = JwtSchema<Date>;
       // @ts-expect-error payload schemas cannot produce null
       type NullSchema = JwtSchema<null>;
+      // @ts-expect-error payload schemas cannot produce strings
+      type StringSchema = JwtSchema<string>;
 
-      expectTypeOf<ArraySchema>();
-      expectTypeOf<DateSchema>();
       expectTypeOf<NullSchema>();
+      expectTypeOf<StringSchema>();
     }
   });
 

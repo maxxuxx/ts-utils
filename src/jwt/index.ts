@@ -21,13 +21,13 @@ export type JwtPayload = JwtObject & {
 };
 
 /** Represents jwt payload with token */
-export type JwtPayloadWithToken<TPayload extends JwtObject = JwtPayload> =
+export type JwtPayloadWithToken<TPayload extends object = JwtPayload> =
   Omit<TPayload, "token"> & {
     token: string;
   };
 
-/** Schema contract used to validate decoded jwt values */
-export type JwtSchema<TValue extends JwtObject> = Readonly<{
+/** Schema contract used to validate decoded jwt object values */
+export type JwtSchema<TValue extends object> = Readonly<{
   parse: (value: unknown) => TValue;
 }>;
 
@@ -85,7 +85,7 @@ export const safeDecodeJwt = (
 };
 
 /** Decodes and validates jwt payload claims with a schema */
-export const decodeJwtWithSchema = <TPayload extends JwtObject>(
+export const decodeJwtWithSchema = <TPayload extends object>(
   token: string,
   schema: JwtSchema<TPayload>
 ): JwtPayloadWithToken<TPayload> | null => {
@@ -95,7 +95,7 @@ export const decodeJwtWithSchema = <TPayload extends JwtObject>(
 };
 
 /** Safely decodes and validates jwt payload claims with a schema */
-export const safeDecodeJwtWithSchema = <TPayload extends JwtObject>(
+export const safeDecodeJwtWithSchema = <TPayload extends object>(
   token: string | null | undefined,
   schema: JwtSchema<TPayload>
 ): JwtResult<JwtPayloadWithToken<TPayload>, JwtDecodeError> => {
@@ -134,7 +134,7 @@ export const safeDecodeJwtHeader = (
 };
 
 /** Decodes and validates a jwt header with a schema */
-export const decodeJwtHeaderWithSchema = <THeader extends JwtObject>(
+export const decodeJwtHeaderWithSchema = <THeader extends object>(
   token: string,
   schema: JwtSchema<THeader>
 ): THeader | null => {
@@ -144,7 +144,7 @@ export const decodeJwtHeaderWithSchema = <THeader extends JwtObject>(
 };
 
 /** Safely decodes and validates a jwt header with a schema */
-export const safeDecodeJwtHeaderWithSchema = <THeader extends JwtObject>(
+export const safeDecodeJwtHeaderWithSchema = <THeader extends object>(
   token: string | null | undefined,
   schema: JwtSchema<THeader>
 ): JwtResult<THeader, JwtDecodeError> => {
@@ -206,7 +206,7 @@ const decodeJwtSegment = (segment: string): JwtObject => {
   return value;
 };
 
-const readPlainJwtObject = <TValue extends JwtObject>(value: TValue): TValue => {
+const readPlainJwtObject = <TValue extends object>(value: TValue): TValue => {
   if (!isPlainJwtObject(value)) {
     throw new TypeError("JWT schema must return a plain record");
   }

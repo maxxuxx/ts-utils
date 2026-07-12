@@ -23,7 +23,10 @@ export type SvelteKitRefreshNamespace<in out TRefresh> = {
 };
 
 type SvelteKitApiAuthBaseOptions<TCookies> = Readonly<{
-  clear               ?: (cookies: TCookies) => MaybePromise<void>;
+  clear               ?: (
+    cookies: TCookies,
+    expectedAccessToken: string | null | undefined
+  ) => MaybePromise<void>;
   formatTokenHeader   ?: ApiAuthOptions["formatTokenHeader"];
   getAccessToken       : (cookies: TCookies) => MaybePromise<string | null | undefined>;
   shouldRefreshOnError?: ApiAuthOptions["shouldRefreshOnError"];
@@ -42,7 +45,8 @@ export type SvelteKitRefreshAuthOptions<TCookies, TRefresh> =
   SvelteKitApiAuthBaseOptions<TCookies> & Readonly<{
     applyRefresh: (
       cookies: TCookies,
-      result: TRefresh
+      result: TRefresh,
+      expectedAccessToken: string | null | undefined
     ) => MaybePromise<string | null | undefined>;
     getRefreshKey?: (
       cookies: TCookies,
@@ -122,16 +126,25 @@ export const createApiFetcher = <TCookies, TRefresh = string>(
     ...apiOptions,
     auth: auth ? {
       clear: auth.clear
-        ? () => auth.clear?.(cookies)
+        ? async (expectedAccessToken) => {
+          const currentAccessToken = await auth.getAccessToken(cookies);
+
+          if (!isSameTokenGeneration(currentAccessToken, expectedAccessToken)) {
+            return;
+          }
+
+          await auth.clear?.(cookies, expectedAccessToken);
+        }
         : undefined,
       formatTokenHeader: auth.formatTokenHeader,
       getAccessToken: () => auth.getAccessToken(cookies),
       refresh: auth.refresh
-        ? (error) => refreshWithDedupe({
+        ? (error, expectedAccessToken) => refreshWithDedupe({
           auth,
           cookies,
           dedupeRefresh,
           error,
+          expectedAccessToken,
           refreshSingleFlight
         })
         : undefined,
@@ -148,16 +161,24 @@ async function refreshWithDedupe<TCookies, TRefresh>({
   cookies,
   dedupeRefresh,
   error,
+  expectedAccessToken,
   refreshSingleFlight
 }: Readonly<{
   auth               : SvelteKitApiAuthOptions<TCookies, TRefresh>;
   cookies            : TCookies;
   dedupeRefresh      : SvelteKitApiFetcherOptions<TCookies, TRefresh>["dedupeRefresh"];
   error              : unknown;
+  expectedAccessToken: string | null | undefined;
   refreshSingleFlight: SingleFlight<string, TRefresh> | undefined;
 }>): Promise<string | null | undefined> {
   if (!auth.refresh) {
     return null;
+  }
+
+  const currentAccessToken = await auth.getAccessToken(cookies);
+
+  if (!isSameTokenGeneration(currentAccessToken, expectedAccessToken)) {
+    return currentAccessToken;
   }
 
   if (dedupeRefresh === false) {
@@ -179,7 +200,12 @@ async function refreshWithDedupe<TCookies, TRefresh>({
       return result;
     }
 
-    return auth.applyRefresh(cookies, result as TRefresh);
+    return applyRefreshIfCurrent(
+      auth,
+      cookies,
+      result as TRefresh,
+      expectedAccessToken
+    );
   }
 
   const applyRefresh = auth.applyRefresh;
@@ -188,10 +214,9 @@ async function refreshWithDedupe<TCookies, TRefresh>({
     throw new TypeError("applyRefresh is required when SvelteKit refresh dedupe is enabled");
   }
 
-  const accessToken = await auth.getAccessToken(cookies);
   const refreshKey = auth.getRefreshKey
-    ? await auth.getRefreshKey(cookies, accessToken)
-    : accessToken;
+    ? await auth.getRefreshKey(cookies, expectedAccessToken)
+    : expectedAccessToken;
 
   if (!refreshKey || !refreshSingleFlight) {
     const result = await auth.refresh(cookies, error);
@@ -204,7 +229,12 @@ async function refreshWithDedupe<TCookies, TRefresh>({
       return undefined;
     }
 
-    return applyRefresh(cookies, result as TRefresh);
+    return applyRefreshIfCurrent(
+      auth,
+      cookies,
+      result as TRefresh,
+      expectedAccessToken
+    );
   }
 
   const result = await runRefreshOnce(
@@ -215,7 +245,41 @@ async function refreshWithDedupe<TCookies, TRefresh>({
 
   return result === null
     ? null
-    : applyRefresh(cookies, result);
+    : applyRefreshIfCurrent(
+      auth,
+      cookies,
+      result,
+      expectedAccessToken
+    );
+}
+
+async function applyRefreshIfCurrent<TCookies, TRefresh>(
+  auth: SvelteKitRefreshAuthOptions<TCookies, TRefresh>,
+  cookies: TCookies,
+  result: TRefresh,
+  expectedAccessToken: string | null | undefined
+): Promise<string | null | undefined> {
+  const currentAccessToken = await auth.getAccessToken(cookies);
+
+  if (!isSameTokenGeneration(currentAccessToken, expectedAccessToken)) {
+    return currentAccessToken;
+  }
+
+  return auth.applyRefresh(cookies, result, expectedAccessToken);
+}
+
+function isSameTokenGeneration(
+  currentAccessToken: string | null | undefined,
+  expectedAccessToken: string | null | undefined
+): boolean {
+  const current = typeof currentAccessToken === "string"
+    ? currentAccessToken.trim()
+    : currentAccessToken;
+  const expected = typeof expectedAccessToken === "string"
+    ? expectedAccessToken.trim()
+    : expectedAccessToken;
+
+  return current === expected;
 }
 
 function resolveRefreshSingleFlight<TRefresh>(

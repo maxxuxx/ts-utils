@@ -35,31 +35,46 @@ export const buildHeaders = (
   accessToken: string | undefined,
   isJsonBody: boolean,
   formatTokenHeader: ApiTokenHeaderFormatter = defaultFormatTokenHeader
-): Headers => {
+): Readonly<{
+  authApplied: boolean;
+  headers    : Headers;
+}> => {
   const nextHeaders = new Headers(headers);
+  let authApplied    = false;
 
   if (isJsonBody && !nextHeaders.has("Content-Type")) {
     nextHeaders.set("Content-Type", "application/json");
   }
 
   if (accessToken) {
-    mergeMissingHeaders(nextHeaders, formatTokenHeader(accessToken) ?? undefined);
+    authApplied = mergeMissingHeaders(
+      nextHeaders,
+      formatTokenHeader(accessToken) ?? undefined
+    );
   }
 
-  return nextHeaders;
+  return {
+    authApplied,
+    headers: nextHeaders
+  };
 };
 
 const mergeMissingHeaders = (
   target: Headers,
   source: ApiHeadersInit | undefined
-): void => {
+): boolean => {
   if (!source) {
-    return;
+    return false;
   }
+
+  let merged = false;
 
   new Headers(source).forEach((value, key) => {
     if (!target.has(key)) {
       target.set(key, value);
+      merged = true;
     }
   });
+
+  return merged;
 };
