@@ -30,7 +30,6 @@ pnpm-debug.log*
 .cache
 .turbo
 .vite
-.vitest
 .eslintcache
 
 # Editor and OS files

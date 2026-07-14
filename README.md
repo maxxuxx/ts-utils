@@ -1,12 +1,14 @@
 # ts-utils
 
+[![CI](https://github.com/maxxuxx/ts-utils/actions/workflows/ci.yml/badge.svg)](https://github.com/maxxuxx/ts-utils/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/@maxxuxx/ts-utils.svg)](https://www.npmjs.com/package/@maxxuxx/ts-utils)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
-[한국어](./docs/readme.kr.md)
+[한국어](./docs/readme.kr.md) · [0.8 migration guide](./docs/migration-0.8.md)
 
-[0.8 migration guide](./docs/migration-0.8.md)
+**TypeScript utility modules for common application development.**
 
-Shared TypeScript utilities for projects that need small reusable runtime helpers
+Reusable helpers for API clients, runtime validation, sessions, async control flow, data conversion, formatting, and other everyday TypeScript tasks.
 
 ## Install
 
@@ -14,21 +16,64 @@ Shared TypeScript utilities for projects that need small reusable runtime helper
 npm install @maxxuxx/ts-utils
 ```
 
-GitHub install is also supported
+Or install directly from GitHub:
 
 ```bash
 npm install github:maxxuxx/ts-utils
 ```
 
-## Import style
+## Quick start
 
-Use subpath imports instead of the package root. The package root is intentionally empty so applications can import only the runtime surface they need
+Create a validated API client and reusable endpoint:
 
 ```ts
-import { parser } from "@maxxuxx/ts-utils/parser";
-import { createApiFetcher } from "@maxxuxx/ts-utils/api-fetch";
-import { createTokenSession } from "@maxxuxx/ts-utils/session";
+import {
+  createApiFetcher,
+  endpoint,
+  z
+} from "@maxxuxx/ts-utils/api-fetch";
+
+const api = createApiFetcher({
+  baseURL: "https://api.example.com",
+  retry: {
+    delay: 250,
+    limit: 2,
+    strategy: "exponential"
+  },
+  timeout: 5000
+});
+
+const User = z.object({
+  id: z.number(),
+  name: z.string()
+});
+
+const getUser = endpoint.get("/users/:id", {
+  params: z.object({
+    id: z.coerce.number().int().positive()
+  }),
+  responseSchema: User
+});
+
+const result = await api.call(getUser, {
+  params: {
+    id: 42
+  }
+});
+
+console.log(result.response.name);
 ```
+
+## Featured modules
+
+| Module | Use it for |
+|---|---|
+| [`api-fetch`](./src/api-fetch/readme.md) | Validated API clients, typed endpoints, auth refresh, retry, timeout, and hooks |
+| [`session`](./src/session/readme.md) | Token sessions for plain TypeScript, React, and SvelteKit applications |
+| [`parser`](./src/parser/readme.md) | Reusable strict and coercing Zod parsers |
+| [`promise`](./src/promise/readme.md) | Timeout, retry, parallel tasks, settling, and single-flight work |
+| [`json`](./src/json/readme.md) | Safe JSON parsing, stringifying, and schema validation |
+| [`jwt`](./src/jwt/readme.md) | JWT decoding, schema validation, and expiration checks |
 
 ## Module map
 
@@ -61,14 +106,15 @@ import { createTokenSession } from "@maxxuxx/ts-utils/session";
 
 ## Runtime notes
 
-- General utility modules are dependency-light and designed for browser and server code
-- Zod-backed modules re-export `z` from their own subpath when colocated schemas are useful
-- Device helpers are split into browser and Node subpaths; prefer the runtime-specific path when the target runtime is known
+- The package is ESM-only and requires Node.js 22.12 or later for Node-targeted usage.
+- Zod is the only direct runtime dependency and is re-exported from schema-oriented subpaths.
+- React and iron-session are optional peer dependencies used only by their corresponding session adapters.
+- General utility modules are designed for browser and server code; device helpers provide explicit browser and Node entry points.
+- Detailed behavior, edge cases, and related APIs live in each module README linked above.
 
 ## Development
 
 ```bash
 npm run typecheck
-npm test
 npm run build
 ```

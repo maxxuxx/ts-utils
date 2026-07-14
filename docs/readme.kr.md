@@ -1,12 +1,14 @@
 # ts-utils
 
+[![CI](https://github.com/maxxuxx/ts-utils/actions/workflows/ci.yml/badge.svg)](https://github.com/maxxuxx/ts-utils/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/@maxxuxx/ts-utils.svg)](https://www.npmjs.com/package/@maxxuxx/ts-utils)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](../LICENSE)
 
-[English](../README.md)
+[English](../README.md) · [0.8 마이그레이션 가이드](./migration-0.8.md)
 
-[0.8 migration guide](./migration-0.8.md)
+**TypeScript 개발 편의성을 높이기 위한 유틸리티 모듈 모음.**
 
-작고 재사용 가능한 런타임 helper가 필요한 TypeScript 프로젝트를 위한 공용 유틸리티 모음
+API client, 런타임 검증, session, 비동기 제어, 데이터 변환, formatting 등 TypeScript 애플리케이션에서 자주 필요한 기능을 제공합니다.
 
 ## 설치
 
@@ -14,21 +16,64 @@
 npm install @maxxuxx/ts-utils
 ```
 
-GitHub 설치도 지원함
+GitHub에서 직접 설치할 수도 있습니다.
 
 ```bash
 npm install github:maxxuxx/ts-utils
 ```
 
-## import 방식
+## 빠른 시작
 
-package root 대신 subpath import를 사용함. package root는 비어 있으며, application이 필요한 runtime surface만 가져오도록 설계되어 있음
+검증된 API client와 재사용 가능한 endpoint를 정의합니다.
 
 ```ts
-import { parser } from "@maxxuxx/ts-utils/parser";
-import { createApiFetcher } from "@maxxuxx/ts-utils/api-fetch";
-import { createTokenSession } from "@maxxuxx/ts-utils/session";
+import {
+  createApiFetcher,
+  endpoint,
+  z
+} from "@maxxuxx/ts-utils/api-fetch";
+
+const api = createApiFetcher({
+  baseURL: "https://api.example.com",
+  retry: {
+    delay: 250,
+    limit: 2,
+    strategy: "exponential"
+  },
+  timeout: 5000
+});
+
+const User = z.object({
+  id: z.number(),
+  name: z.string()
+});
+
+const getUser = endpoint.get("/users/:id", {
+  params: z.object({
+    id: z.coerce.number().int().positive()
+  }),
+  responseSchema: User
+});
+
+const result = await api.call(getUser, {
+  params: {
+    id: 42
+  }
+});
+
+console.log(result.response.name);
 ```
+
+## 주요 모듈
+
+| 모듈 | 사용 목적 |
+|---|---|
+| [`api-fetch`](../src/api-fetch/readme.kr.md) | 검증된 API client, typed endpoint, auth refresh, retry, timeout, hook |
+| [`session`](../src/session/readme.kr.md) | TypeScript, React, SvelteKit 애플리케이션을 위한 token session |
+| [`parser`](../src/parser/readme.kr.md) | 재사용 가능한 strict/coercing Zod parser |
+| [`promise`](../src/promise/readme.kr.md) | Timeout, retry, 병렬 작업, settle, single-flight |
+| [`json`](../src/json/readme.kr.md) | 안전한 JSON parse, stringify, schema 검증 |
+| [`jwt`](../src/jwt/readme.kr.md) | JWT decode, schema 검증, 만료 판별 |
 
 ## 모듈 맵
 
@@ -61,14 +106,15 @@ import { createTokenSession } from "@maxxuxx/ts-utils/session";
 
 ## 런타임 참고
 
-- 일반 유틸 모듈은 의존성을 작게 유지하며 browser와 server code에서 쓰기 쉽게 설계됨
-- Zod 기반 모듈은 schema를 가까운 곳에서 정의할 수 있도록 각 subpath에서 `z`를 re-export함
-- Device helper는 browser와 Node subpath로 분리되어 있으며 target runtime을 알면 runtime-specific path를 우선 사용함
+- 이 패키지는 ESM 전용이며 Node 대상 기능을 사용할 때 Node.js 22.12 이상이 필요합니다.
+- Zod가 유일한 직접 런타임 의존성이며 schema 중심 subpath에서 다시 export됩니다.
+- React와 iron-session은 각 session adapter에서만 사용하는 선택적 peer dependency입니다.
+- 일반 유틸 모듈은 browser와 server code에서 사용할 수 있도록 설계되었으며 device helper는 browser와 Node entry point를 명시적으로 제공합니다.
+- 상세 동작, edge case, 관련 API는 위 표에서 연결된 각 모듈 README에서 확인할 수 있습니다.
 
 ## 개발
 
 ```bash
 npm run typecheck
-npm test
 npm run build
 ```
